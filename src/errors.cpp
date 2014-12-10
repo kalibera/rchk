@@ -6,13 +6,9 @@
 
 using namespace llvm;
 
-// an error function is a function in which no return instruction is
-// reachable from the entry block
-
-bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions) {
+static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions, BasicBlocksSetTy& returningBlocks, bool onlyCheck) {
 
   BasicBlocksSetTy errorBlocks;
-  BasicBlocksSetTy returningBlocks;
   BasicBlock *entry = &fun->getEntryBlock();
 
   for(Function::iterator bb = fun->begin(), bbe = fun->end(); bb != bbe; ++bb) {
@@ -35,7 +31,7 @@ bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions) {
     }
     if (ReturnInst::classof(bb->getTerminator())) {
       // this block has a return statement
-      if (entry == bb) {
+      if (onlyCheck && entry == bb) {
         return false;
       }
       returningBlocks.insert(bb);
@@ -59,9 +55,9 @@ bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions) {
         for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
           BasicBlock *succ = t->getSuccessor(i);
           if (returningBlocks.find(succ) != returningBlocks.end()) {
-            if (entry == bb) {
+            if (onlyCheck && entry == bb) {
               return false;
-            }
+            }          
             returningBlocks.insert(bb);
             addedReturningBlock = true;
             break;
@@ -71,7 +67,32 @@ bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions) {
     }
   }    
   // entry block is not a returning block    
-  return true;
+  return returningBlocks.find(entry) == returningBlocks.end();
+}
+
+
+// an error function is a function in which no return instruction is
+// reachable from the entry block
+
+bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions) {
+
+  BasicBlocksSetTy returningBlocks;
+  return checkAndAnalyzeErrorFunction(fun, knownErrorFunctions, returningBlocks, true);
+}
+
+// returns a set of error basic blocks (those that always end up in an error, so from which
+// the program never returns using the regular function return
+
+void findErrorBasicBlocks(Function *fun, FunctionsSetTy& knownErrorFunctions, BasicBlocksSetTy& errorBlocks) {
+
+  BasicBlocksSetTy returningBlocks;  
+  checkAndAnalyzeErrorFunction(fun, knownErrorFunctions, returningBlocks, false);
+
+  for(Function::iterator bb = fun->begin(), bbe = fun->end(); bb != bbe; ++bb) {
+    if (returningBlocks.find(bb) == returningBlocks.end()) {
+      errorBlocks.insert(bb);
+    }
+  }
 }
 
 // find all functions from module m that do not return, place them into
