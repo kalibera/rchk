@@ -6,8 +6,13 @@
 
 using namespace llvm;
 
+// returns true iff the function is an error function
 static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions, BasicBlocksSetTy& returningBlocks, bool onlyCheck) {
 
+  if (fun->empty()) {
+    // an empty function is not an error function
+    return false;
+  }
   BasicBlocksSetTy errorBlocks;
   BasicBlock *entry = &fun->getEntryBlock();
 
