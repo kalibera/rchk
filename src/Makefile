@@ -31,13 +31,13 @@ TOOLS := errcheck sfpcheck maacheck bcheck
 
 all: $(TOOLS)
 
-errcheck: errcheck.o errors.o
+errcheck: errcheck.o errors.o common.o
 
-sfpcheck: sfpcheck.o errors.o cgclosure.o
+sfpcheck: sfpcheck.o errors.o cgclosure.o common.o
 
-maacheck: maacheck.o errors.o cgclosure.o
+maacheck: maacheck.o errors.o cgclosure.o common.o
 
-bcheck: bcheck.o errors.o
+bcheck: bcheck.o errors.o common.o
 
 clean:
 	rm -f $(OBJECTS) $(DEPENDS)  $(TOOLS)

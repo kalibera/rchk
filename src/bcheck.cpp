@@ -14,16 +14,15 @@
 #include <unordered_map>
 
 #include <llvm/IR/Module.h>
-#include <llvm/IRReader/IRReader.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DebugInfo.h>
-#include <llvm/Support/SourceMgr.h>
 #include <llvm/Analysis/CFG.h>
 #include <llvm/Analysis/CallGraph.h>
 
 #include <llvm/Support/raw_ostream.h>
 
+#include "common.h"
 #include "errors.h"
 
 using namespace llvm;
@@ -707,32 +706,17 @@ void addState(DoneSetTy& doneSet, WorkListTy& workList, StateTy& state) {
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  SMDiagnostic error;
+  FunctionsOrderedSetTy functionsOfInterest;
   
-  std::string fname;
-  if (argc == 2) {
-    fname = argv[1];
-  } else {
-    fname = "R.bin.bc";
-    outs() << "Input file not specified, using the default " << fname << "\n";
-  }
-  
-  errs() << "Input file: " << fname << "\n";
-
-  Module *m = ParseIRFile(fname, error, context);
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
   GlobalsTy gl(m);
-  
-  if (!m) {
-    error.print("bcheck", errs());
-    return 1;
-  }
   
   FunctionsSetTy errorFunctions;
   findErrorFunctions(m, errorFunctions);
 
   unsigned nAnalyzedFunctions = 0;
-  for(Module::iterator FI = m->begin(), FE = m->end(); FI != FE; ++FI) {
-    Function *fun = FI;
+  for(FunctionsOrderedSetTy::iterator FI = functionsOfInterest.begin(), FE = functionsOfInterest.end(); FI != FE; ++FI) {
+    Function *fun = *FI;
 
     if (!fun) continue;
     if (!fun->size()) continue;

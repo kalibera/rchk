@@ -10,8 +10,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Support/SourceMgr.h>
 
 #include <llvm/Support/raw_ostream.h>
 
@@ -44,29 +42,14 @@ void printFunctionInfo(Function* fun) {
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  SMDiagnostic error;
+  FunctionsOrderedSetTy functionsOfInterest;
   
-  std::string fname;
-  if (argc == 2) {
-    fname = argv[1];
-  } else {
-    fname = "R.bin.bc";
-    outs() << "Input file not specified, using the default " << fname << "\n";
-  }
-  
-  errs() << "Input file: " << fname << "\n";
-
-  Module *m = ParseIRFile(fname, error, context);
-  if (!m) {
-    error.print("errcheck", errs());
-    return 1;
-  }
-
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
   FunctionsSetTy errorFunctions;
   findErrorFunctions(m, errorFunctions);
   
-  for(Module::iterator FI = m->begin(), FE = m->end(); FI != FE; ++FI) {
-      Function *fun = FI;
+  for(FunctionsOrderedSetTy::iterator fi = functionsOfInterest.begin(), fe = functionsOfInterest.end(); fi != fe; ++fi) {
+    Function *fun = *fi;
 
     if (!fun) continue;
     if (!fun->size()) continue;

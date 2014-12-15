@@ -19,11 +19,10 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Support/SourceMgr.h>
 
 #include <llvm/Support/raw_ostream.h>
 
+#include "common.h"
 #include "cgclosure.h"
 
 using namespace llvm;
@@ -33,23 +32,9 @@ const std::string gcFunction = "R_gc_internal";
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  SMDiagnostic error;
+  FunctionsOrderedSetTy functionsOfInterest;
   
-  std::string fname;
-  if (argc == 2) {
-    fname = argv[1];
-  } else {
-    fname = "R.bin.bc";
-    outs() << "Input file not specified, using the default " << fname << "\n";
-  }
-  
-  errs() << "Input file: " << fname << "\n";
-
-  Module *m = ParseIRFile(fname, error, context);
-  if (!m) {
-    error.print("maacheck", errs());
-    return 1;
-  }
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);  
   
   Function *gcf = m->getFunction(gcFunction);
   if (!gcf) {
@@ -68,6 +53,10 @@ int main(int argc, char* argv[])
   unsigned gcFunctionIndex = fsearch->second->index;
   
   for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
+    if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {
+      continue;
+    }
+
     FunctionInfo *finfo = FI->second;
 
     for(std::vector<CallInfo*>::iterator CI = finfo->callInfos.begin(), CE = finfo->callInfos.end(); CI != CE; ++CI) {
@@ -114,7 +103,6 @@ int main(int argc, char* argv[])
       }
     }
   }
-  
 
   delete m;
 }
