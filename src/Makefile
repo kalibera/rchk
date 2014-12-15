@@ -3,10 +3,10 @@
 
 # Set the root directory for LLVM here
 
-#LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
+LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
 
 # r-lnx400, LLVM 3.5 
-LLVM := /var/scratch/tomas/opt/llvm/inst
+#LLVM := /var/scratch/tomas/opt/llvm/inst
 
 # ---------------------
 

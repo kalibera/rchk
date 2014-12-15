@@ -20,6 +20,27 @@
 
 using namespace llvm;
 
+void printFunctionInfo(Function* fun) {
+
+  Instruction *instWithDI = NULL;
+  for(Function::iterator bb = fun->begin(), bbe = fun->end(); !instWithDI && bb != bbe; ++bb) {
+    for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); !instWithDI && in != ine; ++in) {
+      if (!in->getDebugLoc().isUnknown()) {
+        instWithDI = in;
+      }
+    }
+  }
+  if (instWithDI) {
+    LLVMContext&context = instWithDI->getParent()->getContext();
+    DebugLoc debugLoc = instWithDI->getDebugLoc().getFnDebugLoc(context);
+    DILocation loc(debugLoc.getScopeNode(context));
+    errs() << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << debugLoc.getLine() << "\n";
+  } else {
+    errs() << " no debug info found for " << fun << "\n";
+  }
+
+}
+
 int main(int argc, char* argv[])
 {
   LLVMContext context;
@@ -54,15 +75,6 @@ int main(int argc, char* argv[])
 
       // FIXME: newer versions of llvm have getDISubprogram(Function*)
       
-      Instruction *instWithDI = NULL;
-      for(Function::iterator bb = fun->begin(), bbe = fun->end(); !instWithDI && bb != bbe; ++bb) {
-        for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); !instWithDI && in != ine; ++in) {
-          if (!in->getDebugLoc().isUnknown()) {
-            instWithDI = in;
-          }
-        }
-      }
-      
       if (fun->doesNotReturn()) {
         errs() << "Marked (noreturn) ";
       } else {
@@ -70,13 +82,12 @@ int main(int argc, char* argv[])
       }
       
       errs() << "error function " << fun->getName();
-      
-      if (instWithDI) {
-        DebugLoc debugLoc = instWithDI->getDebugLoc().getFnDebugLoc(context);
-        DILocation loc(debugLoc.getScopeNode(context));
-        errs() << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << debugLoc.getLine() << "\n";
-      } else {
-        errs() << "\n";
+      printFunctionInfo(fun);
+
+    } else {
+      if (fun->doesNotReturn()) {
+        errs() << "WARNING - returning function marked noerror ";
+        printFunctionInfo(fun);
       }
     }
   }
