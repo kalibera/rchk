@@ -59,12 +59,14 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
     error.print(argv[0], errs());
     exit(1);  
   }
+  std::string errorMessage;
+  if (Linker::LinkModules(base, module, Linker::PreserveSource, &errorMessage)) {
+    errs() << "Linking module " << moduleFname << " with base " << baseFname << " resulted in error " << errorMessage << ".\n";
+  }
   for(Module::iterator f = module->begin(), fe = module->end(); f != fe; ++f) {
     functionsOfInterest.insert(base->getFunction(f->getName()));
   }
-  std::string errorMessage;
-  if (Linker::LinkModules(base, module, Linker::DestroySource, &errorMessage)) {	
-    errs() << "Linking module " << moduleFname << " with base " << baseFname << " resulted in error " << errorMessage << ".\n";
-  }
+  delete module;
+
   return base;
 }
