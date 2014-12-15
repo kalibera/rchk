@@ -1,3 +1,5 @@
+#ifndef RCHK_COMMON_H
+#define RCHK_COMMON_H
 
 #include <set>
 #include <unordered_set>
@@ -12,3 +14,5 @@ typedef std::unordered_set<Function*> FunctionsSetTy;
 typedef std::set<Function*> FunctionsOrderedSetTy;
 
 Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterest, LLVMContext& context);
+
+#endif

@@ -1,3 +1,6 @@
+#ifndef RCHK_CGCLOSURE_H
+#define RCHK_CGCLOSURE_H
+
 #include <map>
 #include <set>
 #include <vector>
@@ -31,3 +34,5 @@ struct FunctionInfo {
 typedef std::map<Function*, FunctionInfo*> FunctionsInfoMapTy;
 
 void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths = true);
+
+#endif
