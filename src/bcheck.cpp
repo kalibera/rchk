@@ -41,6 +41,10 @@ const bool UNIQUE_MSG = true;
   // delayed until the next function, possibly even dropped in case of some
   // kind of adaptive checking.
 
+bool EXCLUDE_PROTECTION_FUNCTIONS = false;
+  // currently this is set below to true for the case when checking modules
+  // if set to true, functions like protect, unprotect are not being checked (because they indeed cause imbalance)
+
 // -------------------------------- basic block state -----------------------------------
 
 const int MAX_DEPTH = 64;	// maximum supported protection stack depth
@@ -709,6 +713,7 @@ int main(int argc, char* argv[])
   FunctionsOrderedSetTy functionsOfInterest;
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  EXCLUDE_PROTECTION_FUNCTIONS = (argc == 3); // exclude when checking modules
   GlobalsTy gl(m);
   
   FunctionsSetTy errorFunctions;
@@ -720,6 +725,15 @@ int main(int argc, char* argv[])
 
     if (!fun) continue;
     if (!fun->size()) continue;
+    
+    if (EXCLUDE_PROTECTION_FUNCTIONS &&
+      (fun == gl.protectFunction ||
+      fun == gl.protectWithIndexFunction ||
+      fun == gl.unprotectFunction ||
+      fun == gl.unprotectPtrFunction)) {
+      
+      continue;
+    }
     
     nAnalyzedFunctions++;
     
