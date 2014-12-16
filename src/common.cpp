@@ -1,6 +1,8 @@
 
 #include "common.h"
 
+#include <cxxabi.h>
+
 #include <llvm/IR/Module.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Function.h>
@@ -69,4 +71,15 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   delete module;
 
   return base;
+}
+
+std::string demangle(std::string name) {
+  int status;
+  char *dname = abi::__cxa_demangle(name.c_str(), 0, 0, &status);
+  if (status == 0) {
+    std::string res(dname);
+    return res;
+  } else {
+    return name;
+  }
 }

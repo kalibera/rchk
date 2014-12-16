@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
           const MDNode* scope = callDebug.getScopeNode(context);
           DILocation loc(scope);
            
-          outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << finfo->function->getName() << " " << loc.getDirectory() << "/"
+          outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << demangle(finfo->function->getName()) << " " << loc.getDirectory() << "/"
             << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
         }
       }

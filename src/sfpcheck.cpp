@@ -76,12 +76,12 @@ int main(int argc, char* argv[])
             
             if (line != lastLine || file != lastFile || directory != lastDirectory) {
               outs() << directory << "/" << file << " " << line << "\n";
-              errs() << "  " << finfo->function->getName() << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
+              errs() << "  " << demangle(finfo->function->getName()) << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
               lastFile = file;
               lastDirectory = directory;
               lastLine = line;
             } else {
-              errs() << "  (GC point on another call at line) " << finfo->function->getName() << " " << loc.getDirectory() << "/" 
+              errs() << "  (GC point on another call at line) " << demangle(finfo->function->getName()) << " " << loc.getDirectory() << "/" 
                 << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
             }
             break;

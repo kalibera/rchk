@@ -15,4 +15,6 @@ typedef std::set<Function*> FunctionsOrderedSetTy;
 
 Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterest, LLVMContext& context);
 
+std::string demangle(std::string name);
+
 #endif

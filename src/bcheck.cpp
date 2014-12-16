@@ -140,7 +140,7 @@ struct StateTy {
       
     void dump() {
       errs() << "\n ###################### STATE DUMP ######################\n";
-      errs() << "=== Function: " << bb->getParent()->getName() << "\n";
+      errs() << "=== Function: " << demangle(bb->getParent()->getName()) << "\n";
       if (VERBOSE_DUMP) {
         errs() << "=== Basic block: \n" << *bb << "\n";
       }
@@ -158,7 +158,7 @@ struct StateTy {
       for(IntGuardsTy::iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
         AllocaInst *i = gi->first;
         IntGuardState s = gi->second;
-        errs() << "   " << i->getName() << " ";
+        errs() << "   " << demangle(i->getName()) << " ";
         if (VERBOSE_DUMP) {
           errs() << *i << " ";
         }
@@ -168,7 +168,7 @@ struct StateTy {
       for(SEXPGuardsTy::iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
         AllocaInst *i = gi->first;
         SEXPGuardState s = gi->second;
-        errs() << "   " << i->getName() << " ";
+        errs() << "   " << demangle(i->getName()) << " ";
         if (VERBOSE_DUMP) {
           errs() << *i << " ";
         }
@@ -265,7 +265,7 @@ LineBufferTy lineBuffer;
 
 void flushLineInfo() {
   if (lineInfoLastFunction != NULL && !lineBuffer.empty()) {
-    errs() << "\nFunction " << lineInfoLastFunction->getName() << "\n";
+    errs() << "\nFunction " << demangle(lineInfoLastFunction->getName()) << "\n";
     for(LineBufferTy::iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
       liBuf->print();
     }
@@ -288,7 +288,7 @@ void lineInfo(std::string kind, std::string message, Instruction *in, Function *
 
   if (!UNIQUE_MSG) {
     if (lineInfoLastFunction != func) {
-      errs() << "\nFunction " << func->getName() << "\n";
+      errs() << "\nFunction " << demangle(func->getName()) << "\n";
       lineInfoLastFunction = func;
     }
     li.print();
@@ -304,7 +304,7 @@ void lineInfo(std::string kind, std::string message, Instruction *in, Function *
 void lineInfoClearForFunction(Function *func) {
   if (!UNIQUE_MSG) {
     if (lineInfoLastFunction == func) {
-      errs() << " ---- restarting checking for function " << func->getName() << " (previous messages for it to be ignored) ----\n";
+      errs() << " ---- restarting checking for function " << demangle(func->getName()) << " (previous messages for it to be ignored) ----\n";
     }
     return;
   }
