@@ -3,11 +3,13 @@
 
 #include <cxxabi.h>
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Linker/Linker.h>
+#include <llvm/Support/Path.h>
 #include <llvm/Support/SourceMgr.h>
 
 #include <llvm/Support/raw_ostream.h>
@@ -83,3 +85,35 @@ std::string demangle(std::string name) {
     return name;
   }
 }
+
+bool sourceLocation(const Instruction *in, std::string& path, unsigned& line) {
+  const DebugLoc& debugLoc = in->getDebugLoc();
+  
+  if (debugLoc.isUnknown()) {
+    path = "/unknown";
+    line = 0;
+    return false;
+  }
+
+  line = debugLoc.getLine();  
+  DILocation loc(debugLoc.getScopeNode(in->getContext()));
+
+  if (sys::path::is_absolute(loc.getFilename())) {
+    path = loc.getFilename().str();
+  } else {
+    path = loc.getDirectory().str() + "/" + loc.getFilename().str();
+  }
+  return true;
+}
+
+std::string sourceLocation(const Instruction *in) {
+  unsigned line;
+  std::string path;
+  
+  if (!sourceLocation(in, path, line)) {
+    return "<unknown location>";
+  } else {
+    return path + ":" + std::to_string(line);
+  }
+}
+

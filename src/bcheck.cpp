@@ -16,7 +16,6 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Constants.h>
-#include <llvm/IR/DebugInfo.h>
 #include <llvm/Analysis/CFG.h>
 #include <llvm/Analysis/CallGraph.h>
 
@@ -146,9 +145,7 @@ struct StateTy {
       }
       
       Instruction *in = bb->begin();
-      DebugLoc debugLoc = in->getDebugLoc();
-      DILocation loc(debugLoc.getScopeNode(bb->getContext()));  
-      errs() << "=== Basic block src: " << loc.getDirectory() << "/" << loc.getFilename() << ":" << debugLoc.getLine() << "\n";
+      errs() << "=== Basic block src: " << sourceLocation(in) << "\n";
 
       errs() << "=== depth: " << depth << "\n";
       errs() << "=== savedDepth: " << savedDepth << "\n";
@@ -282,9 +279,11 @@ void lineInfo(std::string kind, std::string message, Instruction *in, Function *
   if (kind == "TRACE" && !TRACE) {
     return;
   }
-  DebugLoc debugLoc = in->getDebugLoc();
-  DILocation loc(debugLoc.getScopeNode(context));  
-  LineInfoTy li(kind, message, (loc.getDirectory() + "/" + loc.getFilename()).str(), debugLoc.getLine());
+
+  std::string path;
+  unsigned line;
+  sourceLocation(in, path, line);
+  LineInfoTy li(kind, message, path, line);
 
   if (!UNIQUE_MSG) {
     if (lineInfoLastFunction != func) {

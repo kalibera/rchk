@@ -14,7 +14,6 @@
 */
 
 #include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/DebugInfo.h> 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
@@ -93,12 +92,8 @@ int main(int argc, char* argv[])
         }
         
         if (nFreshObjects > 1) {
-          const DebugLoc &callDebug = inst->getDebugLoc();
-          const MDNode* scope = callDebug.getScopeNode(context);
-          DILocation loc(scope);
-           
-          outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << demangle(finfo->function->getName()) << " " << loc.getDirectory() << "/"
-            << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
+          outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << demangle(finfo->function->getName()) << " " 
+            << sourceLocation(inst) << "\n";
         }
       }
     }
