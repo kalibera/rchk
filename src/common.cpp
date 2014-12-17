@@ -64,6 +64,19 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
     exit(1);  
   }
   std::string errorMessage;
+  
+  // turn all the global functions and variables in the module to weak linkage
+  // this is to somewhat mimick the behavior of symbol resolution
+  // (and mainly of multiply defined symbols not being fatal) during the
+  // usual loading of R modules
+  
+  for(Module::global_iterator gv = module->global_begin(), gve = module->global_end(); gv != gve; ++gv) {
+    gv->setLinkage(GlobalValue::WeakAnyLinkage);
+  }
+  for(Module::iterator f = module->begin(), fe = module->end(); f != fe; ++f) {
+    f->setLinkage(GlobalValue::WeakAnyLinkage); 
+  }
+  
   if (Linker::LinkModules(base, module, Linker::PreserveSource, &errorMessage)) {
     errs() << "Linking module " << moduleFname << " with base " << baseFname << " resulted in error " << errorMessage << ".\n";
   }
