@@ -5,6 +5,7 @@
 
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
@@ -130,3 +131,26 @@ std::string sourceLocation(const Instruction *in) {
   }
 }
 
+bool isSEXP(Type* type) {
+
+  if (!PointerType::classof(type)) {
+    return false;
+  }
+  Type *etype = (cast<PointerType>(type))->getPointerElementType();
+  if (!StructType::classof(etype)) {
+    return false;
+  }
+  StructType *estr = cast<StructType>(etype);
+  if (!estr->hasName() || estr->getName() != "struct.SEXPREC") {
+    return false;
+  }
+  return true;
+}
+
+
+bool isSEXP(AllocaInst* var) {
+  if (var->isArrayAllocation() /* need to check this? */) {
+    return false;
+  }
+  return isSEXP(var->getAllocatedType());
+}

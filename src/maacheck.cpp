@@ -75,11 +75,9 @@ int main(int argc, char* argv[])
           Function *fun = cinst->getCalledFunction();
           if (!fun) continue;
           
-          if (!PointerType::classof(fun->getReturnType())) continue; // argument is not a pointer
-          Type *etype = fun->getReturnType()->getPointerElementType();
-          if (!StructType::classof(etype)) continue;
-          StructType *estr = cast<StructType>(etype);
-          if (!estr->hasName() || estr->getName() == "SEXPREC") continue; // argument is not SEXP
+          if (!isSEXP(fun->getReturnType())) { // argument is not SEXP
+            continue;
+          }
 
           auto fsearch = functionsMap.find(const_cast<Function*>(fun));
           if (fsearch == functionsMap.end()) continue; // should not happen

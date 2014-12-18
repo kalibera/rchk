@@ -588,21 +588,6 @@ bool isIntegerGuardVariable(AllocaInst* var, VarCacheTy& cache) {
   return res;
 }
 
-bool isSEXP(AllocaInst* var) {
-  if (!PointerType::classof(var->getAllocatedType()) || var->isArrayAllocation() /* need to check this? */) {
-    return false;
-  }
-  Type *etype = (cast<PointerType>(var->getAllocatedType()))->getPointerElementType();
-  if (!StructType::classof(etype)) {
-    return false;
-  }
-  StructType *estr = cast<StructType>(etype);
-  if (!estr->hasName() || estr->getName() != "struct.SEXPREC") {
-    return false;
-  }
-  return true;
-}
-
 // SEXP guard is a local variable of type SEXP
 //   which is compared at least once against R_NilValue
 //   which may be stored to and loaded from
