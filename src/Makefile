@@ -27,7 +27,7 @@ SOURCES := $(wildcard *.cpp)
 DEPENDS := $(SOURCES:.cpp=.d)
 OBJECTS := $(SOURCES:.cpp=.o)
 
-TOOLS := errcheck sfpcheck maacheck bcheck
+TOOLS := errcheck sfpcheck maacheck bcheck ueacheck
 
 all: $(TOOLS)
 
@@ -38,6 +38,8 @@ sfpcheck: sfpcheck.o errors.o cgclosure.o common.o
 maacheck: maacheck.o errors.o cgclosure.o common.o
 
 bcheck: bcheck.o errors.o common.o
+
+ueacheck: ueacheck.o errors.o cgclosure.o common.o
 
 clean:
 	rm -f $(OBJECTS) $(DEPENDS)  $(TOOLS)
