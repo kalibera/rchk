@@ -13,7 +13,7 @@ const bool DEBUG = false;
 // build closure over the callgraph of module m
 // each function from module m gets its FunctionInfo in the functionsMap
 
-void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths) {
+void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths, FunctionsSetTy *onlyFunctions) {
 
   FunctionsSetTy errorFunctions;
   if (ignoreErrorPaths) {
@@ -36,6 +36,10 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
     CallGraphNode* sourceCGN = MI->second;
     if (!fun) continue;
     
+    if (onlyFunctions && onlyFunctions->find(fun) == onlyFunctions->end()) {
+      continue;
+    }
+
     FunctionInfo *finfo;
     auto fsearch = functionsMap.find(fun);
     if (fsearch == functionsMap.end()) {
@@ -63,7 +67,9 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
       Instruction* callInst = dyn_cast<Instruction>(callSite->getInstruction());
       Function* targetFun = targetCGN->getFunction();
       if (!targetFun) continue;
-      
+      if (onlyFunctions && onlyFunctions->find(targetFun) == onlyFunctions->end()) {
+        continue;
+      }
 
       // find or create FunctionInfo for the target      
       FunctionInfo *targetFunctionInfo;

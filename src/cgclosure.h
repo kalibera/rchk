@@ -5,6 +5,8 @@
 #include <set>
 #include <vector>
 
+#include "common.h"
+
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Function.h>
 
@@ -33,6 +35,6 @@ struct FunctionInfo {
 
 typedef std::map<Function*, FunctionInfo*> FunctionsInfoMapTy;
 
-void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths = true);
+void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths = true, FunctionsSetTy *onlyFunctions = NULL);
 
 #endif
