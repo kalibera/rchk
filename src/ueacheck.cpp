@@ -59,31 +59,48 @@ StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instru
     if (ssrc->hasOneUse()) {
       return s;
     }
+    if (ssrc->hasNUses(2)) {
+      // also allow a store and a call to protect
+      //   so that we can handle PROTECT(v = foo())
+
+      Value::user_iterator ui = ssrc->user_begin();
+      Value *u = *ui;
+      if (u == s) {
+        u = *++ui;
+      }
+
+      CallSite pcs(u);
+      if (pcs && pcs.getCalledFunction()) {
+        std::string fname = pcs.getCalledFunction()->getName();
+        if (fname == "Rf_protect" || fname == "R_ProtectWithIndex") {
+          return s;
+        }
+      }
+    }
   }
   return NULL;
 }
 
 // FIXME: there should be a way to offload this to capture (/escape) analysis
-Instruction* getProtect(AllocaInst *v, const Instruction *allocInst, const Instruction *useInst, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex, DominatorTree& dominatorTree) {
+Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instruction *useInst, DominatorTree& dominatorTree) {
+
+  // look for PROTECT(var)
   for (Value::user_iterator ui = v->user_begin(), ue = v->user_end(); ui != ue; ++ui) {
     if (!LoadInst::classof(*ui)) {
       continue;
     }
     LoadInst *l = cast<LoadInst>(*ui);
-    if (!l->hasOneUse()) {
+    if (!l->hasOneUse()) { // too approximative?
       continue;
     }
     CallSite cs(l->user_back());
-    if (!cs) {
+    if (!cs || !cs.getCalledFunction()) {
       continue;
     } 
     if (!dominatorTree.dominates(cs.getInstruction(), useInst)) {
       continue;
     }
-    if (!dominatorTree.dominates(allocInst, cs.getInstruction())) {
-      continue;
-    }
-    if (!cs.getCalledFunction()) {
+    if (!dominatorTree.dominates(allocStore, cs.getInstruction())) {
       continue;
     }
     std::string fname = cs.getCalledFunction()->getName();
@@ -91,6 +108,27 @@ Instruction* getProtect(AllocaInst *v, const Instruction *allocInst, const Instr
       continue;
     }
     return cs.getInstruction();
+  }
+
+  // look for PROTECT(var = foo())
+  //   in IR, the protect call may be on the result of foo directly without loading var
+  Value* allocValue = const_cast<Value*>(allocStore->getValueOperand());
+  if (!allocValue->hasOneUse()) {
+    for(Value::user_iterator ui = allocValue->user_begin(), ue = allocValue->user_end(); ui != ue; ++ui) {
+      Value *u = *ui;
+      CallSite cs(u);
+      if (!cs || !cs.getCalledFunction()) {
+        continue;
+      }
+      if (!dominatorTree.dominates(cs.getInstruction(), useInst)) {
+        continue;
+      }
+      std::string fname = cs.getCalledFunction()->getName();
+      if (fname != "Rf_protect" && fname != "R_ProtectWithIndex") {
+        continue;
+      }
+      return cs.getInstruction();
+    }
   }
   return NULL;
 }
@@ -153,11 +191,11 @@ int main(int argc, char* argv[])
             if (PointerMayBeCapturedBefore(v, false, true, inst, &dominatorTree, true)) {
               continue; 
             }
-            Instruction* allocStore = getDominatingNonProtectingAllocatingStore(cast<AllocaInst>(v), cast<LoadInst>(o), possibleAllocators, dominatorTree);
+            StoreInst* allocStore = getDominatingNonProtectingAllocatingStore(cast<AllocaInst>(v), cast<LoadInst>(o), possibleAllocators, dominatorTree);
             if (!allocStore) {
               continue;
             }
-            Instruction* protect = getProtect(cast<AllocaInst>(v), allocStore, cast<LoadInst>(o), functionsMap, gcFunctionIndex, dominatorTree);
+            Instruction* protect = getProtect(cast<AllocaInst>(v), allocStore, cast<LoadInst>(o), dominatorTree);
             if (!protect) {
               if (VERBOSE) {
                 errs() << "Variable " << *v << " may be unprotected in call " << sourceLocation(inst) << " with allocation at  "
