@@ -1,16 +1,18 @@
 /*
   Check for a particular call pattern, multiple allocating arguments, that
-  is (used to?) be a common source of PROTECT errors. Calls such as
+  is a common source of PROTECT errors.  Calls such as
   
   cons(install("x"), ScalarInt(1))
   
   where at least two arguments are given as immediate results of allocating
-  functions.  It does not matter that cons protects is arguments - if
-  ScalarInt is evaluated before install, then install may allocate,
-  thrashing that scalar integer.
+  functions and at least one of these functions returns a fresh allocated
+  object.
+
+  It does not matter that cons protects is arguments - if ScalarInt is
+  evaluated before install, then install may allocate, thrashing that scalar
+  integer.
   
   By default the checking ignores error paths.
-
 */
 
 #include <llvm/IR/BasicBlock.h>
@@ -39,6 +41,9 @@ int main(int argc, char* argv[])
   
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
   
+  FunctionsSetTy possibleAllocators;
+  findPossibleAllocators(m, possibleAllocators);
+
   for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
     if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {
       continue;
@@ -53,6 +58,7 @@ int main(int argc, char* argv[])
         
         const Instruction* inst = cinfo->instruction;
         unsigned nFreshObjects = 0;
+        unsigned nAllocatingArgs = 0;
         
         for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
           Value* o = inst->getOperand(u);
@@ -72,10 +78,16 @@ int main(int argc, char* argv[])
             continue;
           }
 
-          nFreshObjects++;
+          if (!isInstall(fun) && possibleAllocators.find(fun) != possibleAllocators.end()) {
+            // the argument allocates and returns a fresh object
+            nFreshObjects++;
+          }
+
+          // the argument allocates
+          nAllocatingArgs++;
         }
         
-        if (nFreshObjects > 1) {
+        if (nAllocatingArgs >= 2 && nFreshObjects >= 1 ) {
           outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << demangle(finfo->function->getName()) << " " 
             << sourceLocation(inst) << "\n";
         }
