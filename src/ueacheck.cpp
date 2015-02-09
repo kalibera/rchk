@@ -40,9 +40,6 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
   return (*finfo->callsFunctionMap)[gcFunctionIndex];
 }
 
-bool isInstall(Function *f) {
-  return f && (f->getName() == "Rf_install" || f->getName() == "Rf_installTrChar" || f->getName() == "Rf_installChar" || f->getName() == "Rf_installS3Signature");
-}
 
 // FIXME: it might be better looking for an allocating store that is closest
 // to the use, to reduce false alarms

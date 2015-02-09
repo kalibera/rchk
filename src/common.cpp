@@ -154,3 +154,8 @@ bool isSEXP(AllocaInst* var) {
   }
   return isSEXP(var->getAllocatedType());
 }
+
+bool isInstall(Function *f) {
+  return f && (f->getName() == "Rf_install" || f->getName() == "Rf_installTrChar" ||
+    f->getName() == "Rf_installChar" || f->getName() == "Rf_installS3Signature");
+}

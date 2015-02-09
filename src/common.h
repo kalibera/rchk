@@ -24,5 +24,6 @@ std::string sourceLocation(const Instruction *in);
 
 bool isSEXP(AllocaInst* var);
 bool isSEXP(Type* type);
+bool isInstall(Function *f);
 
 #endif
