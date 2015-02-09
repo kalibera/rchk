@@ -12,6 +12,7 @@ using namespace llvm;
 
 typedef std::unordered_set<BasicBlock*> BasicBlocksSetTy;
 typedef std::unordered_set<Function*> FunctionsSetTy;
+typedef std::unordered_set<AllocaInst*> VarsSetTy;
 typedef std::set<Function*> FunctionsOrderedSetTy;
 
 Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterest, LLVMContext& context);

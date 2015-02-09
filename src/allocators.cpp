@@ -1,34 +1,48 @@
-/* 
-  This tool attempts to detect "allocators". An allocator is a function that
-  returns a newly allocated pointer.  An allocator may indeed be a wrapper
-  for other allocators, so there is a lot of allocators in the R source code.
 
-*/
-       
+#include "allocators.h"
+
+using namespace llvm;
+
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
-#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 
 #include <llvm/Support/InstIterator.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
-#include "cgclosure.h"
-
-const std::string gcFunction = "R_gc_internal";
-
-using namespace llvm;
-
 const bool DEBUG = false;
 
-typedef std::unordered_set<AllocaInst*> VarsSetTy;
+Function *getGCFunction(Module *m) {
 
-void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturned) {
+  Function *gcf = m->getFunction(gcFunction);
+  if (!gcf) {
+    errs() << "Cannot find function " << gcFunction << ".\n";
+    exit(1);
+  }
+  return gcf;
+}
 
-  if (DEBUG) outs() << "Function " << f.getName() << "...\n";
+unsigned getGCFunctionIndex(FunctionsInfoMapTy& functionsMap, Module *m) {
+
+  auto fsearch = functionsMap.find(getGCFunction(m));
+  if (fsearch == functionsMap.end()) {
+    errs() << "Cannot find function info in callgraph for function " << gcFunction << ", internal error?\n";
+    exit(1);
+  }
+  return fsearch->second->index;
+}
+
+// Possible allocators are (all) functions that may be returning a pointer
+// to a fresh R object (object allocated inside the call to that function). 
+// There may be false positives: some possible allocators may not in fact be
+// returning a fresh pointer at all or under certain conditions.  But, all
+// functions possibly returning a fresh pointer should be identified.
+
+static void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturned) {
+
+  if (DEBUG) errs() << "Function " << f.getName() << "...\n";
   
   // insert variables values of which are directly returned
   for(inst_iterator ini = inst_begin(f), ine = inst_end(f); ini != ine; ++ini) {
@@ -40,7 +54,7 @@ void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturned) {
         if (AllocaInst::classof(loadOperand)) {
           AllocaInst* var = cast<AllocaInst>(loadOperand);
           possiblyReturned.insert(var);
-          if (DEBUG) outs() << "  directly returned " << var->getName() << "(" << *var << ")\n";
+          if (DEBUG) errs() << "  directly returned " << var->getName() << "(" << *var << ")\n";
         }
       }
     }
@@ -72,7 +86,7 @@ void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturned) {
           
           possiblyReturned.insert(varSrc);
           addedVar = true;
-          if (DEBUG) outs() << "  indirectly returned " << varSrc->getName() << " through " << varDst->getName() 
+          if (DEBUG) errs() << "  indirectly returned " << varSrc->getName() << " through " << varDst->getName() 
             << " via load " << *storeValueOperand << " and store " << *in << "\n";
         }
       }
@@ -80,12 +94,12 @@ void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturned) {
   }
 }
 
-bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
+static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
 
   for(Value::user_iterator ui = v->user_begin(), ue = v->user_end(); ui != ue; ++ui) {
     User *u = *ui;
     if (ReturnInst::classof(u)) {
-      if (DEBUG) outs() << "  callsite result is returned directly\n";  
+      if (DEBUG) errs() << "  callsite result is returned directly\n";
       return true;
     }
     if (StoreInst::classof(u)) {
@@ -98,7 +112,7 @@ bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
       if (AllocaInst::classof(storePointer) &&
           possiblyReturned.find(cast<AllocaInst>(storePointer)) != possiblyReturned.end()) {
        
-        if (DEBUG) outs() << "  callsite result is returned indirectly through variable " << *(cast<AllocaInst>(storePointer)) << "\n";
+        if (DEBUG) errs() << "  callsite result is returned indirectly through variable " << *(cast<AllocaInst>(storePointer)) << "\n";
         return true;
       }
     }
@@ -123,7 +137,7 @@ bool mayBeAllocator(Function& f) {
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
       if (valueMayBeReturned(cast<Value>(in), possiblyReturnedVars)) {
-        if (DEBUG) outs() << "  has callsite" << *in << "\n";  
+        if (DEBUG) errs() << "  has callsite" << *in << "\n";
         return true;
       }
     }
@@ -131,45 +145,27 @@ bool mayBeAllocator(Function& f) {
   return false;
 }
 
-int main(int argc, char* argv[])
-{
-  LLVMContext context;
-  FunctionsOrderedSetTy functionsOfInterest;
-  
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
-  FunctionsSetTy possibleAllocators;
-  
+void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
+
   for(Module::iterator f = m->begin(), fe = m->end(); f != fe; ++f) {
     if (mayBeAllocator(*f)) {
       possibleAllocators.insert(f);
     }
   }
   
-  Function *gcf = m->getFunction(gcFunction);
-  if (!gcf) {
-    outs() << "Cannot find function " << gcFunction << ".\n";
-    return 1;
-  }
-  possibleAllocators.insert(gcf);
+  possibleAllocators.insert(getGCFunction(m));
   
   FunctionsInfoMapTy functionsMap;
   buildCGClosure(m, functionsMap, true /* ignore error paths */, &possibleAllocators);
   
-  auto fsearch = functionsMap.find(gcf);
-  if (fsearch == functionsMap.end()) {
-    outs() << "Cannot find function info in callgraph for function " << gcFunction << ", internal error?\n";
-    return 1;
-  }
-  unsigned gcFunctionIndex = fsearch->second->index;
+  unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 
   for(FunctionsInfoMapTy::iterator fi = functionsMap.begin(), fe = functionsMap.end(); fi != fe; ++fi) {
-    Function const *f = fi->second->function;
+    Function *f = const_cast<Function *>(fi->second->function);
     if (!f) continue;
     
     if ((*fi->second->callsFunctionMap)[gcFunctionIndex]) {
-      errs() << "POSSIBLE ALLOCATOR: " << f->getName() << "\n";
+      possibleAllocators.insert(f);
     }
   }
-  
-  delete m;
 }

@@ -21,11 +21,10 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "common.h"
+#include "allocators.h"
 #include "cgclosure.h"
 
 using namespace llvm;
-
-const std::string gcFunction = "R_gc_internal";
 
 bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
   if (!fun) {
@@ -120,24 +119,11 @@ int main(int argc, char* argv[])
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);  
   
-  Function *gcf = m->getFunction(gcFunction);
-  if (!gcf) {
-    outs() << "Cannot find function " << gcFunction << ".\n";
-    return 1;
-  }
-  
   FunctionsInfoMapTy functionsMap;
   buildCGClosure(m, functionsMap, true /* ignore error paths */);
   
-  auto fsearch = functionsMap.find(gcf);
-  if (fsearch == functionsMap.end()) {
-    outs() << "Cannot find function info in callgraph for function " << gcFunction << ", internal error?\n";
-    return 1;
-  }
-  unsigned gcFunctionIndex = fsearch->second->index;
-  
+  unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
   DominatorTreeWrapperPass dtPass;
-  
   
   for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
     if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {
