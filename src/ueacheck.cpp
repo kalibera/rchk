@@ -26,21 +26,6 @@
 
 using namespace llvm;
 
-bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
-  if (!fun) {
-    return false;
-  }
-  auto fsearch = functionsMap.find(const_cast<Function*>(fun));
-  if (fsearch == functionsMap.end()) {
-    // should not happen
-    return false;
-  }
-  FunctionInfo *finfo = fsearch->second;
-
-  return (*finfo->callsFunctionMap)[gcFunctionIndex];
-}
-
-
 // FIXME: it might be better looking for an allocating store that is closest
 // to the use, to reduce false alarms
 

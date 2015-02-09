@@ -66,14 +66,12 @@ int main(int argc, char* argv[])
           if (!isSEXP(fun->getReturnType())) { // argument is not SEXP
             continue;
           }
-
-          auto fsearch = functionsMap.find(const_cast<Function*>(fun));
-          if (fsearch == functionsMap.end()) continue; // should not happen
-          FunctionInfo *finfo = fsearch->second;
           
-          if (!(*finfo->callsFunctionMap)[gcFunctionIndex]) continue; 
-             // argument does not come from a call to an allocating function
-             
+          if (!isAllocatingFunction(fun, functionsMap, gcFunctionIndex)) {
+            // argument does not come from a call to an allocating function
+            continue;
+          }
+
           nFreshObjects++;
         }
         

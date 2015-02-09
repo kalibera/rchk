@@ -169,3 +169,17 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
     }
   }
 }
+
+bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
+  if (!fun) {
+    return false;
+  }
+  auto fsearch = functionsMap.find(const_cast<Function*>(fun));
+  if (fsearch == functionsMap.end()) {
+    // should not happen
+    return false;
+  }
+  FunctionInfo *finfo = fsearch->second;
+
+  return (*finfo->callsFunctionMap)[gcFunctionIndex];
+}
