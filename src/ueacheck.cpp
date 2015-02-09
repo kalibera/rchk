@@ -26,10 +26,12 @@
 
 using namespace llvm;
 
+const bool VERBOSE = false;
+
 // FIXME: it might be better looking for an allocating store that is closest
 // to the use, to reduce false alarms
 
-StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instruction *useInst, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex, DominatorTree& dominatorTree) {
+StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instruction *useInst, FunctionsSetTy& possibleAllocators, DominatorTree& dominatorTree) {
   for (Value::user_iterator ui = v->user_begin(), ue = v->user_end(); ui != ue; ++ui) {
     if (!StoreInst::classof(*ui)) {
       continue;
@@ -47,7 +49,7 @@ StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instru
     if (!f) continue;
     if (isInstall(f)) continue;  // this implicitly protects
     
-    if (!isAllocatingFunction(cs.getCalledFunction(), functionsMap, gcFunctionIndex)) {
+    if (possibleAllocators.find(f) == possibleAllocators.end()) {
       continue;
     }
     if (!dominatorTree.dominates(s, useInst)) {
@@ -105,6 +107,10 @@ int main(int argc, char* argv[])
   buildCGClosure(m, functionsMap, true /* ignore error paths */);
   
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
+
+  FunctionsSetTy possibleAllocators;
+  findPossibleAllocators(m, possibleAllocators);
+
   DominatorTreeWrapperPass dtPass;
   
   for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
@@ -127,7 +133,7 @@ int main(int argc, char* argv[])
         
         const Instruction* inst = cinfo->instruction;
         unsigned nFreshObjects = 0;
-        unsigned nInstallCalls = 0;
+        unsigned nAllocatingArgs = 0;
         
         for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
           Value* o = inst->getOperand(u);
@@ -147,16 +153,19 @@ int main(int argc, char* argv[])
             if (PointerMayBeCapturedBefore(v, false, true, inst, &dominatorTree, true)) {
               continue; 
             }
-            Instruction* allocStore = getDominatingNonProtectingAllocatingStore(cast<AllocaInst>(v), cast<LoadInst>(o), functionsMap, gcFunctionIndex, dominatorTree);
+            Instruction* allocStore = getDominatingNonProtectingAllocatingStore(cast<AllocaInst>(v), cast<LoadInst>(o), possibleAllocators, dominatorTree);
             if (!allocStore) {
               continue;
             }
             Instruction* protect = getProtect(cast<AllocaInst>(v), allocStore, cast<LoadInst>(o), functionsMap, gcFunctionIndex, dominatorTree);
             if (!protect) {
-              errs() << "Variable " << *v << " may be unprotected in call " << sourceLocation(inst) << " with allocation at  "
-                << sourceLocation(allocStore) << "\n";
+              if (VERBOSE) {
+                errs() << "Variable " << *v << " may be unprotected in call " << sourceLocation(inst) << " with allocation at  "
+                  << sourceLocation(allocStore) << "\n";
+              }
                
               nFreshObjects++;
+              nAllocatingArgs++;
             }
             continue;
           }
@@ -173,13 +182,14 @@ int main(int argc, char* argv[])
             // argument does not come from a call to an allocating function
             continue;
           }
-          if (isInstall(fun)) {
-            nInstallCalls++;
+          if (!isInstall(fun) && possibleAllocators.find(fun) != possibleAllocators.end()) {
+            // the argument allocates and returns a fresh object
+            nFreshObjects++;
           }
-          nFreshObjects++;
+          nAllocatingArgs++;
         }
         
-        if (nFreshObjects > 1 && nInstallCalls < nFreshObjects) {
+        if (nAllocatingArgs >= 2 && nFreshObjects >= 1) {
           outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << demangle(finfo->function->getName()) << " " 
             << sourceLocation(inst) << "\n";
         }
