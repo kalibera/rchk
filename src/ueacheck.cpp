@@ -133,6 +133,40 @@ Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instru
   return NULL;
 }
 
+// FIXME: copy-paste from maacheck vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+enum ArgExpKind {
+  AK_NOALLOC = 0,  // no allocation
+  AK_ALLOCATING,   // allocation, but not returning a fresh object
+  AK_FRESH         // allocation and possibly returning a fresh object
+};
+
+ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex, FunctionsSetTy& possibleAllocators) {
+
+  if (!CallInst::classof(arg)) {
+    // argument does not come (immediatelly) from a call
+    return AK_NOALLOC;
+  }
+
+  CallInst *cinst = cast<CallInst>(arg);
+  Function *fun = cinst->getCalledFunction();
+  if (!fun) {
+    return AK_NOALLOC;
+  }
+
+  if (!isAllocatingFunction(fun, functionsMap, gcFunctionIndex)) {
+    // argument does not come from a call to an allocating function
+    return AK_NOALLOC;
+  }
+
+  if (!isInstall(fun) && possibleAllocators.find(fun) != possibleAllocators.end()) {
+    // the argument allocates and returns a fresh object
+    return AK_FRESH;
+  }
+  return AK_ALLOCATING;
+}
+
+// FIXME: copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 int main(int argc, char* argv[])
 {
@@ -176,13 +210,6 @@ int main(int argc, char* argv[])
         for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
           Value* o = inst->getOperand(u);
           
-          // FIXME:: there may be implicit loads, such as
-          //
-          // PROTECT(x=foo())
-          // bar(x)
-          //
-          // may not have a load for x
-          
           if (LoadInst::classof(o)) {
             Value *v = cast<LoadInst>(o)->getPointerOperand();
             if (!AllocaInst::classof(v) || !isSEXP(cast<AllocaInst>(v))) {
@@ -208,23 +235,34 @@ int main(int argc, char* argv[])
             continue;
           }
           
-          if (!CallInst::classof(o)) continue; // argument does not come (immediatelly) from a call
+          // FIXME: copy-paste from maacheck vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
           
-          CallInst *cinst = cast<CallInst>(o);
-          Function *fun = cinst->getCalledFunction();
-          if (!fun) continue;
+          ArgExpKind k;
           
-          if (!isSEXP(fun->getReturnType())) continue; // argument is not SEXP
+          if (PHINode::classof(o)) {
 
-          if (!isAllocatingFunction(fun, functionsMap, gcFunctionIndex)) {
-            // argument does not come from a call to an allocating function
-            continue;
+            // for each argument comming from a PHI node, take the most
+            // difficult kind of allocation (this is an approximation, the
+            // most difficult combination of different arguments may not be
+            // possible).
+
+            PHINode* phi = cast<PHINode>(o);
+            unsigned nvals = phi->getNumIncomingValues();
+            k = AK_NOALLOC;
+            for(unsigned i = 0; i < nvals; i++) {
+              ArgExpKind cur = classifyArgumentExpression(phi->getIncomingValue(i), functionsMap, gcFunctionIndex, possibleAllocators);
+              if (cur > k) {
+                k = cur;
+              }
+            }
+          } else {
+            k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
           }
-          if (!isInstall(fun) && possibleAllocators.find(fun) != possibleAllocators.end()) {
-            // the argument allocates and returns a fresh object
-            nFreshObjects++;
-          }
-          nAllocatingArgs++;
+
+          if (k >= AK_ALLOCATING) nAllocatingArgs++;
+          if (k >= AK_FRESH) nFreshObjects++;
+
+          // FIXME: copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         }
         
         if (nAllocatingArgs >= 2 && nFreshObjects >= 1) {
