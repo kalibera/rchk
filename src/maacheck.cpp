@@ -29,6 +29,38 @@
 
 using namespace llvm;
 
+enum ArgExpKind {
+  AK_NOALLOC = 0,  // no allocation
+  AK_ALLOCATING,   // allocation, but not returning a fresh object
+  AK_FRESH         // allocation and possibly returning a fresh object
+};
+
+ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex, FunctionsSetTy& possibleAllocators) {
+
+  if (!CallInst::classof(arg)) {
+    // argument does not come (immediatelly) from a call
+    return AK_NOALLOC;
+  }
+
+  CallInst *cinst = cast<CallInst>(arg);
+  Function *fun = cinst->getCalledFunction();
+  if (!fun) {
+    return AK_NOALLOC;
+  }
+
+  if (!isAllocatingFunction(fun, functionsMap, gcFunctionIndex)) {
+    // argument does not come from a call to an allocating function
+    return AK_NOALLOC;
+  }
+
+  if (!isInstall(fun) && possibleAllocators.find(fun) != possibleAllocators.end()) {
+    // the argument allocates and returns a fresh object
+    return AK_FRESH;
+  }
+  return AK_ALLOCATING;
+}
+
+
 int main(int argc, char* argv[])
 {
   LLVMContext context;
@@ -62,34 +94,36 @@ int main(int argc, char* argv[])
         
         for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
           Value* o = inst->getOperand(u);
+
+          ArgExpKind k;
           
-          if (!CallInst::classof(o)) continue; // argument does not come (immediatelly) from a call
-          
-          CallInst *cinst = cast<CallInst>(o);
-          Function *fun = cinst->getCalledFunction();
-          if (!fun) continue;
-          
-          if (!isSEXP(fun->getReturnType())) { // argument is not SEXP
-            continue;
-          }
-          
-          if (!isAllocatingFunction(fun, functionsMap, gcFunctionIndex)) {
-            // argument does not come from a call to an allocating function
-            continue;
+          if (PHINode::classof(o)) {
+
+            // for each argument comming from a PHI node, take the most
+            // difficult kind of allocation (this is an approximation, the
+            // most difficult combination of different arguments may not be
+            // possible).
+
+            PHINode* phi = cast<PHINode>(o);
+            unsigned nvals = phi->getNumIncomingValues();
+            k = AK_NOALLOC;
+            for(unsigned i = 0; i < nvals; i++) {
+              ArgExpKind cur = classifyArgumentExpression(phi->getIncomingValue(i), functionsMap, gcFunctionIndex, possibleAllocators);
+              if (cur > k) {
+                k = cur;
+              }
+            }
+          } else {
+            k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
           }
 
-          if (!isInstall(fun) && possibleAllocators.find(fun) != possibleAllocators.end()) {
-            // the argument allocates and returns a fresh object
-            nFreshObjects++;
-          }
-
-          // the argument allocates
-          nAllocatingArgs++;
+          if (k >= AK_ALLOCATING) nAllocatingArgs++;
+          if (k >= AK_FRESH) nFreshObjects++;
         }
         
         if (nAllocatingArgs >= 2 && nFreshObjects >= 1 ) {
-          outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << demangle(finfo->function->getName()) << " " 
-            << sourceLocation(inst) << "\n";
+          outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << demangle(middleFinfo->function->getName()) <<
+            " at " << demangle(finfo->function->getName()) << " " << sourceLocation(inst) << "\n";
         }
       }
     }
