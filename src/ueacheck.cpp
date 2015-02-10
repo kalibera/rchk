@@ -90,24 +90,24 @@ Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instru
       continue;
     }
     LoadInst *l = cast<LoadInst>(*ui);
-    if (!l->hasOneUse()) { // too approximative?
-      continue;
+    for(Value::user_iterator lui = l->user_begin(), lue = l->user_end(); lui != lue; ++lui) {
+      Value *luv = *lui;
+      CallSite cs(luv);
+      if (!cs || !cs.getCalledFunction()) {
+        continue;
+      }
+      if (!dominatorTree.dominates(cs.getInstruction(), useInst)) {
+        continue;
+      }
+      if (!dominatorTree.dominates(allocStore, l)) {
+        continue;
+      }
+      std::string fname = cs.getCalledFunction()->getName();
+      if (fname != "Rf_protect" && fname != "R_ProtectWithIndex") {
+        continue;
+      }
+      return cs.getInstruction();
     }
-    CallSite cs(l->user_back());
-    if (!cs || !cs.getCalledFunction()) {
-      continue;
-    } 
-    if (!dominatorTree.dominates(cs.getInstruction(), useInst)) {
-      continue;
-    }
-    if (!dominatorTree.dominates(allocStore, cs.getInstruction())) {
-      continue;
-    }
-    std::string fname = cs.getCalledFunction()->getName();
-    if (fname != "Rf_protect" && fname != "R_ProtectWithIndex") {
-      continue;
-    }
-    return cs.getInstruction();
   }
 
   // look for PROTECT(var = foo())
@@ -175,6 +175,7 @@ bool isLoadOfUnprotectedObject(Value *arg, Instruction *callInst, FunctionsSetTy
     return false;
   }
   Value *v = cast<LoadInst>(arg)->getPointerOperand();
+
   if (!AllocaInst::classof(v) || !isSEXP(cast<AllocaInst>(v))) { // FIXME: does not handle phi nodes
     return false;
   }
