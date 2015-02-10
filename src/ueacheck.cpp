@@ -168,6 +168,34 @@ ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsM
 
 // FIXME: copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+
+// this is approximative only
+bool isLoadOfUnprotectedObject(Value *arg, Instruction *callInst, FunctionsSetTy& possibleAllocators, DominatorTree& dominatorTree) {
+  if (!LoadInst::classof(arg)) {
+    return false;
+  }
+  Value *v = cast<LoadInst>(arg)->getPointerOperand();
+  if (!AllocaInst::classof(v) || !isSEXP(cast<AllocaInst>(v))) { // FIXME: does not handle phi nodes
+    return false;
+  }
+  if (PointerMayBeCapturedBefore(v, false, true, callInst, &dominatorTree, true)) {
+    return false;
+  }
+  StoreInst* allocStore = getDominatingNonProtectingAllocatingStore(cast<AllocaInst>(v), cast<LoadInst>(arg), possibleAllocators, dominatorTree);
+  if (!allocStore) {
+    return false;
+  }
+  Instruction* protect = getProtect(cast<AllocaInst>(v), allocStore, cast<LoadInst>(arg), dominatorTree);
+  if (!protect) {
+    if (VERBOSE) {
+      errs() << "Variable " << *v << " may be unprotected in call " << sourceLocation(callInst) << " with allocation at  "
+        << sourceLocation(allocStore) << "\n";
+    }
+    return true;
+  }
+  return false;
+}
+
 int main(int argc, char* argv[])
 {
   LLVMContext context;
@@ -210,32 +238,7 @@ int main(int argc, char* argv[])
         for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
           Value* o = inst->getOperand(u);
           
-          if (LoadInst::classof(o)) {
-            Value *v = cast<LoadInst>(o)->getPointerOperand();
-            if (!AllocaInst::classof(v) || !isSEXP(cast<AllocaInst>(v))) {
-              continue;
-            }
-            if (PointerMayBeCapturedBefore(v, false, true, inst, &dominatorTree, true)) {
-              continue; 
-            }
-            StoreInst* allocStore = getDominatingNonProtectingAllocatingStore(cast<AllocaInst>(v), cast<LoadInst>(o), possibleAllocators, dominatorTree);
-            if (!allocStore) {
-              continue;
-            }
-            Instruction* protect = getProtect(cast<AllocaInst>(v), allocStore, cast<LoadInst>(o), dominatorTree);
-            if (!protect) {
-              if (VERBOSE) {
-                errs() << "Variable " << *v << " may be unprotected in call " << sourceLocation(inst) << " with allocation at  "
-                  << sourceLocation(allocStore) << "\n";
-              }
-               
-              nFreshObjects++;
-              nAllocatingArgs++;
-            }
-            continue;
-          }
-          
-          // FIXME: copy-paste from maacheck vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+          // FIXME: partial copy-paste from maacheck vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
           
           ArgExpKind k;
           
@@ -250,24 +253,32 @@ int main(int argc, char* argv[])
             unsigned nvals = phi->getNumIncomingValues();
             k = AK_NOALLOC;
             for(unsigned i = 0; i < nvals; i++) {
-              ArgExpKind cur = classifyArgumentExpression(phi->getIncomingValue(i), functionsMap, gcFunctionIndex, possibleAllocators);
+              Value* incoming = phi->getIncomingValue(i);
+              ArgExpKind cur = classifyArgumentExpression(incoming, functionsMap, gcFunctionIndex, possibleAllocators);
+              if (isLoadOfUnprotectedObject(incoming, const_cast<Instruction*>(inst), possibleAllocators, dominatorTree)) {
+                cur = AK_FRESH;
+              }
               if (cur > k) {
                 k = cur;
+                if (cur == AK_FRESH) break; // no need to check more args
               }
             }
           } else {
             k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
+            if (isLoadOfUnprotectedObject(o, const_cast<Instruction*>(inst), possibleAllocators, dominatorTree)) {
+              k = AK_FRESH;
+            }
           }
 
           if (k >= AK_ALLOCATING) nAllocatingArgs++;
           if (k >= AK_FRESH) nFreshObjects++;
 
-          // FIXME: copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          // FIXME: partial copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         }
         
         if (nAllocatingArgs >= 2 && nFreshObjects >= 1) {
-          outs() << "WARNING Suspicious call (two or more unprotected arguments) at " << demangle(finfo->function->getName()) << " " 
-            << sourceLocation(inst) << "\n";
+          outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << demangle(middleFinfo->function->getName()) <<
+            " at " << demangle(finfo->function->getName()) << " " << sourceLocation(inst) << "\n";
         }
       }
     }
