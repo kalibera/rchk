@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "errors.h"
+#include "allocators.h"
 
 using namespace llvm;
 
@@ -32,6 +33,10 @@ const bool TRACE = false;
 const bool DUMP_STATES = false;
 const std::string DUMP_STATES_FUNCTION = "Rf_substituteList"; // only dump states in this function
 const bool VERBOSE_DUMP = false;
+
+const bool USE_ALLOCATOR_DETECTION = true;
+  // use allocator detection to set SEXP guard variables to non-nill on allocation
+  // this is optional as the allocator detection may be incorrect(?)
 
 // -------------------------
 const bool UNIQUE_MSG = true;
@@ -703,6 +708,11 @@ int main(int argc, char* argv[])
   FunctionsSetTy errorFunctions;
   findErrorFunctions(m, errorFunctions);
 
+  FunctionsSetTy possibleAllocators;
+  if (USE_ALLOCATOR_DETECTION) {
+    findPossibleAllocators(m, possibleAllocators);
+  }
+
   unsigned nAnalyzedFunctions = 0;
   for(FunctionsOrderedSetTy::iterator FI = functionsOfInterest.begin(), FE = functionsOfInterest.end(); FI != FE; ++FI) {
     Function *fun = *FI;
@@ -1058,10 +1068,21 @@ int main(int argc, char* argv[])
                 line_debug("sexp guard variable " + storePointerVar->getName().str() + " set to state of " +
                     cast<AllocaInst>(src)->getName().str() + ", which is " + sgs_name(newState), in, fun, context);
               } else {
+
                 line_debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown (unsupported loadinst source)", in, fun, context);
               }
             } else {
-              line_debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown", in, fun, context);
+              CallSite acs(storeValueOp);
+              if (acs && USE_ALLOCATOR_DETECTION) {
+                Function *afun = acs.getCalledFunction();
+                if (possibleAllocators.find(afun) != possibleAllocators.end()) {
+                    newState = SGS_NONNIL;
+                    line_debug("sexp guard variable " + storePointerVar->getName().str() + " set to non-nill (allocated by " + afun->getName().str() + ")", in, fun, context);
+                }
+              }
+              if (newState == SGS_UNKNOWN) {
+                line_debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown", in, fun, context);
+              }
             }
             sexpGuards[storePointerVar] = newState;
             continue;            
