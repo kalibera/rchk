@@ -26,6 +26,7 @@ int main(int argc, char* argv[])
   FunctionsOrderedSetTy functionsOfInterest;
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+
   FunctionsSetTy possibleAllocators;
   findPossibleAllocators(m, possibleAllocators);
   

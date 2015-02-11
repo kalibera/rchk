@@ -274,6 +274,12 @@ int main(int argc, char* argv[])
           if (k >= AK_ALLOCATING) nAllocatingArgs++;
           if (k >= AK_FRESH) nFreshObjects++;
 
+          if (VERBOSE) {
+            if (k != AK_NOALLOC) {
+              errs() << " Argument " << *o << " in call to " << demangle(middleFinfo->function->getName()) << " is of kind " << k << 
+              " at " << sourceLocation(inst)  << "\n";
+            }
+          }
           // FIXME: partial copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         }
         

@@ -13,7 +13,7 @@ const bool DEBUG = false;
 // build closure over the callgraph of module m
 // each function from module m gets its FunctionInfo in the functionsMap
 
-void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths, FunctionsSetTy *onlyFunctions) {
+void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths, FunctionsSetTy *onlyFunctions, CallEdgesMapTy *onlyEdges) {
 
   FunctionsSetTy errorFunctions;
   if (ignoreErrorPaths) {
@@ -70,7 +70,15 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
       if (onlyFunctions && onlyFunctions->find(targetFun) == onlyFunctions->end()) {
         continue;
       }
-
+      if (onlyEdges) {
+        auto esearch = onlyEdges->find(fun);
+        if (esearch != onlyEdges->end()) {
+          FunctionsSetTy* onlyTargets = esearch->second;
+          if (onlyTargets->find(targetFun) == onlyTargets->end()) {
+            continue;
+          }
+        }
+      }
       // find or create FunctionInfo for the target      
       FunctionInfo *targetFunctionInfo;
       auto search = functionsMap.find(targetFun);

@@ -120,11 +120,16 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
   return false;
 }
 
-bool mayBeAllocator(Function& f) {
-  if (!isSEXP(f.getReturnType())) return false; // allocator must return SEXP
+
+// returns a set of functions such that if any of them was an allocator,
+// this function f could also have been an allocator
+//
+// returns an empty set if this function cannot be an allocator
+
+void getWrappedAllocators(Function& f, FunctionsSetTy& wrappedAllocators, Function* gcFunction) {
+  if (!isSEXP(f.getReturnType())) return; // allocator must return SEXP
 
   VarsSetTy possiblyReturnedVars; // true if value from this variable may be returned
-  
   findPossiblyReturnedVariables(f, possiblyReturnedVars);
       
   for(Function::iterator bb = f.begin(), bbe = f.end(); bb != bbe; ++bb) {
@@ -132,38 +137,55 @@ bool mayBeAllocator(Function& f) {
       CallSite cs(cast<Value>(in));
       if (!cs) continue;
       Function *tgt = cs.getCalledFunction();
+      if (tgt == gcFunction) {
+        // an exception: treat a call to R_gc_internal as an indication this is a direct allocator
+        // (note: R_gc_internal itself does not return an SEXP)
+        if (DEBUG) errs() << "SEXP function " << f.getName() << " calls directly into " << tgt->getName() << "\n";
+        wrappedAllocators.insert(tgt);
+        continue;
+      }
       if (!tgt) continue;
       if (!isSEXP(tgt->getReturnType())) continue;
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
       if (valueMayBeReturned(cast<Value>(in), possiblyReturnedVars)) {
-        if (DEBUG) errs() << "  has callsite" << *in << "\n";
-        return true;
+        if (DEBUG) errs() << "SEXP function " << f.getName() << " wraps functions " << tgt->getName() << "\n";
+        wrappedAllocators.insert(tgt);
       }
     }
   }
-  return false;
 }
 
 void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
 
+  FunctionsSetTy onlyFunctions;
+  CallEdgesMapTy onlyEdges;
+  Function* gcFunction = getGCFunction(m);
+
+  onlyFunctions.insert(gcFunction);
   for(Module::iterator f = m->begin(), fe = m->end(); f != fe; ++f) {
-    if (mayBeAllocator(*f)) {
-      possibleAllocators.insert(f);
+
+    FunctionsSetTy wrappedAllocators;
+    getWrappedAllocators(*f, wrappedAllocators, gcFunction);
+    if (!wrappedAllocators.empty()) {
+      onlyEdges.insert({f, new FunctionsSetTy(wrappedAllocators)});
+      onlyFunctions.insert(f);
     }
   }
   
-  possibleAllocators.insert(getGCFunction(m));
-  
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */, &possibleAllocators);
+  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, &onlyEdges);
+
+  for(CallEdgesMapTy::iterator cei = onlyEdges.begin(), cee = onlyEdges.end(); cei != cee; ++cei) {
+    delete cei->second;
+  }
   
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 
   for(FunctionsInfoMapTy::iterator fi = functionsMap.begin(), fe = functionsMap.end(); fi != fe; ++fi) {
     Function *f = const_cast<Function *>(fi->second->function);
     if (!f) continue;
-    
+
     if ((*fi->second->callsFunctionMap)[gcFunctionIndex]) {
       possibleAllocators.insert(f);
     }

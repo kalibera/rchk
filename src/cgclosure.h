@@ -35,6 +35,9 @@ struct FunctionInfo {
 
 typedef std::map<Function*, FunctionInfo*> FunctionsInfoMapTy;
 
-void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths = true, FunctionsSetTy *onlyFunctions = NULL);
+typedef std::unordered_set<Function*> FunctionsSetTy;
+typedef std::map<Function*, FunctionsSetTy*> CallEdgesMapTy;
+
+void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths = true, FunctionsSetTy *onlyFunctions = NULL, CallEdgesMapTy *onlyEdges = NULL);
 
 #endif
