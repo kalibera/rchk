@@ -63,6 +63,9 @@ bool EXCLUDE_PROTECTION_FUNCTIONS = true;
 bool REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS = true;
   // this can be turned off because it has a lot of false alarms
 
+bool REPORT_UNPROTECTED_VARIABLES_AT_ALLOCATING_CALLS = true;
+  // this can be turned off because it has a lot of false alarms
+
 // -------------------------------- basic block state -----------------------------------
 
 const int MAX_DEPTH = 64;	// maximum supported protection stack depth
@@ -936,15 +939,6 @@ int main(int argc, char* argv[])
               }
             continue;
           }
-          if (possibleAllocators.find(const_cast<Function*>(targetFunc)) != possibleAllocators.end() && in->hasOneUse() && StoreInst::classof(in->user_back())) {
-            // detect initialization of fresh variables
-            Value *dst = cast<StoreInst>(in->user_back())->getPointerOperand();
-            if (AllocaInst::classof(dst)) {
-              AllocaInst *var = cast<AllocaInst>(dst);
-              freshVars.insert(var);
-              line_debug("initialized fresh SEXP variable " + var->getName().str(), in, fun, context);
-            }
-          }
           if (allocatingFunctions.find(const_cast<Function*>(targetFunc)) != allocatingFunctions.end()) {
 
             if (REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS) {
@@ -959,6 +953,21 @@ int main(int argc, char* argv[])
                   }
                 }
               }
+            }
+            if (REPORT_UNPROTECTED_VARIABLES_AT_ALLOCATING_CALLS) {
+              for (FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
+                AllocaInst *var = *fi;
+                line_info("unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str(), in, fun, context);
+              }
+            }
+          }
+          if (possibleAllocators.find(const_cast<Function*>(targetFunc)) != possibleAllocators.end() && in->hasOneUse() && StoreInst::classof(in->user_back())) {
+            // detect initialization of fresh variables
+            Value *dst = cast<StoreInst>(in->user_back())->getPointerOperand();
+            if (AllocaInst::classof(dst)) {
+              AllocaInst *var = cast<AllocaInst>(dst);
+              freshVars.insert(var);
+              line_debug("initialized fresh SEXP variable " + var->getName().str(), in, fun, context);
             }
           }
           continue;
