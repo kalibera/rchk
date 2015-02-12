@@ -172,6 +172,9 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   onlyFunctions.insert(gcFunction);
   for(Module::iterator f = m->begin(), fe = m->end(); f != fe; ++f) {
 
+    if (isKnownNonAllocator(f)) {
+      continue;
+    }
     FunctionsSetTy wrappedAllocators;
     getWrappedAllocators(*f, wrappedAllocators, gcFunction);
     if (!wrappedAllocators.empty()) {

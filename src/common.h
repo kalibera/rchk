@@ -14,6 +14,7 @@ typedef std::unordered_set<BasicBlock*> BasicBlocksSetTy;
 typedef std::unordered_set<Function*> FunctionsSetTy;
 typedef std::unordered_set<AllocaInst*> VarsSetTy;
 typedef std::set<Function*> FunctionsOrderedSetTy;
+typedef std::set<AllocaInst*> VarsOrderedSetTy;
 
 Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterest, LLVMContext& context);
 

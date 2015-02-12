@@ -1,10 +1,18 @@
 
 /*
-  Check protection stack balance for individual functions.
-  
+  Check protection stack balance for individual functions
+  (and look for some other pointer protection bugs).
+
   Note that some functions have protection imbalance by design, most notable
   functions that manipulate the pointer protection stack and functions that
   are part of the parsers.
+
+  The checking is somewhat path-sensitive and this sensitivity is adaptive.
+  It increases when errors are found to validate they are not false alarms.
+
+  The tool also looks for hints that there is an unprotected pointer while
+  calling into a function that may allocate.  This is approximate only and
+  has a lot of false alarms.
 */
 
 #include <map>
@@ -31,7 +39,7 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "Rf_substituteList"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "Rf_DropDims"; // only dump states in this function
 const bool VERBOSE_DUMP = false;
 
 const bool USE_ALLOCATOR_DETECTION = true;
@@ -48,9 +56,12 @@ const bool UNIQUE_MSG = true;
   // delayed until the next function, possibly even dropped in case of some
   // kind of adaptive checking.
 
-bool EXCLUDE_PROTECTION_FUNCTIONS = false;
+bool EXCLUDE_PROTECTION_FUNCTIONS = true;
   // currently this is set below to true for the case when checking modules
   // if set to true, functions like protect, unprotect are not being checked (because they indeed cause imbalance)
+
+bool REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS = true;
+  // this can be turned off because it has a lot of false alarms
 
 // -------------------------------- basic block state -----------------------------------
 
@@ -129,6 +140,11 @@ SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var) {
   }
 }
 
+typedef VarsSetTy FreshVarsTy;
+  // variables known to hold newly allocated pointers (SEXPs)
+  // attempts to include only reliably unprotected pointers,
+  // so as of now, any use of a variable removes it from the set
+
 struct StateTy {
   BasicBlock *bb;
   int depth;		// number of pointers "currently" on the protection stack
@@ -137,13 +153,14 @@ struct StateTy {
   CountState countState;
   IntGuardsTy intGuards;
   SEXPGuardsTy sexpGuards;
+  FreshVarsTy freshVars;
   
   public:
     StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState): 
-      bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), intGuards(), sexpGuards() {};
+      bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), intGuards(), sexpGuards(), freshVars() {};
 
-    StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards): 
-      bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), intGuards(intGuards), sexpGuards(sexpGuards) {};
+    StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
+      bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), intGuards(intGuards), sexpGuards(sexpGuards), freshVars(freshVars) {};
       
     void dump() {
       errs() << "\n ###################### STATE DUMP ######################\n";
@@ -179,6 +196,15 @@ struct StateTy {
         }
         errs() << " state: " << sgs_name(s) << "\n";
       }
+      errs() << "=== fresh vars: \n";
+      for(FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
+        AllocaInst *var = *fi;
+        errs() << "   " << var->getName();
+        if (VERBOSE_DUMP) {
+          errs() << " " << *var;
+        }
+        errs() << "\n";
+      }
       errs() << " ######################            ######################\n";
     }
 
@@ -194,6 +220,7 @@ inline void hash_combine(std::size_t& seed, const T& v) {
 struct StateTy_hash {
 
   size_t operator()(const StateTy& t) const {
+
     size_t res = 0;
     hash_combine(res, t.bb);
     hash_combine(res, t.depth);
@@ -206,6 +233,8 @@ struct StateTy_hash {
     for(SEXPGuardsTy::const_iterator gi = t.sexpGuards.begin(), ge = t.sexpGuards.end(); gi != ge; *gi++) {
       hash_combine(res, (int) gi->second);
     }
+    hash_combine(res, t.freshVars.size());
+    // do not hash the content of freshVars (it doesn't pay off and currently the set is unordered)
     return res;
   }
 };
@@ -214,7 +243,8 @@ struct StateTy_equal {
   bool operator() (const StateTy& lhs, const StateTy& rhs) const {
     return lhs.bb == rhs.bb && lhs.depth == rhs.depth && lhs.savedDepth == rhs.savedDepth &&
       lhs.count == rhs.count && lhs.countState == rhs.countState && 
-      lhs.intGuards == rhs.intGuards && lhs.sexpGuards == rhs.sexpGuards;
+      lhs.intGuards == rhs.intGuards && lhs.sexpGuards == rhs.sexpGuards &&
+      lhs.freshVars == rhs.freshVars;
   }
 };
 
@@ -716,6 +746,9 @@ int main(int argc, char* argv[])
     findPossibleAllocators(m, possibleAllocators);
   }
 
+  FunctionsSetTy allocatingFunctions;
+  findAllocatingFunctions(m, allocatingFunctions);
+
   unsigned nAnalyzedFunctions = 0;
   for(FunctionsOrderedSetTy::iterator FI = functionsOfInterest.begin(), FE = functionsOfInterest.end(); FI != FE; ++FI) {
     Function *fun = *FI;
@@ -762,6 +795,7 @@ int main(int argc, char* argv[])
       BasicBlock *bb = todo.bb;
       IntGuardsTy intGuards = todo.intGuards; // FIXME: could easily avoid copy?
       SEXPGuardsTy sexpGuards = todo.sexpGuards;
+      FreshVarsTy freshVars = todo.freshVars;
       
       if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
         line_trace("going to work on this state:", bb->begin(), fun, context);
@@ -795,7 +829,6 @@ int main(int argc, char* argv[])
             line_debug("protect call", in, fun, context);
             continue;
           }
-
           if (targetFunc == gl.unprotectFunction) {
             Value* unprotectValue = cs.getArgument(0);
             if (ConstantInt::classof(unprotectValue)) { // e.g. UNPROTECT(3)
@@ -893,7 +926,7 @@ int main(int argc, char* argv[])
             continue;
           }
           
-          if (targetFunc == gl.unprotectPtrFunction) {  // UNPROTECT_PTR(x, idx)
+          if (targetFunc == gl.unprotectPtrFunction) {  // UNPROTECT_PTR(x)
             line_debug("unprotect_ptr call", in, fun, context);
             depth--;
             if (countState != CS_DIFF && depth < 0) {
@@ -903,8 +936,33 @@ int main(int argc, char* argv[])
               }
             continue;
           }
+          if (possibleAllocators.find(const_cast<Function*>(targetFunc)) != possibleAllocators.end() && in->hasOneUse() && StoreInst::classof(in->user_back())) {
+            // detect initialization of fresh variables
+            Value *dst = cast<StoreInst>(in->user_back())->getPointerOperand();
+            if (AllocaInst::classof(dst)) {
+              AllocaInst *var = cast<AllocaInst>(dst);
+              freshVars.insert(var);
+              line_debug("initialized fresh SEXP variable " + var->getName().str(), in, fun, context);
+            }
+          }
+          if (allocatingFunctions.find(const_cast<Function*>(targetFunc)) != allocatingFunctions.end()) {
+
+            if (REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS) {
+              for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
+                Value *arg = *ai;
+                CallSite csa(arg);
+                if (csa) {
+                  Function *srcFun = csa.getCalledFunction();
+                  if (srcFun && possibleAllocators.find(srcFun) != possibleAllocators.end()) {
+                    line_info("calling allocating function " + targetFunc->getName().str() + " with argument allocated using " + srcFun->getName().str(),
+                      in, fun, context);
+                  }
+                }
+              }
+            }
+          }
           continue;
-        }
+        } /* not invoke or call */
         if (LoadInst::classof(in)) {
           LoadInst *li = cast<LoadInst>(in);
           if (li->getPointerOperand() == gl.ppStackTopVariable) { // savestack = R_PPStackTop
@@ -924,6 +982,26 @@ int main(int argc, char* argv[])
                     savedDepth = depth;
                     line_debug("saving value of PPStackTop", in, fun, context);
                     continue;
+                  }
+                }
+              }
+            }
+          }
+          if (AllocaInst::classof(li->getPointerOperand())) {
+            AllocaInst *var = cast<AllocaInst>(li->getPointerOperand());
+            if (freshVars.find(var) != freshVars.end()) { // a fresh variable is being loaded
+
+              line_debug("fresh variable " + var->getName().str() + " loaded and thus no longer fresh", in, fun, context);
+              freshVars.erase(var);
+
+              if (REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS && li->hasOneUse()) { // too restrictive? should look at other uses too?
+                CallSite cs(li->user_back());
+                if (cs) {
+                  Function *targetFun = cs.getCalledFunction();
+                  // fresh variable passed to an allocating function - but this may be ok if it is callee-protect function
+                  //   or if the function allocates only after the fresh argument is no longer needed
+                  if (allocatingFunctions.find(targetFun) != allocatingFunctions.end()) {
+                    line_info("calling allocating function " + targetFun->getName().str() + " with a fresh pointer (" + var->getName().str() + ")", in, fun, context);
                   }
                 }
               }
@@ -1178,7 +1256,7 @@ int main(int argc, char* argv[])
               }
               if (succIndex != 1) {
                 // true branch is possible
-                StateTy state(br->getSuccessor(0), depth, savedDepth, count, countState, intGuards, sexpGuards);
+                StateTy state(br->getSuccessor(0), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                 state.sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NIL : SGS_NONNIL;
                 addState(doneSet, workList, state);
                 if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
@@ -1188,7 +1266,7 @@ int main(int argc, char* argv[])
               }
               if (succIndex != 0) {
                 // false branch is possible
-                StateTy state(br->getSuccessor(1), depth, savedDepth, count, countState, intGuards, sexpGuards);
+                StateTy state(br->getSuccessor(1), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                 state.sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NONNIL : SGS_NIL;
                 addState(doneSet, workList, state);
                 if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
@@ -1244,7 +1322,7 @@ int main(int argc, char* argv[])
                 if (succIndex != 1) {
                   // true branch is possible
                   
-                  StateTy state(br->getSuccessor(0), depth, savedDepth, count, countState, intGuards, sexpGuards);
+                  StateTy state(br->getSuccessor(0), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                   state.intGuards[var] = ci->isTrueWhenEqual() ? IGS_ZERO : IGS_NONZERO;
                   addState(doneSet, workList, state);
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
@@ -1254,7 +1332,7 @@ int main(int argc, char* argv[])
                 }
                 if (succIndex != 0) {
                   // false branch is possible
-                  StateTy state(br->getSuccessor(1), depth, savedDepth, count, countState, intGuards, sexpGuards);
+                  StateTy state(br->getSuccessor(1), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                   state.intGuards[var] = ci->isTrueWhenEqual() ? IGS_NONZERO : IGS_ZERO;
                   addState(doneSet, workList, state);
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
@@ -1297,7 +1375,7 @@ int main(int argc, char* argv[])
                   } else {
                     succ = br->getSuccessor(1);
                   }
-                  StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards);
+                  StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                   addState(doneSet, workList, state);
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                     line_trace("added folded successor, the following state", t, fun, context);
@@ -1357,7 +1435,7 @@ int main(int argc, char* argv[])
                       goto abort_from_function;
                     }
                     // next process the code after the if
-                    StateTy state(joinSucc, depth, savedDepth, count, countState, intGuards, sexpGuards);
+                    StateTy state(joinSucc, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                     addState(doneSet, workList, state);
                     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                       line_trace("added folded successor (diff counter state), the following state", t, fun, context);
@@ -1376,7 +1454,7 @@ int main(int argc, char* argv[])
       for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
         BasicBlock *succ = t->getSuccessor(i);
         
-        StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards);
+        StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
         addState(doneSet, workList, state);
         if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
           line_trace("added successor", t, fun, context);
