@@ -36,7 +36,10 @@ const bool VERBOSE_DUMP = false;
 
 const bool USE_ALLOCATOR_DETECTION = true;
   // use allocator detection to set SEXP guard variables to non-nill on allocation
-  // this is optional as the allocator detection may be incorrect(?)
+  // this is optional, because it is not correct
+  //   a function that would sometimes return a non-nill pointer, but at
+  //   other times nil, will still be detected as an allocator [it would
+  //   have been better to have a specific analysis for nullability]
 
 // -------------------------
 const bool UNIQUE_MSG = true;
