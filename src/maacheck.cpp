@@ -53,7 +53,7 @@ ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsM
     return AK_NOALLOC;
   }
 
-  if (!isInstall(fun) && possibleAllocators.find(fun) != possibleAllocators.end()) {
+  if (possibleAllocators.find(fun) != possibleAllocators.end()) {
     // the argument allocates and returns a fresh object
     return AK_FRESH;
   }

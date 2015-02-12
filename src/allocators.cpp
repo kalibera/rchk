@@ -120,6 +120,12 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
   return false;
 }
 
+// some manually added exceptions that so far seem too hard to find automatically
+bool isKnownNonAllocator(Function *f) {
+  if (isInstall(f)) return true;
+  return false;
+}
+
 
 // returns a set of functions such that if any of them was an allocator,
 // this function f could also have been an allocator
@@ -146,6 +152,7 @@ void getWrappedAllocators(Function& f, FunctionsSetTy& wrappedAllocators, Functi
       }
       if (!tgt) continue;
       if (!isSEXP(tgt->getReturnType())) continue;
+      if (isKnownNonAllocator(tgt)) continue;
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
       if (valueMayBeReturned(cast<Value>(in), possiblyReturnedVars)) {
@@ -204,4 +211,21 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
   FunctionInfo *finfo = fsearch->second;
 
   return (*finfo->callsFunctionMap)[gcFunctionIndex];
+}
+
+void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
+
+  FunctionsInfoMapTy functionsMap;
+  buildCGClosure(m, functionsMap, true /* ignore error paths */);
+
+  unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
+
+  for(FunctionsInfoMapTy::iterator fi = functionsMap.begin(), fe = functionsMap.end(); fi != fe; ++fi) {
+    Function *f = const_cast<Function *>(fi->second->function);
+    if (!f) continue;
+
+    if ((*fi->second->callsFunctionMap)[gcFunctionIndex]) {
+      allocatingFunctions.insert(f);
+    }
+  }
 }
