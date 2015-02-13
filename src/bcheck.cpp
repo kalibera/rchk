@@ -1010,7 +1010,17 @@ int main(int argc, char* argv[])
                   // fresh variable passed to an allocating function - but this may be ok if it is callee-protect function
                   //   or if the function allocates only after the fresh argument is no longer needed
                   if (allocatingFunctions.find(targetFun) != allocatingFunctions.end()) {
-                    line_info("calling allocating function " + targetFun->getName().str() + " with a fresh pointer (" + var->getName().str() + ")", in, fun, context);
+                    std::string varName = var->getName().str();
+                    if (varName.empty()) {
+                      unsigned i;
+                      for(i = 0; i < cs.arg_size(); i++) {
+                        if (cs.getArgument(i) == li) {
+                          varName = "arg " + std::to_string(i+1);
+                          break;
+                        }
+                      }
+                    }
+                    line_info("calling allocating function " + targetFun->getName().str() + " with a fresh pointer (" + varName + ")", in, fun, context);
                   }
                 }
               }
