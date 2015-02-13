@@ -961,15 +961,6 @@ int main(int argc, char* argv[])
               }
             }
           }
-          if (possibleAllocators.find(const_cast<Function*>(targetFunc)) != possibleAllocators.end() && in->hasOneUse() && StoreInst::classof(in->user_back())) {
-            // detect initialization of fresh variables
-            Value *dst = cast<StoreInst>(in->user_back())->getPointerOperand();
-            if (AllocaInst::classof(dst)) {
-              AllocaInst *var = cast<AllocaInst>(dst);
-              freshVars.insert(var);
-              line_debug("initialized fresh SEXP variable " + var->getName().str(), in, fun, context);
-            }
-          }
           continue;
         } /* not invoke or call */
         if (LoadInst::classof(in)) {
@@ -1032,6 +1023,25 @@ int main(int argc, char* argv[])
           Value* storePointerOp = cast<StoreInst>(in)->getPointerOperand();
           Value* storeValueOp = cast<StoreInst>(in)->getValueOperand();
 
+          if (AllocaInst::classof(storePointerOp) && storeValueOp->hasOneUse()) {
+            AllocaInst *var = cast<AllocaInst>(storePointerOp);
+            CallSite csv(storeValueOp);
+            bool isFresh = false;
+            if (csv) {
+              Function *vf = csv.getCalledFunction();
+              if (vf && possibleAllocators.find(const_cast<Function*>(vf)) != possibleAllocators.end()) {
+                freshVars.insert(var);
+                line_debug("initialized fresh SEXP variable " + var->getName().str(), in, fun, context);
+                isFresh = true;
+              }
+            }
+            if (!isFresh) {
+              if (freshVars.find(var) != freshVars.end()) {
+                freshVars.erase(var);
+                line_debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in, fun, context);
+              }
+            }
+          }
           if (storePointerOp == gl.ppStackTopVariable) { // R_PPStackTop = savestack
             if (LoadInst::classof(storeValueOp)) {          
               Value *varValue = cast<LoadInst>(storeValueOp)->getPointerOperand();
