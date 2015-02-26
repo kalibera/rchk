@@ -3,6 +3,7 @@
 
 #include <set>
 #include <unordered_set>
+#include <unordered_map>
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
@@ -15,6 +16,13 @@ typedef std::unordered_set<Function*> FunctionsSetTy;
 typedef std::unordered_set<AllocaInst*> VarsSetTy;
 typedef std::set<Function*> FunctionsOrderedSetTy;
 typedef std::set<AllocaInst*> VarsOrderedSetTy;
+
+struct VarBoolCacheTy_hash {
+  size_t operator()(const AllocaInst* i) const {
+    return (size_t) i;
+  }
+};
+typedef std::unordered_map<AllocaInst*,bool,VarBoolCacheTy_hash> VarBoolCacheTy;
 
 Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterest, LLVMContext& context);
 

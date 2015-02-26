@@ -1,0 +1,42 @@
+#ifndef RCHK_GUARDS_H
+#define RCHK_GUARDS_H
+
+#include "common.h"
+
+#include <map>
+
+#include <llvm/IR/Instruction.h>
+
+using namespace llvm;
+
+// integer variable used as a guard
+
+enum IntGuardState {
+  IGS_ZERO = 0,
+  IGS_NONZERO,
+  IGS_UNKNOWN
+};
+
+typedef std::map<AllocaInst*,IntGuardState> IntGuardsTy;
+
+std::string igs_name(IntGuardState igs);
+IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
+bool isIntegerGuardVariable(AllocaInst* var);
+bool isIntegerGuardVariable(AllocaInst* var, VarBoolCacheTy& cache);
+
+// SEXP - an "R pointer" used as a guard
+
+enum SEXPGuardState {
+  SGS_NIL = 0, // R_NilValue
+  SGS_NONNIL,
+  SGS_UNKNOWN
+};
+
+typedef std::map<AllocaInst*,SEXPGuardState> SEXPGuardsTy;
+
+std::string sgs_name(SEXPGuardState sgs);
+SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var);
+bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction);
+bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache);
+
+#endif

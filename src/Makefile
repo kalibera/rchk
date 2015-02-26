@@ -39,7 +39,7 @@ sfpcheck: sfpcheck.o allocators.o errors.o cgclosure.o common.o
 
 maacheck: maacheck.o allocators.o errors.o cgclosure.o common.o
 
-bcheck: bcheck.o allocators.o errors.o cgclosure.o common.o
+bcheck: bcheck.o allocators.o errors.o guards.o cgclosure.o linemsg.o common.o
 
 ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o
 
