@@ -2,6 +2,7 @@
 #define RCHK_GUARDS_H
 
 #include "common.h"
+#include "linemsg.h"
 
 #include <map>
 
@@ -23,6 +24,7 @@ std::string igs_name(IntGuardState igs);
 IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
 bool isIntegerGuardVariable(AllocaInst* var);
 bool isIntegerGuardVariable(AllocaInst* var, VarBoolCacheTy& cache);
+bool handleStoreToIntGuard(StoreInst* store, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg);
 
 // SEXP - an "R pointer" used as a guard
 
@@ -38,5 +40,7 @@ std::string sgs_name(SEXPGuardState sgs);
 SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache);
+bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
+  GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION = false);
 
 #endif

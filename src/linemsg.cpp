@@ -39,7 +39,8 @@ void LineMessenger::flush() {
   lastFunction = NULL;
 }
 
-void LineMessenger::lineInfo(std::string kind, std::string message, Instruction *in, Function *func, LLVMContext& context) {
+void LineMessenger::lineInfo(std::string kind, std::string message, Instruction *in) {
+  Function *func = in->getParent()->getParent();
 
   if (kind == "DEBUG" && !DEBUG) {
     return;
@@ -80,22 +81,22 @@ void LineMessenger::clearForFunction(Function *func) {
   }
 }
 
-void LineMessenger::trace(std::string msg, Instruction *in, Function *func, LLVMContext& context) {
+void LineMessenger::trace(std::string msg, Instruction *in) {
   if (TRACE) {
-    lineInfo("TRACE", msg, in, func, context);
+    lineInfo("TRACE", msg, in);
   }
 }
 
-void LineMessenger::debug(std::string msg, Instruction *in, Function *func, LLVMContext& context) {
+void LineMessenger::debug(std::string msg, Instruction *in) {
   if (DEBUG) {
-    lineInfo("DEBUG", msg, in, func, context);
+    lineInfo("DEBUG", msg, in);
   }
 }
 
-void LineMessenger::info(std::string msg, Instruction *in, Function *func, LLVMContext& context) {
-  lineInfo(DEBUG ? "INFO " : "", msg, in, func, context);
+void LineMessenger::info(std::string msg, Instruction *in) {
+  lineInfo(DEBUG ? "INFO " : "", msg, in);
 }
 
-void LineMessenger::error(std::string msg, Instruction *in, Function *func, LLVMContext& context) {
-  lineInfo("ERROR", msg, in, func, context);
+void LineMessenger::error(std::string msg, Instruction *in) {
+  lineInfo("ERROR", msg, in);
 }

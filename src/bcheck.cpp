@@ -236,7 +236,7 @@ struct GlobalsTy {
     }
     
     GlobalVariable *getSpecialVariable(Module *m, std::string name) {
-      GlobalVariable *v  = m->getGlobalVariable(name, true);
+      GlobalVariable *v = m->getGlobalVariable(name, true);
       if (!v) {
         errs() << "  Variable " << name << " not found in module (won't check its use).\n";
       }
@@ -399,7 +399,7 @@ int main(int argc, char* argv[])
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
   EXCLUDE_PROTECTION_FUNCTIONS = (argc == 3); // exclude when checking modules
   GlobalsTy gl(m);
-  LineMessenger msg(DEBUG, TRACE, UNIQUE_MSG);
+  LineMessenger msg(context, DEBUG, TRACE, UNIQUE_MSG);
   
   FunctionsSetTy errorFunctions;
   findErrorFunctions(m, errorFunctions);
@@ -461,18 +461,18 @@ int main(int argc, char* argv[])
       FreshVarsTy freshVars = todo.freshVars;
       
       if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-        msg.trace("going to work on this state:", bb->begin(), fun, context);
+        msg.trace("going to work on this state:", bb->begin());
         todo.dump();
       }
       workList.pop();
       
       if (errorBasicBlocks.find(bb) != errorBasicBlocks.end()) {
-        msg.debug("ignoring basic block on error path", bb->begin(), fun, context);
+        msg.debug("ignoring basic block on error path", bb->begin());
         continue;
       }
       
       if (doneSet.size() > MAX_STATES) {
-        msg.error("too many states (abstraction error?)", bb->begin(), fun, context);
+        msg.error("too many states (abstraction error?)", bb->begin());
         goto abort_from_function;
       }      
       
@@ -480,7 +480,7 @@ int main(int argc, char* argv[])
       
       // process a single basic block
       for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
-        msg.trace("visiting", in, fun, context);
+        msg.trace("visiting", in);
         CallSite cs(cast<Value>(in));
         if (cs) {
           // invoke or call
@@ -489,7 +489,7 @@ int main(int argc, char* argv[])
           
           if (targetFunc == gl.protectFunction || targetFunc == gl.protectWithIndexFunction) { // PROTECT(x)
             depth++;
-            msg.debug("protect call", in, fun, context);
+            msg.debug("protect call", in);
             continue;
           }
           if (targetFunc == gl.unprotectFunction) {
@@ -497,9 +497,9 @@ int main(int argc, char* argv[])
             if (ConstantInt::classof(unprotectValue)) { // e.g. UNPROTECT(3)
               uint64_t arg = (cast<ConstantInt>(unprotectValue))->getZExtValue();
               depth -= (int) arg;
-              msg.debug("unprotect call using constant", in, fun, context);              
+              msg.debug("unprotect call using constant", in);              
               if (countState != CS_DIFF && depth < 0) {
-                msg.info("has negative depth", in, fun, context);
+                msg.info("has negative depth", in);
                 refinableInfos++;
                 goto abort_from_function;
               }
@@ -510,26 +510,26 @@ int main(int argc, char* argv[])
               if (AllocaInst::classof(varValue)) {
                 AllocaInst* var = cast<AllocaInst>(varValue);
                 if (!isProtectionCounterVariable(var, gl.unprotectFunction, counterVarsCache)) {
-                  msg.info("has an unsupported form of unprotect with a variable (results will be incorrect)", in, fun, context);
+                  msg.info("has an unsupported form of unprotect with a variable (results will be incorrect)", in);
                   continue;
                 }
                 if (!counterVar) {
                   counterVar = var;
                 } else if (counterVar != var) {
-                  msg.info("has an unsupported form of unprotect with a variable - multiple counter variables (results will be incorrect)", in, fun, context);
+                  msg.info("has an unsupported form of unprotect with a variable - multiple counter variables (results will be incorrect)", in);
                   continue;
                 }
                 if (countState == CS_NONE) {
-                  msg.info("passes uninitialized counter of protects in a call to unprotect", in, fun, context);
+                  msg.info("passes uninitialized counter of protects in a call to unprotect", in);
                   refinableInfos++;
                   if (restartable) goto abort_from_function;
                   continue;
                 }
                 if (countState == CS_EXACT) {
                   depth -= count;
-                  msg.debug("unprotect call using counter in exact state", in, fun, context);                
+                  msg.debug("unprotect call using counter in exact state", in);                
                   if (depth < 0) {
-                    msg.info("has negative depth", in, fun, context);
+                    msg.info("has negative depth", in);
                     refinableInfos++;
                     goto abort_from_function;
                   }
@@ -537,11 +537,11 @@ int main(int argc, char* argv[])
                 }
                 // countState == CS_DIFF
                 assert(countState == CS_DIFF);
-                msg.debug("unprotect call using counter in diff state", in, fun, context);
+                msg.debug("unprotect call using counter in diff state", in);
                 countState = CS_NONE;
                 // depth keeps its value - it now becomes exact depth again
                 if (depth < 0) {
-                  msg.info("has negative depth after UNPROTECT(<counter>)", in, fun, context);
+                  msg.info("has negative depth after UNPROTECT(<counter>)", in);
                   refinableInfos++;
                   goto abort_from_function;
                 }
@@ -573,9 +573,9 @@ int main(int argc, char* argv[])
                         arg = cast<ConstantInt>(si->getFalseValue())->getZExtValue();
                       }
                       depth -= (int) arg;
-                      msg.debug("unprotect call using constant in conditional expression on integer guard", in, fun, context);              
+                      msg.debug("unprotect call using constant in conditional expression on integer guard", in);              
                       if (countState != CS_DIFF && depth < 0) {
-                        msg.info("has negative depth", in, fun, context);
+                        msg.info("has negative depth", in);
                         refinableInfos++;
                         goto abort_from_function;
                       }
@@ -585,15 +585,15 @@ int main(int argc, char* argv[])
                 }
               }
             }
-            msg.info("has unsupported form of unprotect", in, fun, context);
+            msg.info("has unsupported form of unprotect", in);
             continue;
           }
           
           if (targetFunc == gl.unprotectPtrFunction) {  // UNPROTECT_PTR(x)
-            msg.debug("unprotect_ptr call", in, fun, context);
+            msg.debug("unprotect_ptr call", in);
             depth--;
             if (countState != CS_DIFF && depth < 0) {
-                msg.info("has negative depth", in, fun, context);
+                msg.info("has negative depth", in);
                 refinableInfos++;
                 goto abort_from_function;
               }
@@ -609,7 +609,7 @@ int main(int argc, char* argv[])
                   Function *srcFun = csa.getCalledFunction();
                   if (srcFun && possibleAllocators.find(srcFun) != possibleAllocators.end()) {
                     msg.info("calling allocating function " + targetFunc->getName().str() + " with argument allocated using " + srcFun->getName().str(),
-                      in, fun, context);
+                      in);
                   }
                 }
               }
@@ -617,7 +617,7 @@ int main(int argc, char* argv[])
             if (REPORT_UNPROTECTED_VARIABLES_AT_ALLOCATING_CALLS) {
               for (FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
                 AllocaInst *var = *fi;
-                msg.info("unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str(), in, fun, context);
+                msg.info("unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str(), in);
               }
             }
           }
@@ -636,11 +636,11 @@ int main(int argc, char* argv[])
                     // topStore is the alloca instruction for the local variable where R_PPStack is saved to
                     // e.g. %save = alloca i32, align 4
                     if (countState == CS_DIFF) {
-                      msg.info("saving value of PPStackTop while in differential count state (results will be incorrect)", in, fun, context);
+                      msg.info("saving value of PPStackTop while in differential count state (results will be incorrect)", in);
                       continue;
                     }
                     savedDepth = depth;
-                    msg.debug("saving value of PPStackTop", in, fun, context);
+                    msg.debug("saving value of PPStackTop", in);
                     continue;
                   }
                 }
@@ -651,7 +651,7 @@ int main(int argc, char* argv[])
             AllocaInst *var = cast<AllocaInst>(li->getPointerOperand());
             if (freshVars.find(var) != freshVars.end()) { // a fresh variable is being loaded
 
-              msg.debug("fresh variable " + var->getName().str() + " loaded and thus no longer fresh", in, fun, context);
+              msg.debug("fresh variable " + var->getName().str() + " loaded and thus no longer fresh", in);
               freshVars.erase(var);
 
               if (REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS && li->hasOneUse()) { // too restrictive? should look at other uses too?
@@ -671,7 +671,7 @@ int main(int argc, char* argv[])
                         }
                       }
                     }
-                    msg.info("calling allocating function " + targetFun->getName().str() + " with a fresh pointer (" + varName + ")", in, fun, context);
+                    msg.info("calling allocating function " + targetFun->getName().str() + " with a fresh pointer (" + varName + ")", in);
                   }
                 }
               }
@@ -691,14 +691,14 @@ int main(int argc, char* argv[])
               Function *vf = csv.getCalledFunction();
               if (vf && possibleAllocators.find(const_cast<Function*>(vf)) != possibleAllocators.end()) {
                 freshVars.insert(var);
-                msg.debug("initialized fresh SEXP variable " + var->getName().str(), in, fun, context);
+                msg.debug("initialized fresh SEXP variable " + var->getName().str(), in);
                 isFresh = true;
               }
             }
             if (!isFresh) {
               if (freshVars.find(var) != freshVars.end()) {
                 freshVars.erase(var);
-                msg.debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in, fun, context);
+                msg.debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in);
               }
             }
           }
@@ -709,12 +709,12 @@ int main(int argc, char* argv[])
                 isProtectionStackTopSaveVariable(cast<AllocaInst>(varValue), gl.ppStackTopVariable, saveVarsCache)) {
 
                 if (countState == CS_DIFF) {
-                  msg.info("restoring value of PPStackTop while in differential count state (results will be incorrect)", in, fun, context);
+                  msg.info("restoring value of PPStackTop while in differential count state (results will be incorrect)", in);
                   continue;
                 }
-                msg.debug("restoring value of PPStackTop", in, fun, context);
+                msg.debug("restoring value of PPStackTop", in);
                 if (savedDepth < 0) {
-                  msg.info("restores PPStackTop from uninitialized local variable", in, fun, context);
+                  msg.info("restores PPStackTop from uninitialized local variable", in);
                   refinableInfos++;
                   if (restartable) goto abort_from_function;
                 } else {
@@ -723,7 +723,7 @@ int main(int argc, char* argv[])
                 continue;
               }
             }
-            msg.info("manipulates PPStackTop directly (results will be incorrect)", in, fun, context);
+            msg.info("manipulates PPStackTop directly (results will be incorrect)", in);
             continue;  
           }
           if (AllocaInst::classof(storePointerOp) && 
@@ -733,13 +733,13 @@ int main(int argc, char* argv[])
             if (!counterVar) {
               counterVar = storePointerVar;
             } else if (counterVar != storePointerVar) {
-              msg.info("uses multiple pointer protection counters (results will be incorrect)", in, fun, context);
+              msg.info("uses multiple pointer protection counters (results will be incorrect)", in);
               continue;
             }
             if (ConstantInt::classof(storeValueOp)) {
               // nprotect = 3
               if (countState == CS_DIFF) {
-                msg.info("setting counter value while in differential mode (forgetting protects)?", in, fun, context);
+                msg.info("setting counter value while in differential mode (forgetting protects)?", in);
                 refinableInfos++;
                 if (restartable) goto abort_from_function;
                 continue;
@@ -747,9 +747,9 @@ int main(int argc, char* argv[])
               int64_t arg = (cast<ConstantInt>(storeValueOp))->getSExtValue();
               count = arg;
               countState = CS_EXACT;
-              msg.debug("setting counter to a constant", in, fun, context);              
+              msg.debug("setting counter to a constant", in);              
               if (count < 0) {
-                msg.info("protection counter set to a negative value", in, fun, context);
+                msg.info("protection counter set to a negative value", in);
               }
               continue;
             }
@@ -772,17 +772,17 @@ int main(int argc, char* argv[])
                   constOp && ConstantInt::classof(constOp)) {
                   
                   if (countState == CS_NONE) {
-                    msg.info("adds a constant to an uninitialized counter variable", in, fun, context);
+                    msg.info("adds a constant to an uninitialized counter variable", in);
                     refinableInfos++;
                     if (restartable) goto abort_from_function;
                     continue;
                   }
                   int64_t arg = (cast<ConstantInt>(constOp))->getSExtValue();
-                  msg.debug("adding a constant to counter", in, fun, context);
+                  msg.debug("adding a constant to counter", in);
                   if (countState == CS_EXACT) {
                     count += arg;
                     if (count < 0) {
-                      msg.info("protection counter went negative after add", in, fun, context);
+                      msg.info("protection counter went negative after add", in);
                       refinableInfos++;
                       if (restartable) goto abort_from_function;
                     }
@@ -795,67 +795,16 @@ int main(int argc, char* argv[])
                 }
               }
             }
-            msg.info("unsupported use of protection counter (internal error?)", in, fun, context);
+            msg.info("unsupported use of protection counter (internal error?)", in);
             continue;
           }
-          if (intGuardsEnabled && AllocaInst::classof(storePointerOp) && 
-            isIntegerGuardVariable(cast<AllocaInst>(storePointerOp), intGuardVarsCache)) { // intguard = ...
-              
-            AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-            IntGuardState newState;
-            if (ConstantInt::classof(storeValueOp)) {
-              ConstantInt* constOp = cast<ConstantInt>(storeValueOp);
-              if (constOp->isZero()) {
-                newState = IGS_ZERO;
-                msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to zero", in, fun, context);
-              } else {
-                newState = IGS_NONZERO;
-                msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to nonzero", in, fun, context);
-              }
-            } else {
-              // FIXME: could add support for intguarda = intguardb, if needed
-              newState = IGS_UNKNOWN;
-              msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to unknown", in, fun, context);
-            }
-            intGuards[storePointerVar] = newState;
+          if (intGuardsEnabled && handleStoreToIntGuard(cast<StoreInst>(in), intGuardVarsCache, intGuards, msg)) {
             continue;
           }
-          if (sexpGuardsEnabled && AllocaInst::classof(storePointerOp) && 
-            isSEXPGuardVariable(cast<AllocaInst>(storePointerOp), gl.nilVariable, gl.isNullFunction, sexpGuardVarsCache)) { // sexpguard = ...
-              
-            AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-            SEXPGuardState newState = SGS_UNKNOWN;
-            
-            if (LoadInst::classof(storeValueOp)) {
-              Value *src = cast<LoadInst>(storeValueOp)->getPointerOperand();
-              if (src == gl.nilVariable) {
-                newState = SGS_NIL;
-                msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to nil", in, fun, context);
-              } else if (AllocaInst::classof(src) && 
-                isSEXPGuardVariable(cast<AllocaInst>(src), gl.nilVariable, gl.isNullFunction, sexpGuardVarsCache)) {
-                  
-                newState = getSEXPGuardState(sexpGuards, cast<AllocaInst>(src));
-                msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to state of " +
-                    cast<AllocaInst>(src)->getName().str() + ", which is " + sgs_name(newState), in, fun, context);
-              } else {
-
-                msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown (unsupported loadinst source)", in, fun, context);
-              }
-            } else {
-              CallSite acs(storeValueOp);
-              if (acs && USE_ALLOCATOR_DETECTION) {
-                Function *afun = acs.getCalledFunction();
-                if (possibleAllocators.find(afun) != possibleAllocators.end()) {
-                    newState = SGS_NONNIL;
-                    msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to non-nill (allocated by " + afun->getName().str() + ")", in, fun, context);
-                }
-              }
-              if (newState == SGS_UNKNOWN) {
-                msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown", in, fun, context);
-              }
-            }
-            sexpGuards[storePointerVar] = newState;
-            continue;            
+          if (sexpGuardsEnabled &&
+            handleStoreToSEXPGuard(cast<StoreInst>(in), sexpGuardVarsCache, sexpGuards, gl.nilVariable, gl.isNullFunction, msg, possibleAllocators, USE_ALLOCATOR_DETECTION)) {
+          
+            continue;  
           }
           continue;
         }
@@ -864,7 +813,7 @@ int main(int argc, char* argv[])
       TerminatorInst *t = bb->getTerminator();
       if (ReturnInst::classof(t)) {
         if (countState == CS_DIFF || depth != 0) {
-          msg.info("has possible protection stack imbalance", t, fun, context);
+          msg.info("has possible protection stack imbalance", t);
           refinableInfos++;
           if (restartable) goto abort_from_function;
         }
@@ -879,7 +828,7 @@ int main(int argc, char* argv[])
       }
       
       if (depth > MAX_DEPTH) {
-        msg.info("has too high protection stack depth", t, fun, context);
+        msg.info("has too high protection stack depth", t);
         refinableInfos++;
         if (restartable) goto abort_from_function;
         continue;
@@ -933,13 +882,13 @@ int main(int argc, char* argv[])
               if (DEBUG) {
                 switch(succIndex) {
                   case -1:
-                    msg.debug("undecided branch on sexp guard variable " + var->getName().str(), t, fun, context);
+                    msg.debug("undecided branch on sexp guard variable " + var->getName().str(), t);
                     break;
                   case 0:
-                    msg.debug("taking true branch on sexp guard variable " + var->getName().str(), t, fun, context);
+                    msg.debug("taking true branch on sexp guard variable " + var->getName().str(), t);
                     break;
                   case 1:
-                    msg.debug("taking false branch on sexp guard variable " + var->getName().str(), t, fun, context);
+                    msg.debug("taking false branch on sexp guard variable " + var->getName().str(), t);
                     break;
                 }
               }
@@ -949,7 +898,7 @@ int main(int argc, char* argv[])
                 state.sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NIL : SGS_NONNIL;
                 addState(doneSet, workList, state);
                 if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-                  msg.trace("added true branch on sexp guard, the following state", t, fun, context);
+                  msg.trace("added true branch on sexp guard, the following state", t);
                   state.dump();
                 }
               }
@@ -959,7 +908,7 @@ int main(int argc, char* argv[])
                 state.sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NONNIL : SGS_NIL;
                 addState(doneSet, workList, state);
                 if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-                  msg.trace("added false branch on sexp guard, the following state", t, fun, context);
+                  msg.trace("added false branch on sexp guard, the following state", t);
                   state.dump();
                 }
               }
@@ -998,13 +947,13 @@ int main(int argc, char* argv[])
                 if (DEBUG) {
                   switch(succIndex) {
                     case -1:
-                      msg.debug("undecided branch on integer guard variable " + var->getName().str(), t, fun, context);
+                      msg.debug("undecided branch on integer guard variable " + var->getName().str(), t);
                       break;
                     case 0:
-                      msg.debug("taking true branch on integer guard variable " + var->getName().str(), t, fun, context);
+                      msg.debug("taking true branch on integer guard variable " + var->getName().str(), t);
                       break;
                     case 1:
-                      msg.debug("taking false branch on integer guard variable " + var->getName().str(), t, fun, context);
+                      msg.debug("taking false branch on integer guard variable " + var->getName().str(), t);
                       break;
                   }
                 }
@@ -1015,7 +964,7 @@ int main(int argc, char* argv[])
                   state.intGuards[var] = ci->isTrueWhenEqual() ? IGS_ZERO : IGS_NONZERO;
                   addState(doneSet, workList, state);
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-                    msg.trace("added true branch on integer guard, the following state", t, fun, context);
+                    msg.trace("added true branch on integer guard, the following state", t);
                     state.dump();
                   }
                 }
@@ -1025,7 +974,7 @@ int main(int argc, char* argv[])
                   state.intGuards[var] = ci->isTrueWhenEqual() ? IGS_NONZERO : IGS_ZERO;
                   addState(doneSet, workList, state);
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-                    msg.trace("added false branch on integer guard, the following state", t, fun, context);
+                    msg.trace("added false branch on integer guard, the following state", t);
                     state.dump();
                   }
                 }
@@ -1037,11 +986,11 @@ int main(int argc, char* argv[])
                 if (!counterVar) {
                   counterVar = var;
                 } else if (counterVar != var) {
-                  msg.info("uses multiple pointer protection counters (results will be incorrect)", t, fun, context);
+                  msg.info("uses multiple pointer protection counters (results will be incorrect)", t);
                   continue;
                 }
                 if (countState == CS_NONE) {
-                  msg.info("branches based on an uninitialized value of the protection counter variable", t, fun, context);
+                  msg.info("branches based on an uninitialized value of the protection counter variable", t);
                   refinableInfos++;
                   if (restartable) goto abort_from_function;
                   continue;
@@ -1057,7 +1006,7 @@ int main(int argc, char* argv[])
                   assert(ConstantInt::classof(res));
                 
                   // add only the relevant successor
-                  msg.debug("folding out branch on counter value", t, fun, context);                
+                  msg.debug("folding out branch on counter value", t);                
                   BasicBlock *succ;
                   if (!res->isZeroValue()) {
                     succ = br->getSuccessor(0);
@@ -1067,7 +1016,7 @@ int main(int argc, char* argv[])
                   StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                   addState(doneSet, workList, state);
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-                    msg.trace("added folded successor, the following state", t, fun, context);
+                    msg.trace("added folded successor, the following state", t);
                     state.dump();
                   }
                   continue;
@@ -1116,10 +1065,10 @@ int main(int argc, char* argv[])
                     // FIXME: could there instead be returns in both branches?
                             
                     // interpret UNPROTECT(nprotect)
-                    msg.debug("simplifying unprotect conditional on counter value (diff state)", t, fun, context);                
+                    msg.debug("simplifying unprotect conditional on counter value (diff state)", t);                
                     countState = CS_NONE;
                     if (depth < 0) {
-                      msg.info("has negative depth after UNPROTECT(<counter>)", t, fun, context);
+                      msg.info("has negative depth after UNPROTECT(<counter>)", t);
                       refinableInfos++;
                       goto abort_from_function;
                     }
@@ -1127,7 +1076,7 @@ int main(int argc, char* argv[])
                     StateTy state(joinSucc, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                     addState(doneSet, workList, state);
                     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-                      msg.trace("added folded successor (diff counter state), the following state", t, fun, context);
+                      msg.trace("added folded successor (diff counter state), the following state", t);
                       state.dump();
                     }
                     continue;
@@ -1146,7 +1095,7 @@ int main(int argc, char* argv[])
         StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
         addState(doneSet, workList, state);
         if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-          msg.trace("added successor", t, fun, context);
+          msg.trace("added successor", t);
           state.dump();
         }
       }

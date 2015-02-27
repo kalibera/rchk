@@ -41,20 +41,21 @@ class LineMessenger {
   
   LineBufferTy lineBuffer;
   Function *lastFunction;
+  LLVMContext& context;
   
   private:
-    void lineInfo(std::string kind, std::string message, Instruction *in, Function *func, LLVMContext& context);
+    void lineInfo(std::string kind, std::string message, Instruction *in);
   
   public:
-    LineMessenger(bool DEBUG = false, bool TRACE = false, bool UNIQUE_MSG = false):
-      DEBUG(DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG) {};
+    LineMessenger(LLVMContext& context, bool DEBUG = false, bool TRACE = false, bool UNIQUE_MSG = false):
+      DEBUG(DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG), context(context) {};
       
     void flush();
     void clearForFunction(Function *func);
-    void trace(std::string msg, Instruction *in, Function *func, LLVMContext& context);
-    void debug(std::string msg, Instruction *in, Function *func, LLVMContext& context);
-    void info(std::string msg, Instruction *in, Function *func, LLVMContext& context);
-    void error(std::string msg, Instruction *in, Function *func, LLVMContext& context);
+    void trace(std::string msg, Instruction *in);
+    void debug(std::string msg, Instruction *in);
+    void info(std::string msg, Instruction *in);
+    void error(std::string msg, Instruction *in);
 };
 
 #endif

@@ -88,13 +88,44 @@ std::string igs_name(IntGuardState gs) {
 }
 
 IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var) {
-
   auto gsearch = intGuards.find(var);
   if (gsearch == intGuards.end()) {
     return IGS_UNKNOWN;
   } else {
     return gsearch->second;
   }
+}
+
+bool handleStoreToIntGuard(StoreInst* store, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg) {
+  Value* storePointerOp = store->getPointerOperand();
+  Value* storeValueOp = store->getValueOperand();
+  
+  // intguard = ...
+  if (!AllocaInst::classof(storePointerOp)) {
+    return false;
+  }
+  AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
+  if (!isIntegerGuardVariable(storePointerVar, intGuardVarsCache)) { 
+    return false;
+  }
+  IntGuardState newState;
+  if (ConstantInt::classof(storeValueOp)) {
+    ConstantInt* constOp = cast<ConstantInt>(storeValueOp);
+    if (constOp->isZero()) {
+      newState = IGS_ZERO;
+      msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to zero", store);
+    } else {
+      newState = IGS_NONZERO;
+      msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to nonzero", store);
+    }
+  } else {
+    // FIXME: could add support for intguarda = intguardb, if needed
+    newState = IGS_UNKNOWN;
+    msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to unknown", store);
+  }
+  intGuards[storePointerVar] = newState;
+  return true;
+
 }
 
 // SEXP guard is a local variable of type SEXP
@@ -111,7 +142,6 @@ IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var) {
 // these heuristics are important because the keep the state space small(er)
 
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction) {
-
   if (!isSEXP(var)) {
     return false;
   }
@@ -198,11 +228,59 @@ std::string sgs_name(SEXPGuardState sgs) {
 }
 
 SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var) {
-
   auto gsearch = sexpGuards.find(var);
   if (gsearch == sexpGuards.end()) {
     return SGS_UNKNOWN;
   } else {
     return gsearch->second;
   }
+}
+
+bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
+  GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION) {
+
+  Value* storePointerOp = store->getPointerOperand();
+  Value* storeValueOp = store->getValueOperand();
+  
+  if (!AllocaInst::classof(storePointerOp)) {
+    return false;
+  }
+  AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
+  if (!isSEXPGuardVariable(storePointerVar, nilVariable, isNullFunction, sexpGuardVarsCache)) {
+    return false;
+  }
+  // sexpguard = ...
+              
+  SEXPGuardState newState = SGS_UNKNOWN;
+            
+  if (LoadInst::classof(storeValueOp)) {
+    Value *src = cast<LoadInst>(storeValueOp)->getPointerOperand();
+    if (src == nilVariable) {
+      newState = SGS_NIL;
+      msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to nil", store);
+    } else if (AllocaInst::classof(src) && 
+        isSEXPGuardVariable(cast<AllocaInst>(src), nilVariable, isNullFunction, sexpGuardVarsCache)) {
+
+      newState = getSEXPGuardState(sexpGuards, cast<AllocaInst>(src));
+      msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to state of " +
+        cast<AllocaInst>(src)->getName().str() + ", which is " + sgs_name(newState), store);
+    } else {
+
+      msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown (unsupported loadinst source)", store);
+    }
+  } else {
+    CallSite acs(storeValueOp);
+    if (acs && USE_ALLOCATOR_DETECTION) {
+      Function *afun = acs.getCalledFunction();
+      if (possibleAllocators.find(afun) != possibleAllocators.end()) {
+        newState = SGS_NONNIL;
+        msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to non-nill (allocated by " + afun->getName().str() + ")", store);
+      }
+    }
+    if (newState == SGS_UNKNOWN) {
+      msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown", store);
+    }
+  }
+  sexpGuards[storePointerVar] = newState;
+  return true;
 }
