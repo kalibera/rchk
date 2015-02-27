@@ -128,6 +128,84 @@ bool handleStoreToIntGuard(StoreInst* store, VarBoolCacheTy& intGuardVarsCache, 
 
 }
 
+bool handleBranchOnIntGuard(BranchInst* branch, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg) {
+  if (!branch->isConditional() || !CmpInst::classof(branch->getCondition())) {
+    return false;
+  }
+  CmpInst* ci = cast<CmpInst>(branch->getCondition());
+  if (!ci->isEquality()) {
+    return false;
+  }
+  // comparison with zero
+  Value *constOp;
+  Value *load;
+  
+  if (ConstantInt::classof(ci->getOperand(0)) && LoadInst::classof(ci->getOperand(1))) {
+    constOp = ci->getOperand(0);
+    load = ci->getOperand(1);
+  } else {
+    constOp = ci->getOperand(1);
+    load = ci->getOperand(0);
+  }
+  
+  if (!ConstantInt::classof(constOp) || !cast<ConstantInt>(constOp)->isZero()) {
+    return false;
+  }
+  if (!LoadInst::classof(load)) {
+    return false;
+  }
+  Value *loadOp = cast<LoadInst>(load)->getPointerOperand();
+  if (!AllocaInst::classof(loadOp)) {
+    return false;
+  }
+  AllocaInst *var = cast<AllocaInst>(loadOp);
+  if (!isIntegerGuardVariable(var, intGuardVarsCache)) {
+    return false;
+  } 
+  // if (intguard) ...
+   
+  IntGuardState g = getIntGuardState(s.intGuards, var);
+  int succIndex = -1;
+  if (g != IGS_UNKNOWN) {
+    if (ci->isTrueWhenEqual()) {
+      // guard == 0
+      succIndex = (g == IGS_ZERO) ? 0 : 1;
+    } else {
+      // guard != 0
+      succIndex = (g == IGS_ZERO) ? 1 : 0;
+    }
+  } 
+
+  if (msg.debug()) {
+    switch(succIndex) {
+      case -1:
+        msg.debug("undecided branch on integer guard variable " + var->getName().str(), branch);
+        break;
+      case 0:
+        msg.debug("taking true branch on integer guard variable " + var->getName().str(), branch);
+        break;
+      case 1:
+        msg.debug("taking false branch on integer guard variable " + var->getName().str(), branch);
+        break;
+    }
+  }
+  if (succIndex != 1) {
+    // true branch is possible
+    StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
+    state->intGuards[var] = ci->isTrueWhenEqual() ? IGS_ZERO : IGS_NONZERO;
+    msg.trace("added true branch on integer guard, the following state", branch);
+    state->add();
+  }
+  if (succIndex != 0) {
+    // false branch is possible
+    StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
+    state->intGuards[var] = ci->isTrueWhenEqual() ? IGS_NONZERO : IGS_ZERO;
+    msg.trace("added false branch on integer guard, the following state", branch);
+    state->add();
+  }
+  return true;
+}
+
 // SEXP guard is a local variable of type SEXP
 //   which is compared at least once against R_NilValue
 //   which may be stored to and loaded from
@@ -282,6 +360,81 @@ bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache
     }
   }
   sexpGuards[storePointerVar] = newState;
+  return true;
+}
+
+bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s,
+  GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg) {
+  
+  if (!branch->isConditional() || !CmpInst::classof(branch->getCondition())) {
+    return false;
+  }
+  CmpInst* ci = cast<CmpInst>(branch->getCondition());
+  if (!ci->isEquality()) {
+    return false;
+  }
+  if (!LoadInst::classof(ci->getOperand(0)) || !LoadInst::classof(ci->getOperand(1))) {
+    return false;
+  }
+  Value *lo = cast<LoadInst>(ci->getOperand(0))->getPointerOperand();
+  Value *ro = cast<LoadInst>(ci->getOperand(1))->getPointerOperand();
+
+  Value *guard = NULL;
+  if (lo == nilVariable) { // comparison against R_NilValue
+    guard = ro;
+  } else {
+    guard = lo;
+  }
+  if (!guard || !AllocaInst::classof(guard)) {
+    return false;
+  }
+  AllocaInst* var = cast<AllocaInst>(guard);
+  if (!isSEXPGuardVariable(var, nilVariable, isNullFunction, sexpGuardVarsCache)) {
+    return false;
+  }
+              
+  // if (x == R_NilValue) ...
+  // if (x != R_NilValue) ...
+
+  SEXPGuardState g = getSEXPGuardState(s.sexpGuards, var);
+  int succIndex = -1;
+
+  if (g != SGS_UNKNOWN) {
+    if (ci->isTrueWhenEqual()) {
+      // guard == R_NilValue
+      succIndex = (g == SGS_NIL) ? 0 : 1;
+    } else {
+      // guard != R_NilValue
+      succIndex = (g == SGS_NIL) ? 1 : 0;
+    }
+  }
+  if (msg.debug()) {
+    switch(succIndex) {
+      case -1:
+        msg.debug("undecided branch on sexp guard variable " + var->getName().str(), branch);
+        break;
+      case 0:
+        msg.debug("taking true branch on sexp guard variable " + var->getName().str(), branch);
+        break;
+      case 1:
+        msg.debug("taking false branch on sexp guard variable " + var->getName().str(), branch);
+        break;
+    }
+  }
+  if (succIndex != 1) {
+    // true branch is possible
+    StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
+    state->sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NIL : SGS_NONNIL;
+    msg.trace("added true branch on sexp guard, the following state", branch);
+    state->add();
+  }
+  if (succIndex != 0) {
+    // false branch is possible
+    StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
+    state->sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NONNIL : SGS_NIL;
+    msg.trace("added false branch on sexp guard, the following state", branch);
+    state->add();
+  }
   return true;
 }
 

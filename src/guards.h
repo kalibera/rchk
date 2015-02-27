@@ -20,12 +20,14 @@ enum IntGuardState {
 };
 
 typedef std::map<AllocaInst*,IntGuardState> IntGuardsTy;
+struct StateWithGuardsTy;
 
 std::string igs_name(IntGuardState igs);
 IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
 bool isIntegerGuardVariable(AllocaInst* var);
 bool isIntegerGuardVariable(AllocaInst* var, VarBoolCacheTy& cache);
 bool handleStoreToIntGuard(StoreInst* store, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg);
+bool handleBranchOnIntGuard(BranchInst* branch, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg);
 
 // SEXP - an "R pointer" used as a guard
 
@@ -43,6 +45,8 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function*
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache);
 bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
   GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION = false);
+bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s,
+  GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg);
 
 // checking state with guards
 
@@ -50,8 +54,8 @@ struct StateWithGuardsTy : public StateBaseTy {
   IntGuardsTy intGuards;
   SEXPGuardsTy sexpGuards;
   
-  StateWithGuardsTy(IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards): intGuards(intGuards), sexpGuards(sexpGuards) {};
-  StateWithGuardsTy(): intGuards(), sexpGuards() {};
+  StateWithGuardsTy(BasicBlock* bb, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards): StateBaseTy(bb), intGuards(intGuards), sexpGuards(sexpGuards) {};
+  StateWithGuardsTy(BasicBlock *bb): StateBaseTy(bb), intGuards(), sexpGuards() {};
   
   virtual StateWithGuardsTy* clone(BasicBlock *newBB) = 0;
   

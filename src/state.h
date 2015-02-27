@@ -7,7 +7,8 @@ using namespace llvm;
 
 struct StateBaseTy {
   BasicBlock *bb;
-  
+
+  StateBaseTy(BasicBlock *bb): bb(bb) {}  
   virtual StateBaseTy* clone(BasicBlock *newBB) = 0;
   virtual bool add() = 0;
   void dump(bool verbose);

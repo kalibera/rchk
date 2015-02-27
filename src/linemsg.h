@@ -56,6 +56,8 @@ class LineMessenger {
     void debug(std::string msg, Instruction *in);
     void info(std::string msg, Instruction *in);
     void error(std::string msg, Instruction *in);
+    bool debug() { return DEBUG; }
+    bool trace() { return TRACE; }
 };
 
 #endif
