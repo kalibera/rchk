@@ -284,3 +284,31 @@ bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache
   sexpGuards[storePointerVar] = newState;
   return true;
 }
+
+// common
+
+void StateWithGuardsTy::dump(bool verbose) {
+  StateBaseTy::dump(verbose);
+  
+  errs() << "=== integer guards: \n";
+  for(IntGuardsTy::iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
+    AllocaInst *i = gi->first;
+    IntGuardState s = gi->second;
+    errs() << "   " << demangle(i->getName()) << " ";
+    if (verbose) {
+      errs() << *i << " ";
+    }
+    errs() << " state: " << igs_name(s) << "\n";
+  }
+
+  errs() << "=== sexp guards: \n";
+  for(SEXPGuardsTy::iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
+    AllocaInst *i = gi->first;
+    SEXPGuardState s = gi->second;
+    errs() << "   " << demangle(i->getName()) << " ";
+    if (verbose) {
+      errs() << *i << " ";
+    }
+    errs() << " state: " << sgs_name(s) << "\n";
+  }  
+}

@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "linemsg.h"
+#include "state.h"
 
 #include <map>
 
@@ -42,5 +43,19 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function*
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache);
 bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
   GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION = false);
+
+// checking state with guards
+
+struct StateWithGuardsTy : public StateBaseTy {
+  IntGuardsTy intGuards;
+  SEXPGuardsTy sexpGuards;
+  
+  StateWithGuardsTy(IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards): intGuards(intGuards), sexpGuards(sexpGuards) {};
+  StateWithGuardsTy(): intGuards(), sexpGuards() {};
+  
+  virtual StateWithGuardsTy* clone(BasicBlock *newBB) = 0;
+  
+  void dump(bool verbose);
+};
 
 #endif

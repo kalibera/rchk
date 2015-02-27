@@ -97,57 +97,34 @@ typedef VarsSetTy FreshVarsTy;
   // attempts to include only reliably unprotected pointers,
   // so as of now, any use of a variable removes it from the set
 
-struct StateTy {
+struct StateTy : public StateWithGuardsTy {
   BasicBlock *bb;
   int depth;		// number of pointers "currently" on the protection stack
   int savedDepth;	// number of pointers on the protection stack when saved to a local store variable (e.g. savestack = R_PPStackTop)
   int count;		// value of a local counter for the number of protected pointers (or -1 when not used) (e.g. nprotect)
   CountState countState;
-  IntGuardsTy intGuards;
-  SEXPGuardsTy sexpGuards;
   FreshVarsTy freshVars;
   
   public:
     StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState): 
-      bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), intGuards(), sexpGuards(), freshVars() {};
+      bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), freshVars() {};
 
     StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
-      bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), intGuards(intGuards), sexpGuards(sexpGuards), freshVars(freshVars) {};
+      StateWithGuardsTy(intGuards, sexpGuards), bb(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), freshVars(freshVars) {};
       
+    virtual StateTy* clone(BasicBlock *newBB) {
+      return new StateTy(newBB, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
+    }
+    
+    virtual bool add();
+
     void dump() {
-      errs() << "\n ###################### STATE DUMP ######################\n";
-      errs() << "=== Function: " << demangle(bb->getParent()->getName()) << "\n";
-      if (VERBOSE_DUMP) {
-        errs() << "=== Basic block: \n" << *bb << "\n";
-      }
-      
-      Instruction *in = bb->begin();
-      errs() << "=== Basic block src: " << sourceLocation(in) << "\n";
+      StateWithGuardsTy::dump(VERBOSE_DUMP);
 
       errs() << "=== depth: " << depth << "\n";
       errs() << "=== savedDepth: " << savedDepth << "\n";
       errs() << "=== count: " << count << "\n";
       errs() << "=== countState: " << cs_name(countState) << "\n";
-      errs() << "=== integer guards: \n";
-      for(IntGuardsTy::iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
-        AllocaInst *i = gi->first;
-        IntGuardState s = gi->second;
-        errs() << "   " << demangle(i->getName()) << " ";
-        if (VERBOSE_DUMP) {
-          errs() << *i << " ";
-        }
-        errs() << " state: " << igs_name(s) << "\n";
-      }
-      errs() << "=== sexp guards: \n";
-      for(SEXPGuardsTy::iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
-        AllocaInst *i = gi->first;
-        SEXPGuardState s = gi->second;
-        errs() << "   " << demangle(i->getName()) << " ";
-        if (VERBOSE_DUMP) {
-          errs() << *i << " ";
-        }
-        errs() << " state: " << sgs_name(s) << "\n";
-      }
       errs() << "=== fresh vars: \n";
       for(FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
         AllocaInst *var = *fi;
@@ -382,10 +359,16 @@ bool isProtectionCounterVariable(AllocaInst* var, Function* unprotectFunction, V
 
 // ------------- helper functions --------------
 
-void addState(DoneSetTy& doneSet, WorkListTy& workList, StateTy& state) {
-  auto sinsert = doneSet.insert(state);
+DoneSetTy doneSet;
+WorkListTy workList;   
+
+bool StateTy::add() {
+  auto sinsert = doneSet.insert(*this); // FIXME: two copies?
   if (sinsert.second) {
-    workList.push(state);
+    workList.push(*this); // FIXME: two copies?
+    return true;
+  } else {
+    return false;
   }
 }
 
@@ -445,8 +428,12 @@ int main(int argc, char* argv[])
   
     unsigned refinableInfos = 0;
     bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
-    DoneSetTy doneSet;
-    WorkListTy workList;   
+
+    doneSet.clear();
+    {
+      WorkListTy empty;
+      std::swap(workList, empty);
+    }
     workList.push(StateTy(&fun->getEntryBlock(), 0, -1, -1, CS_NONE));
     
     while(!workList.empty()) {
@@ -896,7 +883,7 @@ int main(int argc, char* argv[])
                 // true branch is possible
                 StateTy state(br->getSuccessor(0), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                 state.sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NIL : SGS_NONNIL;
-                addState(doneSet, workList, state);
+                state.add();
                 if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                   msg.trace("added true branch on sexp guard, the following state", t);
                   state.dump();
@@ -906,7 +893,7 @@ int main(int argc, char* argv[])
                 // false branch is possible
                 StateTy state(br->getSuccessor(1), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                 state.sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NONNIL : SGS_NIL;
-                addState(doneSet, workList, state);
+                state.add();
                 if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                   msg.trace("added false branch on sexp guard, the following state", t);
                   state.dump();
@@ -962,7 +949,7 @@ int main(int argc, char* argv[])
                   
                   StateTy state(br->getSuccessor(0), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                   state.intGuards[var] = ci->isTrueWhenEqual() ? IGS_ZERO : IGS_NONZERO;
-                  addState(doneSet, workList, state);
+                  state.add();
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                     msg.trace("added true branch on integer guard, the following state", t);
                     state.dump();
@@ -972,7 +959,7 @@ int main(int argc, char* argv[])
                   // false branch is possible
                   StateTy state(br->getSuccessor(1), depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
                   state.intGuards[var] = ci->isTrueWhenEqual() ? IGS_NONZERO : IGS_ZERO;
-                  addState(doneSet, workList, state);
+                  state.add();
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                     msg.trace("added false branch on integer guard, the following state", t);
                     state.dump();
@@ -1014,7 +1001,7 @@ int main(int argc, char* argv[])
                     succ = br->getSuccessor(1);
                   }
                   StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
-                  addState(doneSet, workList, state);
+                  state.add();
                   if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                     msg.trace("added folded successor, the following state", t);
                     state.dump();
@@ -1074,7 +1061,7 @@ int main(int argc, char* argv[])
                     }
                     // next process the code after the if
                     StateTy state(joinSucc, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
-                    addState(doneSet, workList, state);
+                    state.add();
                     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
                       msg.trace("added folded successor (diff counter state), the following state", t);
                       state.dump();
@@ -1093,7 +1080,7 @@ int main(int argc, char* argv[])
         BasicBlock *succ = t->getSuccessor(i);
         
         StateTy state(succ, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
-        addState(doneSet, workList, state);
+        state.add();
         if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
           msg.trace("added successor", t);
           state.dump();
