@@ -41,7 +41,7 @@ const bool TRACE = false;
 
 const bool DUMP_STATES = false;
 const std::string DUMP_STATES_FUNCTION = "do_eval"; // only dump states in this function
-const bool ONLY_FUNCTION = true; // only check one function (named ONLY_FUNCTION_NAME)
+const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
 const std::string ONLY_FUNCTION_NAME = "do_eval";
 const bool VERBOSE_DUMP = false;
 
