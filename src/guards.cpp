@@ -193,15 +193,17 @@ bool handleBranchOnIntGuard(BranchInst* branch, VarBoolCacheTy& intGuardVarsCach
     // true branch is possible
     StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
     state->intGuards[var] = ci->isTrueWhenEqual() ? IGS_ZERO : IGS_NONZERO;
-    msg.trace("added true branch on integer guard, the following state", branch);
-    state->add();
+    if (state->add()) {
+      msg.trace("added true branch on integer guard of branch at", branch);
+    }
   }
   if (succIndex != 0) {
     // false branch is possible
     StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
     state->intGuards[var] = ci->isTrueWhenEqual() ? IGS_NONZERO : IGS_ZERO;
-    msg.trace("added false branch on integer guard, the following state", branch);
-    state->add();
+    if (state->add()) {
+      msg.trace("added false branch on integer guard of branch at", branch);
+    }
   }
   return true;
 }
@@ -425,15 +427,17 @@ bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCa
     // true branch is possible
     StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
     state->sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NIL : SGS_NONNIL;
-    msg.trace("added true branch on sexp guard, the following state", branch);
-    state->add();
+    if (state->add()) {
+      msg.trace("added true branch on sexp guard of branch at", branch);
+    }
   }
   if (succIndex != 0) {
     // false branch is possible
     StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
     state->sexpGuards[var] = ci->isTrueWhenEqual() ? SGS_NONNIL : SGS_NIL;
-    msg.trace("added false branch on sexp guard, the following state", branch);
-    state->add();
+    if (state->add()) {
+      msg.trace("added false branch on sexp guard of branch at", branch);
+    }
   }
   return true;
 }

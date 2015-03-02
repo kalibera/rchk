@@ -41,6 +41,8 @@ const bool TRACE = false;
 
 const bool DUMP_STATES = false;
 const std::string DUMP_STATES_FUNCTION = "do_eval"; // only dump states in this function
+const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
+const std::string ONLY_FUNCTION_NAME = "do_eval";
 const bool VERBOSE_DUMP = false;
 
 const bool USE_ALLOCATOR_DETECTION = true;
@@ -362,11 +364,12 @@ DoneSetTy doneSet;
 WorkListTy workList;   
 
 bool StateTy::add() {
-  if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == bb->getParent()->getName())) {
-    dump();
-  }
   auto sinsert = doneSet.insert(this);
   if (sinsert.second) {
+    if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == bb->getParent()->getName())) {
+      errs() << " -- dumping a new state being added -- \n";
+      dump();
+    }
     workList.push(this);
     return true;
   } else {
@@ -444,12 +447,16 @@ int main(int argc, char* argv[])
     unsigned refinableInfos = 0;
     bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
     clearStates();
-    workList.push(new StateTy(&fun->getEntryBlock(), 0, -1, -1, CS_NONE));
+    StateTy* initState = new StateTy(&fun->getEntryBlock(), 0, -1, -1, CS_NONE);
+    initState->add();
     
     while(!workList.empty()) {
       StateTy& s = *workList.top();
       workList.pop();
       
+      if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != fun->getName()) {
+        continue;
+      }
       if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
         msg.trace("going to work on this state:", s.bb->begin());
         s.dump();
@@ -794,7 +801,8 @@ int main(int argc, char* argv[])
             continue;
           }
           if (sexpGuardsEnabled &&
-            handleStoreToSEXPGuard(cast<StoreInst>(in), sexpGuardVarsCache, s.sexpGuards, gl.nilVariable, gl.isNullFunction, msg, possibleAllocators, USE_ALLOCATOR_DETECTION)) {
+            handleStoreToSEXPGuard(cast<StoreInst>(in), sexpGuardVarsCache, s.sexpGuards,
+              gl.nilVariable, gl.isNullFunction, msg, possibleAllocators, USE_ALLOCATOR_DETECTION)) {
           
             continue;  
           }
@@ -891,8 +899,9 @@ int main(int argc, char* argv[])
                     succ = br->getSuccessor(1);
                   }
                   StateTy *state = s.clone(succ);
-                  msg.trace("added folded successor, the following state", t);
-                  state->add();
+                  if (state->add()) {
+                    msg.trace("added folded successor of", t);
+                  }
                   continue;
                 }
                 // s.countState == CS_DIFF
@@ -948,8 +957,9 @@ int main(int argc, char* argv[])
                     }
                     // next process the code after the if
                     StateTy* state = s.clone(joinSucc);
-                    msg.trace("added folded successor (diff counter state), the following state", t);
-                    state->add();
+                    if (state->add()) {
+                      msg.trace("added folded successor (diff counter state) of", t);
+                    }
                     continue;
                   }
                 }
@@ -968,8 +978,9 @@ int main(int argc, char* argv[])
         BasicBlock *succ = t->getSuccessor(i);
         
         StateTy* state = s.clone(succ);
-        msg.trace("added successor", t);
-        state->add();
+        if (state->add()) {
+          msg.trace("added successor of", t);
+        }
       }
     }
 
