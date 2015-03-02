@@ -48,7 +48,7 @@ class LineMessenger {
   
   public:
     LineMessenger(LLVMContext& context, bool DEBUG = false, bool TRACE = false, bool UNIQUE_MSG = false):
-      DEBUG(DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG), context(context) {};
+      DEBUG(DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG), lineBuffer(), lastFunction(NULL), context(context) {};
       
     void flush();
     void clearForFunction(Function *func);
