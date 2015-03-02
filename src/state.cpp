@@ -11,7 +11,7 @@
 using namespace llvm;
 
 void StateBaseTy::dump(bool verbose) {
-  errs() << "\n ###################### STATE DUMP ######################\n";
+  errs() << "\n ###################### STATE DUMP " << this << " ######################\n";
   Function *fun = bb->getParent();
   errs() << "=== Function: " << ((fun == NULL) ? "NULL" : demangle(fun->getName())) << "\n";
   if (verbose) {

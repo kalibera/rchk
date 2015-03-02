@@ -131,6 +131,13 @@ std::string sourceLocation(const Instruction *in) {
   }
 }
 
+std::string instructionAsString(Instruction *in) {
+  std::string str;
+  raw_string_ostream os(str);
+  os << *in;
+  return str;
+}
+
 bool isSEXP(Type* type) {
 
   if (!PointerType::classof(type)) {

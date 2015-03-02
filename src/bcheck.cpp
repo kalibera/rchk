@@ -41,7 +41,7 @@ const bool TRACE = false;
 
 const bool DUMP_STATES = false;
 const std::string DUMP_STATES_FUNCTION = "do_eval"; // only dump states in this function
-const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
+const bool ONLY_FUNCTION = true; // only check one function (named ONLY_FUNCTION_NAME)
 const std::string ONLY_FUNCTION_NAME = "do_eval";
 const bool VERBOSE_DUMP = false;
 
@@ -125,7 +125,7 @@ struct StateTy : public StateWithGuardsTy {
       errs() << "=== savedDepth: " << savedDepth << "\n";
       errs() << "=== count: " << count << "\n";
       errs() << "=== countState: " << cs_name(countState) << "\n";
-      errs() << "=== fresh vars: \n";
+      errs() << "=== fresh vars: " << &freshVars << "\n";
       for(FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
         AllocaInst *var = *fi;
         errs() << "   " << var->getName();
@@ -148,6 +148,7 @@ inline void hash_combine(std::size_t& seed, const T& v) {
 
 struct StateTy_hash {
   size_t operator()(const StateTy* t) const {
+
     size_t res = 0;
     hash_combine(res, t->bb);
     hash_combine(res, t->depth);
@@ -155,11 +156,11 @@ struct StateTy_hash {
     hash_combine(res, t->intGuards.size());
     for(IntGuardsTy::const_iterator gi = t->intGuards.begin(), ge = t->intGuards.end(); gi != ge; *gi++) {
       hash_combine(res, (int) gi->second);
-    }
+    } // ordered map
     hash_combine(res, t->sexpGuards.size());
     for(SEXPGuardsTy::const_iterator gi = t->sexpGuards.begin(), ge = t->sexpGuards.end(); gi != ge; *gi++) {
       hash_combine(res, (int) gi->second);
-    }
+    } // ordered map
     hash_combine(res, t->freshVars.size());
     // do not hash the content of freshVars (it doesn't pay off and currently the set is unordered)
     return res;
@@ -168,6 +169,7 @@ struct StateTy_hash {
 
 struct StateTy_equal {
   bool operator() (const StateTy* lhs, const StateTy* rhs) const {
+
     if (lhs == rhs) {
       return true;
     }
@@ -447,11 +449,12 @@ int main(int argc, char* argv[])
     unsigned refinableInfos = 0;
     bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
     clearStates();
-    StateTy* initState = new StateTy(&fun->getEntryBlock(), 0, -1, -1, CS_NONE);
-    initState->add();
-    
+    {
+      StateTy* initState = new StateTy(&fun->getEntryBlock(), 0, -1, -1, CS_NONE);
+      initState->add();
+    }
     while(!workList.empty()) {
-      StateTy& s = *workList.top();
+      StateTy s(*workList.top());
       workList.pop();
       
       if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != fun->getName()) {
@@ -898,9 +901,11 @@ int main(int argc, char* argv[])
                   } else {
                     succ = br->getSuccessor(1);
                   }
-                  StateTy *state = s.clone(succ);
-                  if (state->add()) {
-                    msg.trace("added folded successor of", t);
+                  {
+                    StateTy *state = s.clone(succ);
+                    if (state->add()) {
+                      msg.trace("added folded successor of", t);
+                    }
                   }
                   continue;
                 }
@@ -956,9 +961,11 @@ int main(int argc, char* argv[])
                       goto abort_from_function;
                     }
                     // next process the code after the if
-                    StateTy* state = s.clone(joinSucc);
-                    if (state->add()) {
-                      msg.trace("added folded successor (diff counter state) of", t);
+                    {
+                      StateTy* state = s.clone(joinSucc);
+                      if (state->add()) {
+                        msg.trace("added folded successor (diff counter state) of", t);
+                      }
                     }
                     continue;
                   }
@@ -976,10 +983,11 @@ int main(int argc, char* argv[])
       // add conservatively all cfg successors
       for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
         BasicBlock *succ = t->getSuccessor(i);
-        
-        StateTy* state = s.clone(succ);
-        if (state->add()) {
-          msg.trace("added successor of", t);
+        {
+          StateTy* state = s.clone(succ);
+          if (state->add()) {
+            msg.trace("added successor of", t);
+          }
         }
       }
     }

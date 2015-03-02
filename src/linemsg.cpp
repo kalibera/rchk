@@ -83,20 +83,29 @@ void LineMessenger::clearForFunction(Function *func) {
 
 void LineMessenger::trace(std::string msg, Instruction *in) {
   if (TRACE) {
-    lineInfo("TRACE", msg, in);
+    lineInfo("TRACE", msg + instructionAsString(in), in);
   }
 }
 
 void LineMessenger::debug(std::string msg, Instruction *in) {
+  if (TRACE) {
+    msg = msg + instructionAsString(in);
+  }
   if (DEBUG) {
     lineInfo("DEBUG", msg, in);
   }
 }
 
 void LineMessenger::info(std::string msg, Instruction *in) {
+  if (TRACE) {
+    msg = msg + instructionAsString(in);
+  }
   lineInfo(DEBUG ? "INFO " : "", msg, in);
 }
 
 void LineMessenger::error(std::string msg, Instruction *in) {
+  if (TRACE) {
+    msg = msg + instructionAsString(in);
+  }
   lineInfo("ERROR", msg, in);
 }

@@ -14,6 +14,7 @@ LLVMC := $(LLVM)/bin/llvm-config
 
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
 CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
