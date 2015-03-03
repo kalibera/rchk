@@ -53,4 +53,7 @@ bool isProtectionCounterVariable(AllocaInst* var, Function* unprotectFunction, V
 void handleBalanceForNonTerminator(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoolCacheTy& counterVarsCache, VarBoolCacheTy& saveVarsCache,
     LineMessenger& msg, unsigned& refinableInfos);
 
+bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, GlobalsTy& g, VarBoolCacheTy& counterVarsCache,
+    LineMessenger& msg, unsigned& refinableInfos);
+
 #endif

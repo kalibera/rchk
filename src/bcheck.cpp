@@ -172,6 +172,73 @@ void clearStates() {
   // all elements in worklist are also in doneset, so no need to call destructors
 }
 
+void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, VarBoolCacheTy& intGuardVarsCache, LineMessenger& msg, unsigned& refinableInfos) { 
+  // UNPROTECT(intguard ? 3 : 4)
+  
+  CallSite cs(cast<Value>(in));
+  if (!cs) {
+    return;
+  }
+  const Function* targetFunc = cs.getCalledFunction();
+  if (!targetFunc || targetFunc != g.unprotectFunction) return;
+          
+  Value* unprotectValue = cs.getArgument(0);
+  if (!SelectInst::classof(unprotectValue)) {
+    return;
+  } 
+  
+  SelectInst *si = cast<SelectInst>(unprotectValue);
+              
+  if (!CmpInst::classof(si->getCondition()) || !ConstantInt::classof(si->getTrueValue()) || !ConstantInt::classof(si->getFalseValue())) {
+    return;
+  }
+                
+  CmpInst *ci = cast<CmpInst>(si->getCondition());
+  if (!ci->isEquality()) {
+    return;
+  }
+  
+  LoadInst *guardOp;
+  ConstantInt *constOp;
+  
+  if (LoadInst::classof(ci->getOperand(0)) && ConstantInt::classof(ci->getOperand(1))) {
+    guardOp = cast<LoadInst>(ci->getOperand(0));
+    constOp = cast<ConstantInt>(ci->getOperand(1));
+  } else if (ConstantInt::classof(ci->getOperand(0)) && LoadInst::classof(ci->getOperand(1))) {
+    constOp = cast<ConstantInt>(ci->getOperand(0));
+    guardOp = cast<LoadInst>(ci->getOperand(1));
+  } else {
+    return;
+  }
+  
+  if (!constOp->isZero()) {
+    return;
+  }
+  
+  Value *guardValue = guardOp->getPointerOperand();
+  if (!AllocaInst::classof(guardValue) || !isIntegerGuardVariable(cast<AllocaInst>(guardValue), intGuardVarsCache)) {
+    return;
+  }
+                  
+  IntGuardState gs = getIntGuardState(s.intGuards, cast<AllocaInst>(guardValue));
+                    
+  if (gs != IGS_UNKNOWN) {
+    uint64_t arg; 
+    if ( (gs == IGS_ZERO && ci->isTrueWhenEqual()) || (gs == IGS_NONZERO && ci->isFalseWhenEqual()) ) {
+      arg = cast<ConstantInt>(si->getTrueValue())->getZExtValue();
+    } else {
+      arg = cast<ConstantInt>(si->getFalseValue())->getZExtValue();
+    }
+    s.balance.depth -= (int) arg;
+    msg.debug("unprotect call using constant in conditional expression on integer guard", in);              
+    if (s.balance.countState != CS_DIFF && s.balance.depth < 0) {
+      msg.info("has negative depth", in);
+      refinableInfos++;
+    }
+  }
+}
+
+
 // -------------------------------- main  -----------------------------------
 
 int main(int argc, char* argv[])
@@ -262,224 +329,29 @@ int main(int argc, char* argv[])
  
         if (intGuardsEnabled) {
           handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, msg);
+          handleUnprotectWithIntGuard(in, s, gl, intGuardVarsCache, msg, refinableInfos);
         }
         if (sexpGuardsEnabled) {
           handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, gl, msg, possibleAllocators, USE_ALLOCATOR_DETECTION);
         }
-        
-        CallSite cs(cast<Value>(in));
-        if (cs) {
-          // invoke or call
-          const Function* targetFunc = cs.getCalledFunction();
-          if (!targetFunc) continue;
-          
-          if (targetFunc == gl.unprotectFunction) {
-            Value* unprotectValue = cs.getArgument(0);
-            if (intGuardsEnabled && SelectInst::classof(unprotectValue)) { // UNPROTECT(intguard ? 3 : 4)
-              SelectInst *si = cast<SelectInst>(unprotectValue);
-              
-              if (CmpInst::classof(si->getCondition()) && 
-                ConstantInt::classof(si->getTrueValue()) && ConstantInt::classof(si->getFalseValue())) {
-                
-                CmpInst *ci = cast<CmpInst>(si->getCondition());
-                if (Constant::classof(ci->getOperand(0))) {
-                  ci->swapOperands();
-                }
-                if (LoadInst::classof(ci->getOperand(0)) && ConstantInt::classof(ci->getOperand(1)) &&
-                  cast<ConstantInt>(ci->getOperand(1))->isZero() && ci->isEquality()) {
-                  Value *guardValue = cast<LoadInst>(ci->getOperand(0))->getPointerOperand();
-                  
-                  if (AllocaInst::classof(guardValue) && isIntegerGuardVariable(cast<AllocaInst>(guardValue), intGuardVarsCache)) {
-                    IntGuardState g = getIntGuardState(s.intGuards, cast<AllocaInst>(guardValue));
-                    
-                    if (g != IGS_UNKNOWN) {
-                      uint64_t arg; 
-                      if ( (g == IGS_ZERO && ci->isTrueWhenEqual()) || (g == IGS_NONZERO && ci->isFalseWhenEqual()) ) {
-                        arg = cast<ConstantInt>(si->getTrueValue())->getZExtValue();
-                      } else {
-                        arg = cast<ConstantInt>(si->getFalseValue())->getZExtValue();
-                      }
-                      s.balance.depth -= (int) arg;
-                      msg.debug("unprotect call using constant in conditional expression on integer guard", in);              
-                      if (s.balance.countState != CS_DIFF && s.balance.depth < 0) {
-                        msg.info("has negative depth", in);
-                        refinableInfos++;
-                        goto abort_from_function;
-                      }
-                      continue;                      
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
       }
       
       TerminatorInst *t = s.bb->getTerminator();
-      if (ReturnInst::classof(t)) {
-        if (s.balance.countState == CS_DIFF || s.balance.depth != 0) {
-          msg.info("has possible protection stack imbalance", t);
-          refinableInfos++;
-          if (restartable) goto abort_from_function;
-        }
+
+      if (handleBalanceForTerminator(t, s, gl, counterVarsCache, msg, refinableInfos)) {
+        // ignore successors in case important errors were already found, and hence further
+        // errors found will just confuse the user
         continue;
       }
-      
-      if (s.balance.count > MAX_COUNT) { // turn the counter to differential state
-        assert(s.balance.countState == CS_EXACT);
-        s.balance.countState = CS_DIFF;
-        s.balance.depth -= s.balance.count;
-        s.balance.count = -1;
-      }
-      
-      if (s.balance.depth > MAX_DEPTH) {
-        msg.info("has too high protection stack depth", t);
-        refinableInfos++;
-        if (restartable) goto abort_from_function;
-        continue;
-      }
-      
-      if (s.balance.countState != CS_DIFF && s.balance.depth < 0) {
-        if (restartable) goto abort_from_function;
-        continue; 
-        // do not propagate negative depth to successors
-        // can't do this for count, because -1 means count not initialized
-      }
-      
+
       if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, gl, msg)) {
         continue;
       }
 
-      if (BranchInst::classof(t)) {
-        // (be smarter when adding successors)
-        
-        BranchInst* br = cast<BranchInst>(t);
-        if (br->isConditional() && CmpInst::classof(br->getCondition())) {
-          CmpInst* ci = cast<CmpInst>(br->getCondition());
-          
-          // if (x == y) ... [comparison of two variables]
-          
-          // comparison with constant
-          if (Constant::classof(ci->getOperand(0)) && LoadInst::classof(ci->getOperand(1))) {
-            ci->swapOperands(); // have the variable first
-          }
-          
-          if (LoadInst::classof(ci->getOperand(0)) && Constant::classof(ci->getOperand(1))) {
-            LoadInst *li = cast<LoadInst>(ci->getOperand(0));
-            
-            if (AllocaInst::classof(li->getPointerOperand())) {
-              AllocaInst *var = cast<AllocaInst>(li->getPointerOperand());
-
-              // if (nprotect) UNPROTECT(nprotect)
-              if (isProtectionCounterVariable(var, gl.unprotectFunction, counterVarsCache)) {
-                if (!s.balance.counterVar) {
-                  s.balance.counterVar = var;
-                } else if (s.balance.counterVar != var) {
-                  msg.info("uses multiple pointer protection counters (results will be incorrect)", t);
-                  continue;
-                }
-                if (s.balance.countState == CS_NONE) {
-                  msg.info("branches based on an uninitialized value of the protection counter variable", t);
-                  refinableInfos++;
-                  if (restartable) goto abort_from_function;
-                  continue;
-                }
-                if (s.balance.countState == CS_EXACT) {
-                  // we can unfold the branch with general body, and with comparisons against nonzero
-                  // as we know the exact value of the counter
-                  //
-                  // if (nprotect) { .... }
-                  
-                  Constant *knownLhs = ConstantInt::getSigned(s.balance.counterVar->getAllocatedType(), s.balance.count);
-                  Constant *res = ConstantExpr::getCompare(ci->getPredicate(), knownLhs, cast<Constant>(ci->getOperand(1)));
-                  assert(ConstantInt::classof(res));
-                
-                  // add only the relevant successor
-                  msg.debug("folding out branch on counter value", t);                
-                  BasicBlock *succ;
-                  if (!res->isZeroValue()) {
-                    succ = br->getSuccessor(0);
-                  } else {
-                    succ = br->getSuccessor(1);
-                  }
-                  {
-                    StateTy *state = s.clone(succ);
-                    if (state->add()) {
-                      msg.trace("added folded successor of", t);
-                    }
-                  }
-                  continue;
-                }
-                // s.countState == CS_DIFF
-                assert(s.balance.countState == CS_DIFF);
-                // we don't know if nprotect is zero
-                // but if the expression is just "if (nprotect) UNPROTECT(nprotect)", we can
-                //   treat it as "UNPROTECT(nprotect)", because UNPROTECT(0) does nothing
-                if (ci->isEquality() && ConstantInt::classof(ci->getOperand(1))) {
-                  ConstantInt *constOp = cast<ConstantInt>(ci->getOperand(1));
-                  BasicBlock *unprotectSucc; // the successor that would have to be UNPROTECT(nprotect)
-                  BasicBlock *joinSucc; // the other successor (where unprotectSucc would have to jump to)
-                  if (ci->isTrueWhenEqual()) {
-                    unprotectSucc = br->getSuccessor(1);
-                    joinSucc = br->getSuccessor(0);
-                  } else {
-                    unprotectSucc = br->getSuccessor(0);
-                    joinSucc = br->getSuccessor(1);
-                  }
-                  
-                  BasicBlock::iterator it = unprotectSucc->begin();
-                  LoadInst *loadInst = NULL;
-                  bool callsUnprotect = false;
-                  bool mergesWithJoinSucc = false;
-                  if (it != unprotectSucc->end() && LoadInst::classof(it)) {
-                    loadInst = cast<LoadInst>(it);
-                  }
-                  ++it;
-                  if (it != unprotectSucc->end()) {
-                    CallSite cs(cast<Value>(it));
-                    if (cs && cs.getCalledFunction() == gl.unprotectFunction && loadInst && cs.getArgument(0) == loadInst) {
-                      callsUnprotect = true;
-                    }
-                  }
-                  ++it;
-                  if (it != unprotectSucc->end() && BranchInst::classof(it)) {
-                    BranchInst *bi = cast<BranchInst>(it);
-                    if (!bi->isConditional() && bi->getSuccessor(0) == joinSucc) {
-                      mergesWithJoinSucc = true;
-                    }
-                  }
-                  if (callsUnprotect && mergesWithJoinSucc && loadInst->getPointerOperand() == var) {
-                    // if (np) { UNPROTECT(np) ...
-                            
-                    // FIXME: could there instead be returns in both branches?
-                            
-                    // interpret UNPROTECT(nprotect)
-                    msg.debug("simplifying unprotect conditional on counter value (diff state)", t);                
-                    s.balance.countState = CS_NONE;
-                    if (s.balance.depth < 0) {
-                      msg.info("has negative depth after UNPROTECT(<counter>)", t);
-                      refinableInfos++;
-                      goto abort_from_function;
-                    }
-                    // next process the code after the if
-                    {
-                      StateTy* state = s.clone(joinSucc);
-                      if (state->add()) {
-                        msg.trace("added folded successor (diff counter state) of", t);
-                      }
-                    }
-                    continue;
-                  }
-                }
-              }
-              // int guard
-              if (intGuardsEnabled && handleIntGuardsForTerminator(br, intGuardVarsCache, s, msg)) {
-                continue;
-              }
-            }
-          }
-        }
+        // int guards have to be after balance, so that "if (nprotect) UNPROTECT(nprotect)"
+        // is handled in preference of int guard
+      if (intGuardsEnabled && handleIntGuardsForTerminator(t, intGuardVarsCache, s, msg)) {
+        continue;
       }
       
       // add conservatively all cfg successors
