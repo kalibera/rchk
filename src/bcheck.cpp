@@ -326,7 +326,7 @@ int main(int argc, char* argv[])
         continue;
       }
       
-      if (s.balance.count > MAX_COUNT) {
+      if (s.balance.count > MAX_COUNT) { // turn the counter to differential state
         assert(s.balance.countState == CS_EXACT);
         s.balance.countState = CS_DIFF;
         s.balance.depth -= s.balance.count;
@@ -347,6 +347,10 @@ int main(int argc, char* argv[])
         // can't do this for count, because -1 means count not initialized
       }
       
+      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, gl, msg)) {
+        continue;
+      }
+
       if (BranchInst::classof(t)) {
         // (be smarter when adding successors)
         
@@ -355,11 +359,6 @@ int main(int argc, char* argv[])
           CmpInst* ci = cast<CmpInst>(br->getCondition());
           
           // if (x == y) ... [comparison of two variables]
-          if (sexpGuardsEnabled &&
-            handleBranchOnSEXPGuard(br, sexpGuardVarsCache, s, gl.nilVariable, gl.isNullFunction, msg)) {
-            
-            continue;
-          }
           
           // comparison with constant
           if (Constant::classof(ci->getOperand(0)) && LoadInst::classof(ci->getOperand(1))) {
@@ -475,7 +474,7 @@ int main(int argc, char* argv[])
                 }
               }
               // int guard
-              if (intGuardsEnabled && handleBranchOnIntGuard(br, intGuardVarsCache, s, msg)) {
+              if (intGuardsEnabled && handleIntGuardsForTerminator(br, intGuardVarsCache, s, msg)) {
                 continue;
               }
             }

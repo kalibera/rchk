@@ -133,7 +133,12 @@ void handleIntGuardsForNonTerminator(Instruction *in, VarBoolCacheTy& intGuardVa
   intGuards[storePointerVar] = newState;
 }
 
-bool handleBranchOnIntGuard(BranchInst* branch, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg) {
+bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg) {
+
+  if (!BranchInst::classof(t)) {
+    return false;
+  }
+  BranchInst* branch = cast<BranchInst>(t);
   if (!branch->isConditional() || !CmpInst::classof(branch->getCondition())) {
     return false;
   }
@@ -377,9 +382,12 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
   sexpGuards[storePointerVar] = newState;
 }
 
-bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s,
-  GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg) {
+bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy& g, LineMessenger& msg) {
   
+  if (!BranchInst::classof(t)) {
+    return false;
+  }
+  BranchInst* branch = cast<BranchInst>(t);
   if (!branch->isConditional() || !CmpInst::classof(branch->getCondition())) {
     return false;
   }
@@ -394,7 +402,7 @@ bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCa
   Value *ro = cast<LoadInst>(ci->getOperand(1))->getPointerOperand();
 
   Value *guard = NULL;
-  if (lo == nilVariable) { // comparison against R_NilValue
+  if (lo == g.nilVariable) { // comparison against R_NilValue
     guard = ro;
   } else {
     guard = lo;
@@ -403,23 +411,23 @@ bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCa
     return false;
   }
   AllocaInst* var = cast<AllocaInst>(guard);
-  if (!isSEXPGuardVariable(var, nilVariable, isNullFunction, sexpGuardVarsCache)) {
+  if (!isSEXPGuardVariable(var, g.nilVariable, g.isNullFunction, sexpGuardVarsCache)) {
     return false;
   }
               
   // if (x == R_NilValue) ...
   // if (x != R_NilValue) ...
 
-  SEXPGuardState g = getSEXPGuardState(s.sexpGuards, var);
+  SEXPGuardState gs = getSEXPGuardState(s.sexpGuards, var);
   int succIndex = -1;
 
-  if (g != SGS_UNKNOWN) {
+  if (gs != SGS_UNKNOWN) {
     if (ci->isTrueWhenEqual()) {
       // guard == R_NilValue
-      succIndex = (g == SGS_NIL) ? 0 : 1;
+      succIndex = (gs == SGS_NIL) ? 0 : 1;
     } else {
       // guard != R_NilValue
-      succIndex = (g == SGS_NIL) ? 1 : 0;
+      succIndex = (gs == SGS_NIL) ? 1 : 0;
     }
   }
   if (msg.debug()) {
