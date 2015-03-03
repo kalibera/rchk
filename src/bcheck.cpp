@@ -31,6 +31,7 @@
 #include "common.h"
 #include "errors.h"
 #include "allocators.h"
+#include "freshvars.h"
 #include "guards.h"
 #include "linemsg.h"
 
@@ -63,11 +64,6 @@ bool EXCLUDE_PROTECTION_FUNCTIONS = true;
   // currently this is set below to true for the case when checking modules
   // if set to true, functions like protect, unprotect are not being checked (because they indeed cause imbalance)
 
-bool REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS = true;
-  // this can be turned off because it has a lot of false alarms
-
-bool REPORT_UNPROTECTED_VARIABLES_AT_ALLOCATING_CALLS = true;
-  // this can be turned off because it has a lot of false alarms
 
 // -------------------------------- basic block state -----------------------------------
 
@@ -93,24 +89,19 @@ std::string cs_name(CountState cs) {
   }
 }
 
-typedef VarsSetTy FreshVarsTy;
-  // variables known to hold newly allocated pointers (SEXPs)
-  // attempts to include only reliably unprotected pointers,
-  // so as of now, any use of a variable removes it from the set
-
-struct StateTy : public StateWithGuardsTy {
+struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy {
   int depth;		// number of pointers "currently" on the protection stack
   int savedDepth;	// number of pointers on the protection stack when saved to a local store variable (e.g. savestack = R_PPStackTop)
   int count;		// value of a local counter for the number of protected pointers (or -1 when not used) (e.g. nprotect)
   CountState countState;
-  FreshVarsTy freshVars;
   
   public:
     StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState): 
-      StateWithGuardsTy(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState), freshVars() {};
+      StateBaseTy(bb), StateWithGuardsTy(bb), StateWithFreshVarsTy(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState) {};
 
     StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
-      StateWithGuardsTy(bb, intGuards, sexpGuards), depth(depth), savedDepth(savedDepth), count(count), countState(countState), freshVars(freshVars) {};
+      StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), StateWithFreshVarsTy(bb, freshVars),
+      depth(depth), savedDepth(savedDepth), count(count), countState(countState) {};
       
     virtual StateTy* clone(BasicBlock *newBB) {
       return new StateTy(newBB, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
@@ -119,21 +110,15 @@ struct StateTy : public StateWithGuardsTy {
     virtual bool add();
 
     void dump() {
+      StateBaseTy::dump(VERBOSE_DUMP);
       StateWithGuardsTy::dump(VERBOSE_DUMP);
+      StateWithFreshVarsTy::dump(VERBOSE_DUMP);
 
       errs() << "=== depth: " << depth << "\n";
       errs() << "=== savedDepth: " << savedDepth << "\n";
       errs() << "=== count: " << count << "\n";
       errs() << "=== countState: " << cs_name(countState) << "\n";
-      errs() << "=== fresh vars: " << &freshVars << "\n";
-      for(FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
-        AllocaInst *var = *fi;
-        errs() << "   " << var->getName();
-        if (VERBOSE_DUMP) {
-          errs() << " " << *var;
-        }
-        errs() << "\n";
-      }
+
       errs() << " ######################            ######################\n";
     }
 
@@ -408,9 +393,7 @@ int main(int argc, char* argv[])
   findErrorFunctions(m, errorFunctions);
 
   FunctionsSetTy possibleAllocators;
-  if (USE_ALLOCATOR_DETECTION) {
-    findPossibleAllocators(m, possibleAllocators);
-  }
+  findPossibleAllocators(m, possibleAllocators);
 
   FunctionsSetTy allocatingFunctions;
   findAllocatingFunctions(m, allocatingFunctions);
@@ -480,6 +463,8 @@ int main(int argc, char* argv[])
       // process a single basic block
       for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
         msg.trace("visiting", in);
+        handleFreshVarsForNonTerminator(in, possibleAllocators, allocatingFunctions, s, msg, refinableInfos);
+        
         CallSite cs(cast<Value>(in));
         if (cs) {
           // invoke or call
@@ -598,31 +583,6 @@ int main(int argc, char* argv[])
               }
             continue;
           }
-          if (allocatingFunctions.find(const_cast<Function*>(targetFunc)) != allocatingFunctions.end()) {
-
-            if (REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS) {
-              for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
-                Value *arg = *ai;
-                CallSite csa(arg);
-                if (csa) {
-                  Function *srcFun = csa.getCalledFunction();
-                  if (srcFun && possibleAllocators.find(srcFun) != possibleAllocators.end()) {
-                    msg.info("calling allocating function " + targetFunc->getName().str() + " with argument allocated using " + srcFun->getName().str(),
-                      in);
-                    refinableInfos++;
-                  }
-                }
-              }
-            }
-            if (REPORT_UNPROTECTED_VARIABLES_AT_ALLOCATING_CALLS) {
-              for (FreshVarsTy::iterator fi = s.freshVars.begin(), fe = s.freshVars.end(); fi != fe; ++fi) {
-                AllocaInst *var = *fi;
-                msg.info("unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str(), in);
-                refinableInfos++;
-              }
-            }
-          }
-          continue;
         } /* not invoke or call */
         if (LoadInst::classof(in)) {
           LoadInst *li = cast<LoadInst>(in);
@@ -648,62 +608,12 @@ int main(int argc, char* argv[])
               }
             }
           }
-          if (AllocaInst::classof(li->getPointerOperand())) {
-            AllocaInst *var = cast<AllocaInst>(li->getPointerOperand());
-            if (s.freshVars.find(var) != s.freshVars.end()) { // a fresh variable is being loaded
-
-              msg.debug("fresh variable " + var->getName().str() + " loaded and thus no longer fresh", in);
-              s.freshVars.erase(var);
-
-              if (REPORT_FRESH_ARGUMENTS_TO_ALLOCATING_FUNCTIONS && li->hasOneUse()) { // too restrictive? should look at other uses too?
-                CallSite cs(li->user_back());
-                if (cs) {
-                  Function *targetFun = cs.getCalledFunction();
-                  // fresh variable passed to an allocating function - but this may be ok if it is callee-protect function
-                  //   or if the function allocates only after the fresh argument is no longer needed
-                  if (allocatingFunctions.find(targetFun) != allocatingFunctions.end()) {
-                    std::string varName = var->getName().str();
-                    if (varName.empty()) {
-                      unsigned i;
-                      for(i = 0; i < cs.arg_size(); i++) {
-                        if (cs.getArgument(i) == li) {
-                          varName = "arg " + std::to_string(i+1);
-                          break;
-                        }
-                      }
-                    }
-                    msg.info("calling allocating function " + targetFun->getName().str() + " with a fresh pointer (" + varName + ")", in);
-                    refinableInfos++;
-                  }
-                }
-              }
-            }
-          }
           continue;
         }
         if (StoreInst::classof(in)) {
           Value* storePointerOp = cast<StoreInst>(in)->getPointerOperand();
           Value* storeValueOp = cast<StoreInst>(in)->getValueOperand();
 
-          if (AllocaInst::classof(storePointerOp) && storeValueOp->hasOneUse()) {
-            AllocaInst *var = cast<AllocaInst>(storePointerOp);
-            CallSite csv(storeValueOp);
-            bool isFresh = false;
-            if (csv) {
-              Function *vf = csv.getCalledFunction();
-              if (vf && possibleAllocators.find(const_cast<Function*>(vf)) != possibleAllocators.end()) {
-                s.freshVars.insert(var);
-                msg.debug("initialized fresh SEXP variable " + var->getName().str(), in);
-                isFresh = true;
-              }
-            }
-            if (!isFresh) {
-              if (s.freshVars.find(var) != s.freshVars.end()) {
-                s.freshVars.erase(var);
-                msg.debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in);
-              }
-            }
-          }
           if (storePointerOp == gl.ppStackTopVariable) { // R_PPStackTop = savestack
             if (LoadInst::classof(storeValueOp)) {          
               Value *varValue = cast<LoadInst>(storeValueOp)->getPointerOperand();

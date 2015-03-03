@@ -50,11 +50,11 @@ bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCa
 
 // checking state with guards
 
-struct StateWithGuardsTy : public StateBaseTy {
+struct StateWithGuardsTy : virtual public StateBaseTy {
   IntGuardsTy intGuards;
   SEXPGuardsTy sexpGuards;
   
-  StateWithGuardsTy(BasicBlock* bb, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards): StateBaseTy(bb), intGuards(intGuards), sexpGuards(sexpGuards) {};
+  StateWithGuardsTy(BasicBlock *bb, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards): StateBaseTy(bb), intGuards(intGuards), sexpGuards(sexpGuards) {};
   StateWithGuardsTy(BasicBlock *bb): StateBaseTy(bb), intGuards(), sexpGuards() {};
   
   virtual StateWithGuardsTy* clone(BasicBlock *newBB) = 0;

@@ -453,7 +453,6 @@ bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCa
 // common
 
 void StateWithGuardsTy::dump(bool verbose) {
-  StateBaseTy::dump(verbose);
   
   errs() << "=== integer guards: " << &intGuards << "\n";
   for(IntGuardsTy::iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
