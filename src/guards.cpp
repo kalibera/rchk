@@ -5,6 +5,8 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/GlobalVariable.h>
 
+#include <llvm/Support/raw_ostream.h>
+
 using namespace llvm;
 
 // integer guard is a local variable

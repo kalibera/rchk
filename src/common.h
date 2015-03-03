@@ -36,4 +36,19 @@ bool isSEXP(AllocaInst* var);
 bool isSEXP(Type* type);
 bool isInstall(Function *f);
 
+struct GlobalsTy {
+  Function *protectFunction, *protectWithIndexFunction, *unprotectFunction, *unprotectPtrFunction;
+  GlobalVariable *ppStackTopVariable;
+  
+  GlobalVariable *nilVariable;
+  Function *isNullFunction;
+  
+  public:
+    GlobalsTy(Module *m);
+  
+  private:
+    Function *getSpecialFunction(Module *m, std::string name);
+    GlobalVariable *getSpecialVariable(Module *m, std::string name);
+};
+
 #endif

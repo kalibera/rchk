@@ -18,7 +18,7 @@ typedef VarsSetTy FreshVarsTy;
 struct StateWithFreshVarsTy : virtual public StateBaseTy {
   FreshVarsTy freshVars;
   
-  StateWithFreshVarsTy(BasicBlock *bb ,FreshVarsTy& freshVars): StateBaseTy(bb), freshVars(freshVars) {};
+  StateWithFreshVarsTy(BasicBlock *bb, FreshVarsTy& freshVars): StateBaseTy(bb), freshVars(freshVars) {};
   StateWithFreshVarsTy(BasicBlock *bb): StateBaseTy(bb), freshVars() {};
   
   virtual StateWithFreshVarsTy* clone(BasicBlock *newBB) = 0;
@@ -27,6 +27,6 @@ struct StateWithFreshVarsTy : virtual public StateBaseTy {
 };
 
 void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions,
-  StateWithFreshVarsTy& s, LineMessenger& msg, unsigned& refinableInfos);
+  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos);
 
 #endif

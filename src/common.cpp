@@ -166,3 +166,29 @@ bool isInstall(Function *f) {
   return f && (f->getName() == "Rf_install" || f->getName() == "Rf_installTrChar" ||
     f->getName() == "Rf_installChar" || f->getName() == "Rf_installS3Signature");
 }
+
+GlobalsTy::GlobalsTy(Module *m) {
+  protectFunction = getSpecialFunction(m, "Rf_protect");
+  protectWithIndexFunction = getSpecialFunction(m, "R_ProtectWithIndex");
+  unprotectFunction = getSpecialFunction(m, "Rf_unprotect");
+  unprotectPtrFunction = getSpecialFunction(m, "Rf_unprotect_ptr");
+  ppStackTopVariable = getSpecialVariable(m, "R_PPStackTop");
+  nilVariable = getSpecialVariable(m, "R_NilValue");
+  isNullFunction = getSpecialFunction(m, "Rf_isNull");
+}
+  
+Function* GlobalsTy::getSpecialFunction(Module *m, std::string name) {
+  Function *f = m->getFunction(name);
+  if (!f) {
+    errs() << "  Function " << name << " not found in module (won't check its use).\n";
+  }
+  return f;
+}
+    
+GlobalVariable* GlobalsTy::getSpecialVariable(Module *m, std::string name) {
+  GlobalVariable *v = m->getGlobalVariable(name, true);
+  if (!v) {
+    errs() << "  Variable " << name << " not found in module (won't check its use).\n";
+  }
+  return v;
+}

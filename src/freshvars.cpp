@@ -7,7 +7,7 @@
 
 using namespace llvm;
 
-static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, StateWithFreshVarsTy& s,
+static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos) {
   
   CallSite cs(cast<Value>(in));
@@ -34,7 +34,7 @@ static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, Func
       }
     }
   }
-  for (FreshVarsTy::iterator fi = s.freshVars.begin(), fe = s.freshVars.end(); fi != fe; ++fi) {
+  for (FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
     AllocaInst *var = *fi;
     msg.info("unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str(), in);
     refinableInfos++;
@@ -42,7 +42,7 @@ static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, Func
 
 }
 
-static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, StateWithFreshVarsTy& s, LineMessenger& msg, unsigned& refinableInfos) {
+static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
   if (!LoadInst::classof(in)) {
     return;
   }
@@ -51,13 +51,13 @@ static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, Sta
     return;
   }
   AllocaInst *var = cast<AllocaInst>(li->getPointerOperand());
-  if (s.freshVars.find(var) == s.freshVars.end()) { 
+  if (freshVars.find(var) == freshVars.end()) { 
     return;
   }
   // a fresh variable is being loaded
 
   msg.debug("fresh variable " + var->getName().str() + " loaded and thus no longer fresh", in);
-  s.freshVars.erase(var);
+  freshVars.erase(var);
 
   if (!li->hasOneUse()) { // too restrictive? should look at other uses too?
     return;
@@ -87,7 +87,7 @@ static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, Sta
   return;
 }
 
-static void handleStore(Instruction *in, FunctionsSetTy& possibleAllocators, StateWithFreshVarsTy& s, LineMessenger& msg, unsigned& refinableInfos) {
+static void handleStore(Instruction *in, FunctionsSetTy& possibleAllocators, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
   if (!StoreInst::classof(in)) {
     return;
   }
@@ -103,24 +103,24 @@ static void handleStore(Instruction *in, FunctionsSetTy& possibleAllocators, Sta
   if (csv) {
     Function *vf = csv.getCalledFunction();
     if (vf && possibleAllocators.find(const_cast<Function*>(vf)) != possibleAllocators.end()) {
-      s.freshVars.insert(var);
+      freshVars.insert(var);
       msg.debug("initialized fresh SEXP variable " + var->getName().str(), in);
       isFresh = true;
     }
   }
   if (!isFresh) {
-    if (s.freshVars.find(var) != s.freshVars.end()) {
-      s.freshVars.erase(var);
+    if (freshVars.find(var) != freshVars.end()) {
+      freshVars.erase(var);
       msg.debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in);
     }
   }
 }
 
-void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, StateWithFreshVarsTy& s, LineMessenger& msg, unsigned& refinableInfos) {
+void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
 
-  handleCall(in, possibleAllocators, allocatingFunctions, s, msg, refinableInfos);
-  handleLoad(in, allocatingFunctions, s, msg, refinableInfos);
-  handleStore(in, possibleAllocators, s, msg, refinableInfos);
+  handleCall(in, possibleAllocators, allocatingFunctions, freshVars, msg, refinableInfos);
+  handleLoad(in, allocatingFunctions, freshVars, msg, refinableInfos);
+  handleStore(in, possibleAllocators, freshVars, msg, refinableInfos);
 }
 
 void StateWithFreshVarsTy::dump(bool verbose) {

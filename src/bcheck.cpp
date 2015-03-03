@@ -31,6 +31,7 @@
 #include "common.h"
 #include "errors.h"
 #include "allocators.h"
+#include "balance.h"
 #include "freshvars.h"
 #include "guards.h"
 #include "linemsg.h"
@@ -67,44 +68,19 @@ bool EXCLUDE_PROTECTION_FUNCTIONS = true;
 
 // -------------------------------- basic block state -----------------------------------
 
-const int MAX_DEPTH = 64;	// maximum supported protection stack depth
-const int MAX_COUNT = 32;	// maximum supported protection counter value (before turning to differential)
 const int MAX_STATES = 3000000;	// maximum number of states visited per function
 
-
-// protection counter (like "nprotect")
-enum CountState {
-  CS_NONE = 0,
-  CS_EXACT,
-  CS_DIFF // count is unused
-          // savedDepth is inaccessible but keeps its value
-          // depth is "how many protects on top of counter"
-};
-
-std::string cs_name(CountState cs) {
-  switch(cs) {
-    case CS_NONE: return "uninitialized (none)";
-    case CS_EXACT: return "exact";
-    case CS_DIFF: return "differential";
-  }
-}
-
-struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy {
-  int depth;		// number of pointers "currently" on the protection stack
-  int savedDepth;	// number of pointers on the protection stack when saved to a local store variable (e.g. savestack = R_PPStackTop)
-  int count;		// value of a local counter for the number of protected pointers (or -1 when not used) (e.g. nprotect)
-  CountState countState;
+struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanceTy {
   
   public:
-    StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState): 
-      StateBaseTy(bb), StateWithGuardsTy(bb), StateWithFreshVarsTy(bb), depth(depth), savedDepth(savedDepth), count(count), countState(countState) {};
+    StateTy(BasicBlock *bb): 
+      StateBaseTy(bb), StateWithGuardsTy(bb), StateWithFreshVarsTy(bb), StateWithBalanceTy(bb) {};
 
-    StateTy(BasicBlock *bb, int depth, int savedDepth, int count, CountState countState, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
-      StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), StateWithFreshVarsTy(bb, freshVars),
-      depth(depth), savedDepth(savedDepth), count(count), countState(countState) {};
+    StateTy(BasicBlock *bb, BalanceStateTy& balance, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
+      StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), StateWithFreshVarsTy(bb, freshVars), StateWithBalanceTy(bb, balance) {};
       
     virtual StateTy* clone(BasicBlock *newBB) {
-      return new StateTy(newBB, depth, savedDepth, count, countState, intGuards, sexpGuards, freshVars);
+      return new StateTy(newBB, balance, intGuards, sexpGuards, freshVars);
     }
     
     virtual bool add();
@@ -113,12 +89,7 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy {
       StateBaseTy::dump(VERBOSE_DUMP);
       StateWithGuardsTy::dump(VERBOSE_DUMP);
       StateWithFreshVarsTy::dump(VERBOSE_DUMP);
-
-      errs() << "=== depth: " << depth << "\n";
-      errs() << "=== savedDepth: " << savedDepth << "\n";
-      errs() << "=== count: " << count << "\n";
-      errs() << "=== countState: " << cs_name(countState) << "\n";
-
+      StateWithBalanceTy::dump(VERBOSE_DUMP);
       errs() << " ######################            ######################\n";
     }
 
@@ -136,8 +107,8 @@ struct StateTy_hash {
 
     size_t res = 0;
     hash_combine(res, t->bb);
-    hash_combine(res, t->depth);
-    hash_combine(res, t->count);
+    hash_combine(res, t->balance.depth);
+    hash_combine(res, t->balance.count);
     hash_combine(res, t->intGuards.size());
     for(IntGuardsTy::const_iterator gi = t->intGuards.begin(), ge = t->intGuards.end(); gi != ge; *gi++) {
       hash_combine(res, (int) gi->second);
@@ -158,8 +129,9 @@ struct StateTy_equal {
     if (lhs == rhs) {
       return true;
     }
-    return lhs->bb == rhs->bb && lhs->depth == rhs->depth && lhs->savedDepth == rhs->savedDepth &&
-      lhs->count == rhs->count && lhs->countState == rhs->countState && 
+    return lhs->bb == rhs->bb && 
+      lhs->balance.depth == rhs->balance.depth && lhs->balance.savedDepth == rhs->balance.savedDepth && lhs->balance.count == rhs->balance.count &&
+      lhs->balance.countState == rhs->balance.countState && lhs->balance.counterVar == rhs->balance.counterVar &&
       lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
       lhs->freshVars == rhs->freshVars;
   }
@@ -167,183 +139,6 @@ struct StateTy_equal {
 
 typedef std::stack<StateTy*> WorkListTy;
 typedef std::unordered_set<StateTy*, StateTy_hash, StateTy_equal> DoneSetTy;
-
-
-// -----------------------------------
-
-struct GlobalsTy {
-  Function *protectFunction, *protectWithIndexFunction, *unprotectFunction, *unprotectPtrFunction;
-  GlobalVariable *ppStackTopVariable;
-  
-  GlobalVariable *nilVariable;
-  Function *isNullFunction;
-  
-  public:
-    GlobalsTy(Module *m) {
-    
-      protectFunction = getSpecialFunction(m, "Rf_protect");
-      protectWithIndexFunction = getSpecialFunction(m, "R_ProtectWithIndex");
-      unprotectFunction = getSpecialFunction(m, "Rf_unprotect");
-      unprotectPtrFunction = getSpecialFunction(m, "Rf_unprotect_ptr");
-      ppStackTopVariable = getSpecialVariable(m, "R_PPStackTop");
-      
-      nilVariable = getSpecialVariable(m, "R_NilValue");
-      isNullFunction = getSpecialFunction(m, "Rf_isNull");
-    }
-  
-  private:
-    Function *getSpecialFunction(Module *m, std::string name) {
-      Function *f = m->getFunction(name);
-      if (!f) {
-        errs() << "  Function " << name << " not found in module (won't check its use).\n";
-      }
-      return f;
-    }
-    
-    GlobalVariable *getSpecialVariable(Module *m, std::string name) {
-      GlobalVariable *v = m->getGlobalVariable(name, true);
-      if (!v) {
-        errs() << "  Variable " << name << " not found in module (won't check its use).\n";
-      }
-      return v;
-    }
-};
-
-
-// -------------------------------- identifying special local variables (helper functions)  -----------------------------------
-
-
-// protection stack top "save variable" is a local variable
-//   - which can be assigned the value of R_PPStackTop (typically at start of function)
-//   - which can be assigned to R_PPStackTop (typically at end of function)
-//   - it must have at least one load/store of R_PPStackTop
-
-bool isProtectionStackTopSaveVariable(AllocaInst* var, GlobalVariable* ppStackTopVariable, VarBoolCacheTy& cache) {
-
-  if (!ppStackTopVariable) {
-    return false;
-  }
-  auto csearch = cache.find(var);
-  if (csearch != cache.end()) {
-    return csearch->second;
-  }
-  
-  bool usesPPStackTop = false;
-  for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
-    User *u = *ui;
-
-    if (StoreInst::classof(u)) {
-      Value *v = (cast<StoreInst>(u))->getValueOperand();
-      if (LoadInst::classof(v) && cast<LoadInst>(v)->getPointerOperand() == ppStackTopVariable && v->hasOneUse()) {
-        // savestack = R_PPStackTop
-        usesPPStackTop = true;
-        continue;
-      }
-    }
-
-    if (LoadInst::classof(u)) {
-      LoadInst *l = cast<LoadInst>(u);
-      if (l->hasOneUse() && StoreInst::classof(l->user_back()) &&
-        cast<StoreInst>(l->user_back())->getPointerOperand() == ppStackTopVariable) {
-        // R_PPStackTop = savestack
-        usesPPStackTop = true;
-        continue;
-      }
-    }
-    // some other use
-    cache.insert({var, false});
-    return false;
-  }
-  cache.insert({var, true});
-  return usesPPStackTop;
-}
-
-// protection counter is a local variable
-//   - integer type
-//   - only modified by
-//       assigning a constant to it (store instruction)
-//       adding a constant to it
-//         load
-//         add
-//	   store
-//   - used as an argument to Rf_unprotect at least once
-//	  load
-//        call
-//   - not used for anything but load, store
-//
-
-bool isProtectionCounterVariable(AllocaInst* var, Function* unprotectFunction) {
-
-  if (!unprotectFunction) {
-    return false;
-  }
-
-  if (!IntegerType::classof(var->getAllocatedType()) || var->isArrayAllocation()) {
-    return false;
-  }
-  
-  bool passedToUnprotect = false;
-  for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
-    User *u = *ui;
-
-    if (StoreInst::classof(u)) {
-      Value *v = (cast<StoreInst>(u))->getValueOperand();
-      if (ConstantInt::classof(v)) {
-        // nprotect = 3
-        continue;
-      }
-      if (BinaryOperator::classof(v)) {
-        // nprotect += 3;
-        BinaryOperator *o = cast<BinaryOperator>(v);
-        if (o->getOpcode() != Instruction::Add) {
-          return false;
-        }
-        Value *nonConst;
-        if (ConstantInt::classof(o->getOperand(0))) {
-          nonConst = o->getOperand(1);
-        } else if (ConstantInt::classof(o->getOperand(1))) {
-          nonConst = o->getOperand(0);
-        } else {
-          return false;
-        }
-        
-        if (LoadInst::classof(nonConst) && cast<LoadInst>(nonConst)->getPointerOperand() == var) {
-          continue;
-        }
-      }
-      return false;
-    }
-    if (LoadInst::classof(u)) {
-      LoadInst *l = cast<LoadInst>(u);
-      if (!l->hasOneUse()) {
-        return false;
-      }
-      CallSite cs(cast<Value>(l->user_back()));
-      if (cs && cs.getCalledFunction() == unprotectFunction) {
-        passedToUnprotect = true;
-      }
-      continue;
-    }
-    return false;
-  }  
-  return passedToUnprotect;
-}
-
-bool isProtectionCounterVariable(AllocaInst* var, Function* unprotectFunction, VarBoolCacheTy& cache) {
-
-  if (!unprotectFunction) {
-    return false;
-  }
-  auto csearch = cache.find(var);
-  if (csearch != cache.end()) {
-    return csearch->second;
-  }
-
-  bool res = isProtectionCounterVariable(var, unprotectFunction);
-  
-  cache.insert({var, res});
-  return res;
-}
 
 // ------------- helper functions --------------
 
@@ -433,7 +228,7 @@ int main(int argc, char* argv[])
     bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
     clearStates();
     {
-      StateTy* initState = new StateTy(&fun->getEntryBlock(), 0, -1, -1, CS_NONE);
+      StateTy* initState = new StateTy(&fun->getEntryBlock());
       initState->add();
     }
     while(!workList.empty()) {
@@ -458,12 +253,11 @@ int main(int argc, char* argv[])
         goto abort_from_function;
       }      
       
-      AllocaInst* counterVar = NULL;
-      
       // process a single basic block
       for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
         msg.trace("visiting", in);
-        handleFreshVarsForNonTerminator(in, possibleAllocators, allocatingFunctions, s, msg, refinableInfos);
+        handleFreshVarsForNonTerminator(in, possibleAllocators, allocatingFunctions, s.freshVars, msg, refinableInfos);
+        handleBalanceForNonTerminator(in, s.balance, gl, counterVarsCache, saveVarsCache, msg, refinableInfos);
         
         CallSite cs(cast<Value>(in));
         if (cs) {
@@ -471,67 +265,8 @@ int main(int argc, char* argv[])
           const Function* targetFunc = cs.getCalledFunction();
           if (!targetFunc) continue;
           
-          if (targetFunc == gl.protectFunction || targetFunc == gl.protectWithIndexFunction) { // PROTECT(x)
-            s.depth++;
-            msg.debug("protect call", in);
-            continue;
-          }
           if (targetFunc == gl.unprotectFunction) {
             Value* unprotectValue = cs.getArgument(0);
-            if (ConstantInt::classof(unprotectValue)) { // e.g. UNPROTECT(3)
-              uint64_t arg = (cast<ConstantInt>(unprotectValue))->getZExtValue();
-              s.depth -= (int) arg;
-              msg.debug("unprotect call using constant", in);              
-              if (s.countState != CS_DIFF && s.depth < 0) {
-                msg.info("has negative depth", in);
-                refinableInfos++;
-                goto abort_from_function;
-              }
-              continue;
-            }
-            if (LoadInst::classof(unprotectValue)) { // e.g. UNPROTECT(numProtects)
-              Value *varValue = const_cast<Value*>(cast<LoadInst>(unprotectValue)->getPointerOperand());
-              if (AllocaInst::classof(varValue)) {
-                AllocaInst* var = cast<AllocaInst>(varValue);
-                if (!isProtectionCounterVariable(var, gl.unprotectFunction, counterVarsCache)) {
-                  msg.info("has an unsupported form of unprotect with a variable (results will be incorrect)", in);
-                  continue;
-                }
-                if (!counterVar) {
-                  counterVar = var;
-                } else if (counterVar != var) {
-                  msg.info("has an unsupported form of unprotect with a variable - multiple counter variables (results will be incorrect)", in);
-                  continue;
-                }
-                if (s.countState == CS_NONE) {
-                  msg.info("passes uninitialized counter of protects in a call to unprotect", in);
-                  refinableInfos++;
-                  if (restartable) goto abort_from_function;
-                  continue;
-                }
-                if (s.countState == CS_EXACT) {
-                  s.depth -= s.count;
-                  msg.debug("unprotect call using counter in exact state", in);                
-                  if (s.depth < 0) {
-                    msg.info("has negative depth", in);
-                    refinableInfos++;
-                    goto abort_from_function;
-                  }
-                  continue;
-                }
-                // countState == CS_DIFF
-                assert(s.countState == CS_DIFF);
-                msg.debug("unprotect call using counter in diff state", in);
-                s.countState = CS_NONE;
-                // depth keeps its value - it now becomes exact depth again
-                if (s.depth < 0) {
-                  msg.info("has negative depth after UNPROTECT(<counter>)", in);
-                  refinableInfos++;
-                  goto abort_from_function;
-                }
-                continue;
-              }
-            }
             if (intGuardsEnabled && SelectInst::classof(unprotectValue)) { // UNPROTECT(intguard ? 3 : 4)
               SelectInst *si = cast<SelectInst>(unprotectValue);
               
@@ -556,9 +291,9 @@ int main(int argc, char* argv[])
                       } else {
                         arg = cast<ConstantInt>(si->getFalseValue())->getZExtValue();
                       }
-                      s.depth -= (int) arg;
+                      s.balance.depth -= (int) arg;
                       msg.debug("unprotect call using constant in conditional expression on integer guard", in);              
-                      if (s.countState != CS_DIFF && s.depth < 0) {
+                      if (s.balance.countState != CS_DIFF && s.balance.depth < 0) {
                         msg.info("has negative depth", in);
                         refinableInfos++;
                         goto abort_from_function;
@@ -569,147 +304,11 @@ int main(int argc, char* argv[])
                 }
               }
             }
-            msg.info("has unsupported form of unprotect", in);
-            continue;
           }
           
-          if (targetFunc == gl.unprotectPtrFunction) {  // UNPROTECT_PTR(x)
-            msg.debug("unprotect_ptr call", in);
-            s.depth--;
-            if (s.countState != CS_DIFF && s.depth < 0) {
-                msg.info("has negative depth", in);
-                refinableInfos++;
-                goto abort_from_function;
-              }
-            continue;
-          }
         } /* not invoke or call */
-        if (LoadInst::classof(in)) {
-          LoadInst *li = cast<LoadInst>(in);
-          if (li->getPointerOperand() == gl.ppStackTopVariable) { // savestack = R_PPStackTop
-            if (li->hasOneUse()) {
-              User* user = li->user_back();
-              if (StoreInst::classof(user)) {
-                StoreInst* topStoreInst = cast<StoreInst>(user);
-                if (AllocaInst::classof(topStoreInst->getPointerOperand())) {
-                  AllocaInst* topStore = cast<AllocaInst>(topStoreInst->getPointerOperand());
-                  if (isProtectionStackTopSaveVariable(topStore, gl.ppStackTopVariable, saveVarsCache)) {
-                    // topStore is the alloca instruction for the local variable where R_PPStack is saved to
-                    // e.g. %save = alloca i32, align 4
-                    if (s.countState == CS_DIFF) {
-                      msg.info("saving value of PPStackTop while in differential count state (results will be incorrect)", in);
-                      continue;
-                    }
-                    s.savedDepth = s.depth;
-                    msg.debug("saving value of PPStackTop", in);
-                    continue;
-                  }
-                }
-              }
-            }
-          }
-          continue;
-        }
-        if (StoreInst::classof(in)) {
-          Value* storePointerOp = cast<StoreInst>(in)->getPointerOperand();
-          Value* storeValueOp = cast<StoreInst>(in)->getValueOperand();
-
-          if (storePointerOp == gl.ppStackTopVariable) { // R_PPStackTop = savestack
-            if (LoadInst::classof(storeValueOp)) {          
-              Value *varValue = cast<LoadInst>(storeValueOp)->getPointerOperand();
-              if (AllocaInst::classof(varValue) && 
-                isProtectionStackTopSaveVariable(cast<AllocaInst>(varValue), gl.ppStackTopVariable, saveVarsCache)) {
-
-                if (s.countState == CS_DIFF) {
-                  msg.info("restoring value of PPStackTop while in differential count state (results will be incorrect)", in);
-                  continue;
-                }
-                msg.debug("restoring value of PPStackTop", in);
-                if (s.savedDepth < 0) {
-                  msg.info("restores PPStackTop from uninitialized local variable", in);
-                  refinableInfos++;
-                  if (restartable) goto abort_from_function;
-                } else {
-                  s.depth = s.savedDepth;
-                }
-                continue;
-              }
-            }
-            msg.info("manipulates PPStackTop directly (results will be incorrect)", in);
-            continue;  
-          }
-          if (AllocaInst::classof(storePointerOp) && 
-            isProtectionCounterVariable(cast<AllocaInst>(storePointerOp), gl.unprotectFunction, counterVarsCache)) { // nprotect = ... 
-              
-            AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-            if (!counterVar) {
-              counterVar = storePointerVar;
-            } else if (counterVar != storePointerVar) {
-              msg.info("uses multiple pointer protection counters (results will be incorrect)", in);
-              continue;
-            }
-            if (ConstantInt::classof(storeValueOp)) {
-              // nprotect = 3
-              if (s.countState == CS_DIFF) {
-                msg.info("setting counter value while in differential mode (forgetting protects)?", in);
-                refinableInfos++;
-                if (restartable) goto abort_from_function;
-                continue;
-              }
-              int64_t arg = (cast<ConstantInt>(storeValueOp))->getSExtValue();
-              s.count = arg;
-              s.countState = CS_EXACT;
-              msg.debug("setting counter to a constant", in);              
-              if (s.count < 0) {
-                msg.info("protection counter set to a negative value", in);
-              }
-              continue;
-            }
-            if (BinaryOperator::classof(storeValueOp)) {
-              // nprotect += 3;
-              BinaryOperator *o = cast<BinaryOperator>(storeValueOp);
-              if (o->getOpcode() == Instruction::Add) {
-                Value *nonConstOp = NULL;
-                Value *constOp = NULL;
-
-                if (ConstantInt::classof(o->getOperand(0))) {
-                  constOp = o->getOperand(0);
-                  nonConstOp = o->getOperand(1);
-                } else if (ConstantInt::classof(o->getOperand(1))) {
-                  constOp = o->getOperand(1);
-                  nonConstOp = o->getOperand(0);
-                } 
         
-                if (nonConstOp && LoadInst::classof(nonConstOp) && cast<LoadInst>(nonConstOp)->getPointerOperand() == counterVar &&
-                  constOp && ConstantInt::classof(constOp)) {
-                  
-                  if (s.countState == CS_NONE) {
-                    msg.info("adds a constant to an uninitialized counter variable", in);
-                    refinableInfos++;
-                    if (restartable) goto abort_from_function;
-                    continue;
-                  }
-                  int64_t arg = (cast<ConstantInt>(constOp))->getSExtValue();
-                  msg.debug("adding a constant to counter", in);
-                  if (s.countState == CS_EXACT) {
-                    s.count += arg;
-                    if (s.count < 0) {
-                      msg.info("protection counter went negative after add", in);
-                      refinableInfos++;
-                      if (restartable) goto abort_from_function;
-                    }
-                    continue;
-                  }
-                  // countState == CS_DIFF
-                  assert(s.countState == CS_DIFF);
-                  s.depth -= arg; // fewer protects on top of counter than before
-                  continue;
-                }
-              }
-            }
-            msg.info("unsupported use of protection counter (internal error?)", in);
-            continue;
-          }
+        if (StoreInst::classof(in)) {
           if (intGuardsEnabled && handleStoreToIntGuard(cast<StoreInst>(in), intGuardVarsCache, s.intGuards, msg)) {
             continue;
           }
@@ -725,7 +324,7 @@ int main(int argc, char* argv[])
       
       TerminatorInst *t = s.bb->getTerminator();
       if (ReturnInst::classof(t)) {
-        if (s.countState == CS_DIFF || s.depth != 0) {
+        if (s.balance.countState == CS_DIFF || s.balance.depth != 0) {
           msg.info("has possible protection stack imbalance", t);
           refinableInfos++;
           if (restartable) goto abort_from_function;
@@ -733,21 +332,21 @@ int main(int argc, char* argv[])
         continue;
       }
       
-      if (s.count > MAX_COUNT) {
-        assert(s.countState == CS_EXACT);
-        s.countState = CS_DIFF;
-        s.depth -= s.count;
-        s.count = -1;
+      if (s.balance.count > MAX_COUNT) {
+        assert(s.balance.countState == CS_EXACT);
+        s.balance.countState = CS_DIFF;
+        s.balance.depth -= s.balance.count;
+        s.balance.count = -1;
       }
       
-      if (s.depth > MAX_DEPTH) {
+      if (s.balance.depth > MAX_DEPTH) {
         msg.info("has too high protection stack depth", t);
         refinableInfos++;
         if (restartable) goto abort_from_function;
         continue;
       }
       
-      if (s.countState != CS_DIFF && s.depth < 0) {
+      if (s.balance.countState != CS_DIFF && s.balance.depth < 0) {
         if (restartable) goto abort_from_function;
         continue; 
         // do not propagate negative depth to successors
@@ -781,25 +380,25 @@ int main(int argc, char* argv[])
 
               // if (nprotect) UNPROTECT(nprotect)
               if (isProtectionCounterVariable(var, gl.unprotectFunction, counterVarsCache)) {
-                if (!counterVar) {
-                  counterVar = var;
-                } else if (counterVar != var) {
+                if (!s.balance.counterVar) {
+                  s.balance.counterVar = var;
+                } else if (s.balance.counterVar != var) {
                   msg.info("uses multiple pointer protection counters (results will be incorrect)", t);
                   continue;
                 }
-                if (s.countState == CS_NONE) {
+                if (s.balance.countState == CS_NONE) {
                   msg.info("branches based on an uninitialized value of the protection counter variable", t);
                   refinableInfos++;
                   if (restartable) goto abort_from_function;
                   continue;
                 }
-                if (s.countState == CS_EXACT) {
+                if (s.balance.countState == CS_EXACT) {
                   // we can unfold the branch with general body, and with comparisons against nonzero
                   // as we know the exact value of the counter
                   //
                   // if (nprotect) { .... }
                   
-                  Constant *knownLhs = ConstantInt::getSigned(counterVar->getAllocatedType(), s.count);
+                  Constant *knownLhs = ConstantInt::getSigned(s.balance.counterVar->getAllocatedType(), s.balance.count);
                   Constant *res = ConstantExpr::getCompare(ci->getPredicate(), knownLhs, cast<Constant>(ci->getOperand(1)));
                   assert(ConstantInt::classof(res));
                 
@@ -820,7 +419,7 @@ int main(int argc, char* argv[])
                   continue;
                 }
                 // s.countState == CS_DIFF
-                assert(s.countState == CS_DIFF);
+                assert(s.balance.countState == CS_DIFF);
                 // we don't know if nprotect is zero
                 // but if the expression is just "if (nprotect) UNPROTECT(nprotect)", we can
                 //   treat it as "UNPROTECT(nprotect)", because UNPROTECT(0) does nothing
@@ -864,8 +463,8 @@ int main(int argc, char* argv[])
                             
                     // interpret UNPROTECT(nprotect)
                     msg.debug("simplifying unprotect conditional on counter value (diff state)", t);                
-                    s.countState = CS_NONE;
-                    if (s.depth < 0) {
+                    s.balance.countState = CS_NONE;
+                    if (s.balance.depth < 0) {
                       msg.info("has negative depth after UNPROTECT(<counter>)", t);
                       refinableInfos++;
                       goto abort_from_function;
