@@ -26,7 +26,7 @@ std::string igs_name(IntGuardState igs);
 IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
 bool isIntegerGuardVariable(AllocaInst* var);
 bool isIntegerGuardVariable(AllocaInst* var, VarBoolCacheTy& cache);
-bool handleStoreToIntGuard(StoreInst* store, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg);
+void handleIntGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg);
 bool handleBranchOnIntGuard(BranchInst* branch, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg);
 
 // SEXP - an "R pointer" used as a guard
@@ -43,8 +43,8 @@ std::string sgs_name(SEXPGuardState sgs);
 SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache);
-bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION = false);
+void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
+  GlobalsTy& g, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION = false);
 bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s,
   GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg);
 

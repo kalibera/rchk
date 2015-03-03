@@ -256,8 +256,16 @@ int main(int argc, char* argv[])
       // process a single basic block
       for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
         msg.trace("visiting", in);
+   
         handleFreshVarsForNonTerminator(in, possibleAllocators, allocatingFunctions, s.freshVars, msg, refinableInfos);
         handleBalanceForNonTerminator(in, s.balance, gl, counterVarsCache, saveVarsCache, msg, refinableInfos);
+ 
+        if (intGuardsEnabled) {
+          handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, msg);
+        }
+        if (sexpGuardsEnabled) {
+          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, gl, msg, possibleAllocators, USE_ALLOCATOR_DETECTION);
+        }
         
         CallSite cs(cast<Value>(in));
         if (cs) {
@@ -305,20 +313,6 @@ int main(int argc, char* argv[])
               }
             }
           }
-          
-        } /* not invoke or call */
-        
-        if (StoreInst::classof(in)) {
-          if (intGuardsEnabled && handleStoreToIntGuard(cast<StoreInst>(in), intGuardVarsCache, s.intGuards, msg)) {
-            continue;
-          }
-          if (sexpGuardsEnabled &&
-            handleStoreToSEXPGuard(cast<StoreInst>(in), sexpGuardVarsCache, s.sexpGuards,
-              gl.nilVariable, gl.isNullFunction, msg, possibleAllocators, USE_ALLOCATOR_DETECTION)) {
-          
-            continue;  
-          }
-          continue;
         }
       }
       

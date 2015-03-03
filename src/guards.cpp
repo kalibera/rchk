@@ -98,17 +98,22 @@ IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var) {
   }
 }
 
-bool handleStoreToIntGuard(StoreInst* store, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg) {
+void handleIntGuardsForNonTerminator(Instruction *in, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg) {
+
+  if (!StoreInst::classof(in)) {
+    return;
+  }
+  StoreInst* store = cast<StoreInst>(in);
   Value* storePointerOp = store->getPointerOperand();
   Value* storeValueOp = store->getValueOperand();
   
   // intguard = ...
   if (!AllocaInst::classof(storePointerOp)) {
-    return false;
+    return;
   }
   AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
   if (!isIntegerGuardVariable(storePointerVar, intGuardVarsCache)) { 
-    return false;
+    return;
   }
   IntGuardState newState;
   if (ConstantInt::classof(storeValueOp)) {
@@ -126,8 +131,6 @@ bool handleStoreToIntGuard(StoreInst* store, VarBoolCacheTy& intGuardVarsCache, 
     msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to unknown", store);
   }
   intGuards[storePointerVar] = newState;
-  return true;
-
 }
 
 bool handleBranchOnIntGuard(BranchInst* branch, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg) {
@@ -322,18 +325,22 @@ SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var) {
   }
 }
 
-bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalVariable* nilVariable, Function* isNullFunction, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION) {
+void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
+  GlobalsTy& g, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION) {
 
+  if (!StoreInst::classof(in)) {
+    return;
+  }
+  StoreInst* store = cast<StoreInst>(in);
   Value* storePointerOp = store->getPointerOperand();
   Value* storeValueOp = store->getValueOperand();
   
   if (!AllocaInst::classof(storePointerOp)) {
-    return false;
+    return;
   }
   AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-  if (!isSEXPGuardVariable(storePointerVar, nilVariable, isNullFunction, sexpGuardVarsCache)) {
-    return false;
+  if (!isSEXPGuardVariable(storePointerVar, g.nilVariable, g.isNullFunction, sexpGuardVarsCache)) {
+    return;
   }
   // sexpguard = ...
               
@@ -341,11 +348,11 @@ bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache
             
   if (LoadInst::classof(storeValueOp)) {
     Value *src = cast<LoadInst>(storeValueOp)->getPointerOperand();
-    if (src == nilVariable) {
+    if (src == g.nilVariable) {
       newState = SGS_NIL;
       msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to nil", store);
     } else if (AllocaInst::classof(src) && 
-        isSEXPGuardVariable(cast<AllocaInst>(src), nilVariable, isNullFunction, sexpGuardVarsCache)) {
+        isSEXPGuardVariable(cast<AllocaInst>(src), g.nilVariable, g.isNullFunction, sexpGuardVarsCache)) {
 
       newState = getSEXPGuardState(sexpGuards, cast<AllocaInst>(src));
       msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to state of " +
@@ -368,7 +375,6 @@ bool handleStoreToSEXPGuard(StoreInst* store, VarBoolCacheTy& sexpGuardVarsCache
     }
   }
   sexpGuards[storePointerVar] = newState;
-  return true;
 }
 
 bool handleBranchOnSEXPGuard(BranchInst* branch, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s,
