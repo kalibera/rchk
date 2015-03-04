@@ -3,6 +3,53 @@
 
 using namespace llvm;
 
+void BaseLineMessenger::trace(std::string msg, Instruction *in) {
+  if (TRACE) {
+    lineInfo("TRACE", msg + instructionAsString(in), in);
+  }
+}
+
+void BaseLineMessenger::debug(std::string msg, Instruction *in) {
+  if (TRACE) {
+    msg = msg + instructionAsString(in);
+  }
+  if (DEBUG) {
+    lineInfo("DEBUG", msg, in);
+  }
+}
+
+void BaseLineMessenger::info(std::string msg, Instruction *in) {
+  if (TRACE) {
+    msg = msg + instructionAsString(in);
+  }
+  lineInfo(DEBUG ? "INFO " : "", msg, in);
+}
+
+void BaseLineMessenger::error(std::string msg, Instruction *in) {
+  if (TRACE) {
+    msg = msg + instructionAsString(in);
+  }
+  lineInfo("ERROR", msg, in);
+}
+
+void BaseLineMessenger::lineInfo(std::string kind, std::string message, Instruction *in) {
+  if (kind == "DEBUG" && !DEBUG) {
+    return;
+  }
+  if (kind == "TRACE" && !TRACE) {
+    return;
+  }
+
+  std::string path;
+  unsigned line;
+  sourceLocation(in, path, line);
+  LineInfoTy li(kind, message, path, line);
+  lineInfo(li, in->getParent()->getParent());
+}
+
+
+// -----------------------------
+
 void LineInfoTy::print() const {
   errs() << "  ";
   if (!kind.empty()) {
@@ -28,6 +75,8 @@ bool LineInfoTy_compare::operator() (const LineInfoTy& lhs, const LineInfoTy& rh
   return cmp < 0;
 }
 
+// ----------------------------- 
+
 void LineMessenger::flush() {
   if (lastFunction != NULL && !lineBuffer.empty()) {
     errs() << "\nFunction " << demangle(lastFunction->getName()) << "\n";
@@ -39,21 +88,7 @@ void LineMessenger::flush() {
   lastFunction = NULL;
 }
 
-void LineMessenger::lineInfo(std::string kind, std::string message, Instruction *in) {
-  Function *func = in->getParent()->getParent();
-
-  if (kind == "DEBUG" && !DEBUG) {
-    return;
-  }
-  if (kind == "TRACE" && !TRACE) {
-    return;
-  }
-
-  std::string path;
-  unsigned line;
-  sourceLocation(in, path, line);
-  LineInfoTy li(kind, message, path, line);
-
+void LineMessenger::lineInfo(LineInfoTy& li, Function *func) {
   if (!UNIQUE_MSG) {
     if (lastFunction != func) {
       errs() << "\nFunction " << demangle(func->getName()) << "\n";
@@ -69,6 +104,7 @@ void LineMessenger::lineInfo(std::string kind, std::string message, Instruction 
   }
 }
 
+
 void LineMessenger::clearForFunction(Function *func) {
   if (!UNIQUE_MSG) {
     if (lastFunction == func) {
@@ -81,31 +117,16 @@ void LineMessenger::clearForFunction(Function *func) {
   }
 }
 
-void LineMessenger::trace(std::string msg, Instruction *in) {
-  if (TRACE) {
-    lineInfo("TRACE", msg + instructionAsString(in), in);
-  }
+// ----------------------------- 
+
+void DelayedLineMessenger::lineInfo(LineInfoTy& li, Function *func) {
+  lineBuffer.insert(li);
 }
 
-void LineMessenger::debug(std::string msg, Instruction *in) {
-  if (TRACE) {
-    msg = msg + instructionAsString(in);
+void DelayedLineMessenger::flushTo(BaseLineMessenger& msg, Function *func) {
+  for(LineBufferTy::iterator bi = lineBuffer.begin(), be = lineBuffer.end(); bi != be; ++bi) {
+    LineInfoTy li(*bi); // FIXME: extra copy
+    msg.lineInfo(li, func);
   }
-  if (DEBUG) {
-    lineInfo("DEBUG", msg, in);
-  }
-}
-
-void LineMessenger::info(std::string msg, Instruction *in) {
-  if (TRACE) {
-    msg = msg + instructionAsString(in);
-  }
-  lineInfo(DEBUG ? "INFO " : "", msg, in);
-}
-
-void LineMessenger::error(std::string msg, Instruction *in) {
-  if (TRACE) {
-    msg = msg + instructionAsString(in);
-  }
-  lineInfo("ERROR", msg, in);
+  lineBuffer.clear();
 }

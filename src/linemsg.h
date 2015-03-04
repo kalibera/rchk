@@ -20,11 +20,13 @@ struct LineInfoTy {
   unsigned line;
   
   public:
-  LineInfoTy(std::string kind, std::string message, std::string path, unsigned line): 
-    kind(kind), message(message), path(path), line(line) {}
+    LineInfoTy(std::string kind, std::string message, std::string path, unsigned line): 
+      kind(kind), message(message), path(path), line(line) {}
     
-  void print() const;
-
+    void print() const;
+    bool operator==(const LineInfoTy& other) const {
+      return kind == other.kind && message == other.message && path == other.path && line == other.line;
+    }
 };
 
 struct LineInfoTy_compare {
@@ -33,31 +35,58 @@ struct LineInfoTy_compare {
 
 typedef std::set<LineInfoTy, LineInfoTy_compare> LineBufferTy;
 
-class LineMessenger {
+class BaseLineMessenger {
 
-  const bool DEBUG;
-  const bool TRACE;
-  const bool UNIQUE_MSG;
-  
-  LineBufferTy lineBuffer;
-  Function *lastFunction;
-  LLVMContext& context;
-  
-  private:
-    void lineInfo(std::string kind, std::string message, Instruction *in);
+  protected:
+    const bool DEBUG;
+    const bool TRACE;
+    const bool UNIQUE_MSG;  
   
   public:
-    LineMessenger(LLVMContext& context, bool DEBUG = false, bool TRACE = false, bool UNIQUE_MSG = false):
-      DEBUG(DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG), lineBuffer(), lastFunction(NULL), context(context) {};
+    BaseLineMessenger(bool DEBUG, bool TRACE, bool UNIQUE_MSG):
+      DEBUG(DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG) {};
       
-    void flush();
-    void clearForFunction(Function *func);
     void trace(std::string msg, Instruction *in);
     void debug(std::string msg, Instruction *in);
     void info(std::string msg, Instruction *in);
     void error(std::string msg, Instruction *in);
     bool debug() { return DEBUG; }
     bool trace() { return TRACE; }
+    bool uniqueMsg() { return UNIQUE_MSG; }
+    
+    void lineInfo(std::string kind, std::string message, Instruction *in);
+    virtual void lineInfo(LineInfoTy& li, Function *func) = 0;
+};
+
+class LineMessenger : public BaseLineMessenger {
+
+  LineBufferTy lineBuffer;
+  Function *lastFunction;
+  LLVMContext& context;
+  
+  public:
+    LineMessenger(LLVMContext& context, bool DEBUG, bool TRACE, bool UNIQUE_MSG):
+      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), lastFunction(NULL), context(context) {};
+      
+    void flush();
+    void clearForFunction(Function *func);
+    virtual void lineInfo(LineInfoTy& li, Function *func);
+};
+
+
+class DelayedLineMessenger : public BaseLineMessenger {
+
+  LineBufferTy lineBuffer;
+  
+  public:
+    DelayedLineMessenger(bool DEBUG, bool TRACE, bool UNIQUE_MSG):
+      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer() {};
+      
+    void flushTo(BaseLineMessenger& msg, Function *func);
+    bool operator==(const DelayedLineMessenger& other) const {
+      return lineBuffer == other.lineBuffer && DEBUG == other.DEBUG && TRACE == other.TRACE && UNIQUE_MSG == other.UNIQUE_MSG;
+    }
+    virtual void lineInfo(LineInfoTy& li, Function *func = NULL);
 };
 
 #endif

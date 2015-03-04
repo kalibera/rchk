@@ -117,7 +117,7 @@ struct StateTy_hash {
     for(SEXPGuardsTy::const_iterator gi = t->sexpGuards.begin(), ge = t->sexpGuards.end(); gi != ge; *gi++) {
       hash_combine(res, (int) gi->second);
     } // ordered map
-    hash_combine(res, t->freshVars.size());
+    hash_combine(res, t->freshVars.vars.size());
     // do not hash the content of freshVars (it doesn't pay off and currently the set is unordered)
     return res;
   }
@@ -133,7 +133,7 @@ struct StateTy_equal {
       lhs->balance.depth == rhs->balance.depth && lhs->balance.savedDepth == rhs->balance.savedDepth && lhs->balance.count == rhs->balance.count &&
       lhs->balance.countState == rhs->balance.countState && lhs->balance.counterVar == rhs->balance.counterVar &&
       lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
-      lhs->freshVars == rhs->freshVars;
+      lhs->freshVars.vars == rhs->freshVars.vars && lhs->freshVars.condMsgs == rhs->freshVars.condMsgs;
   }
 };
 

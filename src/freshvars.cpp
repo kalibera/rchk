@@ -34,9 +34,21 @@ static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, Func
       }
     }
   }
-  for (FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
+  for (VarsSetTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = *fi;
-    msg.info("unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str(), in);
+    std::string message = "unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str();
+    
+    // prepare a conditional message
+    auto vsearch = freshVars.condMsgs.find(var);
+    if (vsearch == freshVars.condMsgs.end()) {
+      DelayedLineMessenger dmsg(msg.debug(), msg.trace(), msg.uniqueMsg());
+      dmsg.info(message, in);
+      freshVars.condMsgs.insert({var, dmsg});  
+    } else {
+      vsearch->second.info(message, in);
+    }
+    
+    msg.debug("created a conditional message \"" + message + "\"", in);
     refinableInfos++;
   }
 
@@ -51,13 +63,23 @@ static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, Fre
     return;
   }
   AllocaInst *var = cast<AllocaInst>(li->getPointerOperand());
-  if (freshVars.find(var) == freshVars.end()) { 
+  // a variable is being loaded
+  
+  // check for conditional messages
+  auto vsearch = freshVars.condMsgs.find(var);
+  if (vsearch != freshVars.condMsgs.end()) {
+    vsearch->second.flushTo(msg, in->getParent()->getParent());
+    freshVars.condMsgs.erase(vsearch);
+    msg.debug("Printed conditional messages on use of variable " + var->getName().str(), in);
+  }
+  
+  if (freshVars.vars.find(var) == freshVars.vars.end()) { 
     return;
   }
   // a fresh variable is being loaded
 
   msg.debug("fresh variable " + var->getName().str() + " loaded and thus no longer fresh", in);
-  freshVars.erase(var);
+  freshVars.vars.erase(var);
 
   if (!li->hasOneUse()) { // too restrictive? should look at other uses too?
     return;
@@ -98,25 +120,32 @@ static void handleStore(Instruction *in, FunctionsSetTy& possibleAllocators, Fre
     return;
   }
   AllocaInst *var = cast<AllocaInst>(storePointerOp);
+  
+  // a variable is being killed by the store, erase conditional messages if any
+  if (freshVars.condMsgs.erase(var)) {
+    msg.debug("removed conditional messages as variable " + var->getName().str() + " is rewritten.", in);
+  }
+  
   CallSite csv(storeValueOp);
-  bool isFresh = false;
   if (csv) {
     Function *vf = csv.getCalledFunction();
     if (vf && possibleAllocators.find(const_cast<Function*>(vf)) != possibleAllocators.end()) {
-      freshVars.insert(var);
+      // the store (re-)creates a fresh variable
+      freshVars.vars.insert(var);
       msg.debug("initialized fresh SEXP variable " + var->getName().str(), in);
-      isFresh = true;
+      return;
     }
   }
-  if (!isFresh) {
-    if (freshVars.find(var) != freshVars.end()) {
-      freshVars.erase(var);
-      msg.debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in);
-    }
+  
+  // the store turns a variable into non-fresh  
+  if (freshVars.vars.find(var) != freshVars.vars.end()) {
+    freshVars.vars.erase(var);
+    msg.debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in);
   }
 }
 
-void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, 
+    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
 
   handleCall(in, possibleAllocators, allocatingFunctions, freshVars, msg, refinableInfos);
   handleLoad(in, allocatingFunctions, freshVars, msg, refinableInfos);
@@ -125,8 +154,8 @@ void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAl
 
 void StateWithFreshVarsTy::dump(bool verbose) {
 
-  errs() << "=== fresh vars: " << &freshVars << "\n";
-  for(FreshVarsTy::iterator fi = freshVars.begin(), fe = freshVars.end(); fi != fe; ++fi) {
+  errs() << "=== fresh vars [conditional messages not dumped]: " << &freshVars << "\n";
+  for(VarsSetTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = *fi;
     errs() << "   " << var->getName();
     if (verbose) {
