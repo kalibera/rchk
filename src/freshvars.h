@@ -10,7 +10,7 @@
 
 using namespace llvm;
 
-typedef std::unordered_map<AllocaInst*, DelayedLineMessenger> ConditionalMessagesTy;
+typedef std::map<AllocaInst*, DelayedLineMessenger> ConditionalMessagesTy;
 
 struct FreshVarsTy {
   VarsSetTy vars;

@@ -47,6 +47,9 @@ const bool ONLY_FUNCTION = true; // only check one function (named ONLY_FUNCTION
 const std::string ONLY_FUNCTION_NAME = "modelmatrix";
 const bool VERBOSE_DUMP = false;
 
+const bool PROGRESS_MARKS = true;
+const unsigned PROGRESS_STEP = 1000;
+
 const bool USE_ALLOCATOR_DETECTION = true;
   // use allocator detection to set SEXP guard variables to non-nill on allocation
   // this is optional, because it is not correct
@@ -94,13 +97,6 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
     }
 
 };
-
-// from Boost
-template <class T>
-inline void hash_combine(std::size_t& seed, const T& v) {
-  std::hash<T> hasher;
-  seed ^= hasher(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
-}
 
 struct StateTy_hash {
   size_t operator()(const StateTy* t) const {
@@ -291,6 +287,8 @@ int main(int argc, char* argv[])
     VarBoolCacheTy intGuardVarsCache;
     VarBoolCacheTy sexpGuardVarsCache;
     
+    msg.newFunction(fun);
+
   retry_function:
   
     unsigned refinableInfos = 0;
@@ -320,6 +318,12 @@ int main(int argc, char* argv[])
       if (doneSet.size() > MAX_STATES) {
         msg.error("too many states (abstraction error?)", s.bb->begin());
         goto abort_from_function;
+      }
+      
+      if (PROGRESS_MARKS) {
+        if (doneSet.size() % PROGRESS_STEP == 0) {
+          outs() << std::to_string(workList.size()) << "/" << std::to_string(doneSet.size()) << "\n";
+        }
       }      
       
       // process a single basic block
@@ -371,7 +375,7 @@ int main(int argc, char* argv[])
     abort_from_function:
       if (restartable && refinableInfos>0) {
         // retry with more precise checking
-        msg.clearForFunction(fun);
+        msg.clear();
         if (!intGuardsEnabled) {
           intGuardsEnabled = true;
         } else if (!sexpGuardsEnabled) {

@@ -41,7 +41,7 @@ static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, Func
     // prepare a conditional message
     auto vsearch = freshVars.condMsgs.find(var);
     if (vsearch == freshVars.condMsgs.end()) {
-      DelayedLineMessenger dmsg(msg.debug(), msg.trace(), msg.uniqueMsg());
+      DelayedLineMessenger dmsg(&msg);
       dmsg.info(message, in);
       freshVars.condMsgs.insert({var, dmsg});
       msg.debug("created conditional message \"" + message + "\" first for variable " + var->getName().str(), in);
@@ -67,10 +67,10 @@ static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, Fre
   // check for conditional messages
   auto vsearch = freshVars.condMsgs.find(var);
   if (vsearch != freshVars.condMsgs.end()) {
-    vsearch->second.flushTo(msg, in->getParent()->getParent());
+    vsearch->second.flush();
     refinableInfos++;
     freshVars.condMsgs.erase(vsearch);
-    msg.debug("Printed conditional messages on use of variable " + var->getName().str(), in);
+    msg.debug("printed conditional messages on use of variable " + var->getName().str(), in);
   }
   
   if (freshVars.vars.find(var) == freshVars.vars.end()) { 

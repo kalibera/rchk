@@ -9,6 +9,7 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/LLVMContext.h>
 
+#include <llvm/Support/StringPool.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -29,11 +30,20 @@ struct LineInfoTy {
     }
 };
 
-struct LineInfoTy_compare {
+struct LineInfoTyPtr_compare {
+  bool operator() (const LineInfoTy* lhs, const LineInfoTy* rhs) const;
+};
+
+struct LineInfoTy_hash {
+  size_t operator()(const LineInfoTy& t) const;
+};
+
+struct LineInfoTy_equal {
   bool operator() (const LineInfoTy& lhs, const LineInfoTy& rhs) const;
 };
 
-typedef std::set<LineInfoTy, LineInfoTy_compare> LineBufferTy;
+typedef std::set<LineInfoTy*, LineInfoTyPtr_compare> LineInfoPtrSetTy; // for ordering messages, uniqueness
+typedef std::unordered_set<LineInfoTy, LineInfoTy_hash, LineInfoTy_equal> LineInfoSetTy; // for interning table (performance)
 
 class BaseLineMessenger {
 
@@ -54,39 +64,45 @@ class BaseLineMessenger {
     bool trace() { return TRACE; }
     bool uniqueMsg() { return UNIQUE_MSG; }
     
-    void lineInfo(std::string kind, std::string message, Instruction *in);
-    virtual void lineInfo(LineInfoTy& li, Function *func) = 0;
+    void emit(std::string kind, std::string message, Instruction *in);
+    virtual void emit(LineInfoTy* li) = 0;
 };
 
 class LineMessenger : public BaseLineMessenger {
 
-  LineBufferTy lineBuffer;
+  LineInfoPtrSetTy lineBuffer;
+  LineInfoSetTy internTable;
+  
   Function *lastFunction;
   LLVMContext& context;
   
   public:
     LineMessenger(LLVMContext& context, bool DEBUG, bool TRACE, bool UNIQUE_MSG):
-      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), lastFunction(NULL), context(context) {};
+      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), context(context)  {};
       
     void flush();
-    void clearForFunction(Function *func);
-    virtual void lineInfo(LineInfoTy& li, Function *func);
+    void clear();
+    void newFunction(Function *func);
+    
+    LineInfoTy* intern(const LineInfoTy& li); // intern (but do not emit)
+    void emitInterned(LineInfoTy* li); // emit line info interned in internTable
+    
+    virtual void emit(LineInfoTy* li);
 };
 
 class DelayedLineMessenger : public BaseLineMessenger {
 
-  LineBufferTy lineBuffer;
-  
+  LineInfoPtrSetTy delayedLineBuffer;
+  LineMessenger* msg; // used to print messages (flush) and to intern them
+    
   public:
-    DelayedLineMessenger(bool DEBUG, bool TRACE, bool UNIQUE_MSG):
-      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer() {};
+    DelayedLineMessenger(LineMessenger *msg):
+      BaseLineMessenger(msg->debug(), msg->trace(), msg->uniqueMsg()), delayedLineBuffer(), msg(msg) {};
       
-    void flushTo(BaseLineMessenger& msg, Function *func);
-    bool operator==(const DelayedLineMessenger& other) const {
-      return lineBuffer == other.lineBuffer && DEBUG == other.DEBUG && TRACE == other.TRACE && UNIQUE_MSG == other.UNIQUE_MSG;
-    }
-    virtual void lineInfo(LineInfoTy& li, Function *func = NULL);
-    size_t size() { return lineBuffer.size(); }
+    void flush();
+    bool operator==(const DelayedLineMessenger& other) const;
+    virtual void emit(LineInfoTy* li);
+    size_t size() { return delayedLineBuffer.size(); }
     void print(std::string prefix);
 };
 

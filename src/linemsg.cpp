@@ -5,7 +5,7 @@ using namespace llvm;
 
 void BaseLineMessenger::trace(std::string msg, Instruction *in) {
   if (TRACE) {
-    lineInfo("TRACE", msg + instructionAsString(in), in);
+    emit("TRACE", msg + instructionAsString(in), in);
   }
 }
 
@@ -14,7 +14,7 @@ void BaseLineMessenger::debug(std::string msg, Instruction *in) {
     msg = msg + instructionAsString(in);
   }
   if (DEBUG) {
-    lineInfo("DEBUG", msg, in);
+    emit("DEBUG", msg, in);
   }
 }
 
@@ -22,17 +22,17 @@ void BaseLineMessenger::info(std::string msg, Instruction *in) {
   if (TRACE) {
     msg = msg + instructionAsString(in);
   }
-  lineInfo(DEBUG ? "INFO" : "", msg, in);
+  emit(DEBUG ? "INFO" : "", msg, in);
 }
 
 void BaseLineMessenger::error(std::string msg, Instruction *in) {
   if (TRACE) {
     msg = msg + instructionAsString(in);
   }
-  lineInfo("ERROR", msg, in);
+  emit("ERROR", msg, in);
 }
 
-void BaseLineMessenger::lineInfo(std::string kind, std::string message, Instruction *in) {
+void BaseLineMessenger::emit(std::string kind, std::string message, Instruction *in) {
   if (kind == "DEBUG" && !DEBUG) {
     return;
   }
@@ -44,7 +44,7 @@ void BaseLineMessenger::lineInfo(std::string kind, std::string message, Instruct
   unsigned line;
   sourceLocation(in, path, line);
   LineInfoTy li(kind, message, path, line);
-  lineInfo(li, in->getParent()->getParent());
+  emit(&li);
 }
 
 
@@ -58,21 +58,29 @@ void LineInfoTy::print() const {
   errs() << message << " " << path << ":" << line << "\n";
 }
 
-bool LineInfoTy_compare::operator() (const LineInfoTy& lhs, const LineInfoTy& rhs) const {
+bool LineInfoTyPtr_compare::operator() (const LineInfoTy* lhs, const LineInfoTy* rhs) const {
   int cmp;
-  cmp = lhs.path.compare(rhs.path);
+  cmp = lhs->path.compare(rhs->path);
   if (cmp) {
     return cmp < 0;
   }
-  if (lhs.line != rhs.line) {
-    return lhs.line < rhs.line;
+  if (lhs->line != rhs->line) {
+    return lhs->line < rhs->line;
   }
-  cmp = lhs.message.compare(rhs.message);
+  cmp = lhs->message.compare(rhs->message);
   if (cmp) {
     return cmp < 0;
   }
-  cmp = lhs.kind.compare(rhs.kind);
+  cmp = lhs->kind.compare(rhs->kind);
   return cmp < 0;
+}
+
+size_t LineInfoTy_hash::operator()(const LineInfoTy& t) const {
+  return t.line;
+}
+
+bool LineInfoTy_equal::operator() (const LineInfoTy& lhs, const LineInfoTy& rhs) const {
+  return lhs.line == rhs.line && lhs.message == rhs.message && lhs.path == rhs.path && lhs.kind == rhs.kind;
 }
 
 // ----------------------------- 
@@ -80,62 +88,73 @@ bool LineInfoTy_compare::operator() (const LineInfoTy& lhs, const LineInfoTy& rh
 void LineMessenger::flush() {
   if (lastFunction != NULL && !lineBuffer.empty()) {
     errs() << "\nFunction " << demangle(lastFunction->getName()) << "\n";
-    for(LineBufferTy::iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
-      liBuf->print();
+    for(LineInfoPtrSetTy::iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
+      LineInfoTy* li = *liBuf;
+      li->print();
     }
     lineBuffer.clear();
   }
+  internTable.clear();
   lastFunction = NULL;
 }
 
-void LineMessenger::lineInfo(LineInfoTy& li, Function *func) {
+void LineMessenger::newFunction(Function *func) {
   if (!UNIQUE_MSG) {
-    if (lastFunction != func) {
-      errs() << "\nFunction " << demangle(func->getName()) << "\n";
-      lastFunction = func;
-    }
-    li.print();
+    errs() << "\nFunction " << demangle(func->getName()) << "\n";
   } else {
-    if (lastFunction != func) {
-      flush();
-      lastFunction = func;
-    }
+    flush();
+  }
+  lastFunction = func;
+}
+
+void LineMessenger::emitInterned(LineInfoTy* li) {
+  if (!UNIQUE_MSG) {
+    li->print();
+  } else {
     lineBuffer.insert(li);
   }
 }
 
+void LineMessenger::emit(LineInfoTy* li) {
+  emitInterned(intern(*li));
+}
 
-void LineMessenger::clearForFunction(Function *func) {
+LineInfoTy* LineMessenger::intern(const LineInfoTy& li) {
+  auto linsert = internTable.insert(li);
+  const LineInfoTy *ili = &*linsert.first;
+  return const_cast<LineInfoTy*>(ili);
+}
+
+void LineMessenger::clear() {
   if (!UNIQUE_MSG) {
-    if (lastFunction == func) {
-      errs() << " ---- restarting checking for function " << demangle(func->getName()) << " (previous messages for it to be ignored) ----\n";
-    }
-    return;
-  }
-  if (lastFunction == func) {
-    lineBuffer.clear();  
+    errs() << " ---- restarting checking for function " << demangle(lastFunction->getName()) << " (previous messages for it to be ignored) ----\n";
+  } else {
+    lineBuffer.clear();
+    // not clearing the intern table
   }
 }
 
 // ----------------------------- 
 
-void DelayedLineMessenger::lineInfo(LineInfoTy& li, Function *func) {
-  lineBuffer.insert(li);
+void DelayedLineMessenger::emit(LineInfoTy *li) {
+  delayedLineBuffer.insert(msg->intern(*li));
 }
 
-void DelayedLineMessenger::flushTo(BaseLineMessenger& msg, Function *func) {
-  for(LineBufferTy::iterator bi = lineBuffer.begin(), be = lineBuffer.end(); bi != be; ++bi) {
-    LineInfoTy li(*bi); // FIXME: extra copy
-    msg.lineInfo(li, func);
+void DelayedLineMessenger::flush() {
+  for(LineInfoPtrSetTy::iterator bi = delayedLineBuffer.begin(), be = delayedLineBuffer.end(); bi != be; ++bi) {
+    msg->emitInterned(*bi);
   }
-  lineBuffer.clear();
+  delayedLineBuffer.clear();
 }
 
 void DelayedLineMessenger::print(std::string prefix) {
-  // FIXME: should order this?
-  for(LineBufferTy::iterator bi = lineBuffer.begin(), be = lineBuffer.end(); bi != be; ++bi) {
-    LineInfoTy li(*bi);
+  for(LineInfoPtrSetTy::iterator bi = delayedLineBuffer.begin(), be = delayedLineBuffer.end(); bi != be; ++bi) {
+    LineInfoTy *li = *bi;
     errs() << prefix;
-    li.print();
+    li->print();
   }
+}
+
+bool DelayedLineMessenger::operator==(const DelayedLineMessenger& other) const {
+  return delayedLineBuffer == other.delayedLineBuffer && msg == other.msg;
 }
