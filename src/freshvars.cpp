@@ -43,15 +43,14 @@ static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, Func
     if (vsearch == freshVars.condMsgs.end()) {
       DelayedLineMessenger dmsg(msg.debug(), msg.trace(), msg.uniqueMsg());
       dmsg.info(message, in);
-      freshVars.condMsgs.insert({var, dmsg});  
+      freshVars.condMsgs.insert({var, dmsg});
+      msg.debug("created conditional message \"" + message + "\" first for variable " + var->getName().str(), in);
     } else {
-      vsearch->second.info(message, in);
+      DelayedLineMessenger& dmsg = vsearch->second;
+      dmsg.info(message, in);
+      msg.debug("added conditional message \"" + message + "\" for variable " + var->getName().str() + "(size " + std::to_string(dmsg.size()) + ")", in);
     }
-    
-    msg.debug("created a conditional message \"" + message + "\"", in);
-    refinableInfos++;
   }
-
 }
 
 static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
@@ -69,6 +68,7 @@ static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, Fre
   auto vsearch = freshVars.condMsgs.find(var);
   if (vsearch != freshVars.condMsgs.end()) {
     vsearch->second.flushTo(msg, in->getParent()->getParent());
+    refinableInfos++;
     freshVars.condMsgs.erase(vsearch);
     msg.debug("Printed conditional messages on use of variable " + var->getName().str(), in);
   }
@@ -154,13 +154,21 @@ void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAl
 
 void StateWithFreshVarsTy::dump(bool verbose) {
 
-  errs() << "=== fresh vars [conditional messages not dumped]: " << &freshVars << "\n";
+  errs() << "=== fresh vars: " << &freshVars << "\n";
   for(VarsSetTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = *fi;
     errs() << "   " << var->getName();
     if (verbose) {
       errs() << " " << *var;
     }
+    
+    auto vsearch = freshVars.condMsgs.find(var);
+    if (vsearch != freshVars.condMsgs.end()) {
+      errs() << " conditional messages: \n";
+      DelayedLineMessenger& dmsg = vsearch->second;
+      dmsg.print("    ");
+    }
+    
     errs() << "\n";
   }
 }
