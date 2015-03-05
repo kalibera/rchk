@@ -549,8 +549,16 @@ std::string cs_name(CountState cs) {
 void StateWithBalanceTy::dump(bool verbose) {
 
   errs() << "=== depth: " << balance.depth << "\n";
-  errs() << "=== savedDepth: " << balance.savedDepth << "\n";
-  errs() << "=== count: " << balance.count << "\n";
-  errs() << "=== countState: " << cs_name(balance.countState) << "\n";
-  errs() << "=== counterVar: " << balance.counterVar->getName() << "\n";
+  if (balance.savedDepth != -1) {
+    errs() << "=== savedDepth: " << balance.savedDepth << "\n";
+  }
+  if (balance.count != -1) {
+    errs() << "=== count: " << balance.count << "\n";
+  }
+  if (balance.countState != CS_NONE) {
+    errs() << "=== countState: " << cs_name(balance.countState) << "\n";
+  }
+  if (balance.counterVar != NULL) {
+    errs() << "=== counterVar: " << balance.counterVar->getName() << "\n";
+  }
 }
