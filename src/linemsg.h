@@ -73,7 +73,6 @@ class LineMessenger : public BaseLineMessenger {
     virtual void lineInfo(LineInfoTy& li, Function *func);
 };
 
-
 class DelayedLineMessenger : public BaseLineMessenger {
 
   LineBufferTy lineBuffer;
@@ -87,6 +86,8 @@ class DelayedLineMessenger : public BaseLineMessenger {
       return lineBuffer == other.lineBuffer && DEBUG == other.DEBUG && TRACE == other.TRACE && UNIQUE_MSG == other.UNIQUE_MSG;
     }
     virtual void lineInfo(LineInfoTy& li, Function *func = NULL);
+    size_t size() { return lineBuffer.size(); }
+    void print(std::string prefix);
 };
 
 #endif

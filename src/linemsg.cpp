@@ -22,7 +22,7 @@ void BaseLineMessenger::info(std::string msg, Instruction *in) {
   if (TRACE) {
     msg = msg + instructionAsString(in);
   }
-  lineInfo(DEBUG ? "INFO " : "", msg, in);
+  lineInfo(DEBUG ? "INFO" : "", msg, in);
 }
 
 void BaseLineMessenger::error(std::string msg, Instruction *in) {
@@ -129,4 +129,13 @@ void DelayedLineMessenger::flushTo(BaseLineMessenger& msg, Function *func) {
     msg.lineInfo(li, func);
   }
   lineBuffer.clear();
+}
+
+void DelayedLineMessenger::print(std::string prefix) {
+  // FIXME: should order this?
+  for(LineBufferTy::iterator bi = lineBuffer.begin(), be = lineBuffer.end(); bi != be; ++bi) {
+    LineInfoTy li(*bi);
+    errs() << prefix;
+    li.print();
+  }
 }

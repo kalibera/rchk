@@ -42,9 +42,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "do_eval"; // only dump states in this function
-const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "do_eval";
+const std::string DUMP_STATES_FUNCTION = "modelmatrix"; // only dump states in this function
+const bool ONLY_FUNCTION = true; // only check one function (named ONLY_FUNCTION_NAME)
+const std::string ONLY_FUNCTION_NAME = "modelmatrix";
 const bool VERBOSE_DUMP = false;
 
 const bool USE_ALLOCATOR_DETECTION = true;
@@ -68,7 +68,7 @@ bool EXCLUDE_PROTECTION_FUNCTIONS = true;
 
 // -------------------------------- basic block state -----------------------------------
 
-const int MAX_STATES = 3000000;	// maximum number of states visited per function
+const int MAX_STATES = 3000000;        // maximum number of states visited per function
 
 struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanceTy {
   
@@ -118,7 +118,9 @@ struct StateTy_hash {
       hash_combine(res, (int) gi->second);
     } // ordered map
     hash_combine(res, t->freshVars.vars.size());
-    // do not hash the content of freshVars (it doesn't pay off and currently the set is unordered)
+    // do not hash the content of freshVars.vars (it doesn't pay off and currently the set is unordered)
+    hash_combine(res, t->freshVars.condMsgs.size());
+    // condMsgs is unordered
     return res;
   }
 };
