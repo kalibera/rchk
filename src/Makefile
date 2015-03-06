@@ -6,7 +6,7 @@
 LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
 
 # r-lnx400, LLVM 3.5 
-#LLVM := /var/scratch/tomas/opt/llvm/inst
+#LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.5.1-x86_64-fedora20
 
 # ---------------------
 
