@@ -10,10 +10,11 @@
 
 using namespace llvm;
 
+typedef VarsOrderedSetTy FreshVarsVarsTy;
 typedef std::map<AllocaInst*, DelayedLineMessenger> ConditionalMessagesTy;
 
 struct FreshVarsTy {
-  VarsSetTy vars;
+  FreshVarsVarsTy vars;
     // variables known to hold newly allocated pointers (SEXPs)
     // attempts to include only reliably unprotected pointers,
     // so as of now, any use of a variable removes it from the set

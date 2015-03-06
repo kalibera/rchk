@@ -72,6 +72,9 @@ class LineMessenger : public BaseLineMessenger {
 
   LineInfoPtrSetTy lineBuffer;
   LineInfoSetTy internTable;
+    // the interning is important for the DelayedLineMessenger
+    //   for printing messages directly with LineMessenger, one could easily
+    //   do without it
   
   Function *lastFunction;
   LLVMContext& context;
@@ -90,20 +93,27 @@ class LineMessenger : public BaseLineMessenger {
     virtual void emit(LineInfoTy* li);
 };
 
-class DelayedLineMessenger : public BaseLineMessenger {
+// this is a rather special object for conditional/delayed messaging
+//   it remembers messages, preparing them for being printed via LineMessenger msg,
+//   but only prints them if/when flush() is called
+//
+// the messages are interned immediatelly with LineMessenger msg (which is
+//   for performance of comparisons and for reducing the memory costs, because delayed
+//   messengers are indeed part of the checking state
 
-  LineInfoPtrSetTy delayedLineBuffer;
+struct DelayedLineMessenger : public BaseLineMessenger {
+
   LineMessenger* msg; // used to print messages (flush) and to intern them
+  LineInfoPtrSetTy delayedLineBuffer;
     
-  public:
-    DelayedLineMessenger(LineMessenger *msg):
-      BaseLineMessenger(msg->debug(), msg->trace(), msg->uniqueMsg()), delayedLineBuffer(), msg(msg) {};
+  DelayedLineMessenger(LineMessenger *msg):
+    BaseLineMessenger(msg->debug(), msg->trace(), msg->uniqueMsg()), delayedLineBuffer(), msg(msg) {};
       
-    void flush();
-    bool operator==(const DelayedLineMessenger& other) const;
-    virtual void emit(LineInfoTy* li);
-    size_t size() { return delayedLineBuffer.size(); }
-    void print(std::string prefix);
+  void flush();
+  bool operator==(const DelayedLineMessenger& other) const;
+  virtual void emit(LineInfoTy* li);
+  size_t size() { return delayedLineBuffer.size(); }
+  void print(std::string prefix);
 };
 
 #endif

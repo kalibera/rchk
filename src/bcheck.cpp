@@ -43,12 +43,18 @@ const bool TRACE = false;
 
 const bool DUMP_STATES = false;
 const std::string DUMP_STATES_FUNCTION = "modelmatrix"; // only dump states in this function
-const bool ONLY_FUNCTION = true; // only check one function (named ONLY_FUNCTION_NAME)
+const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
 const std::string ONLY_FUNCTION_NAME = "modelmatrix";
 const bool VERBOSE_DUMP = false;
 
-const bool PROGRESS_MARKS = true;
+const bool PROGRESS_MARKS = false;
 const unsigned PROGRESS_STEP = 1000;
+
+const bool FULL_COMPARISON = true;
+  // compare state precisely
+  //   if disabled, only hashcodes are compared, which may cause some imprecision
+  //   (some states will not be checked)
+  //   yet there may be some speedups in some cases
 
 const bool USE_ALLOCATOR_DETECTION = true;
   // use allocator detection to set SEXP guard variables to non-nill on allocation
@@ -73,20 +79,64 @@ bool EXCLUDE_PROTECTION_FUNCTIONS = true;
 
 const int MAX_STATES = 3000000;        // maximum number of states visited per function
 
+unsigned int nComparedEqual = 0;
+unsigned int nComparedDifferent = 0;
+
 struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanceTy {
   
+  size_t hashcode;
   public:
     StateTy(BasicBlock *bb): 
-      StateBaseTy(bb), StateWithGuardsTy(bb), StateWithFreshVarsTy(bb), StateWithBalanceTy(bb) {};
+      StateBaseTy(bb), StateWithGuardsTy(bb), StateWithFreshVarsTy(bb), StateWithBalanceTy(bb), hashcode(0) {};
 
     StateTy(BasicBlock *bb, BalanceStateTy& balance, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
-      StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), StateWithFreshVarsTy(bb, freshVars), StateWithBalanceTy(bb, balance) {};
+      StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), StateWithFreshVarsTy(bb, freshVars), StateWithBalanceTy(bb, balance), hashcode(0) {};
       
     virtual StateTy* clone(BasicBlock *newBB) {
       return new StateTy(newBB, balance, intGuards, sexpGuards, freshVars);
     }
     
     virtual bool add();
+    void hash() {
+      size_t res = 0;
+      hash_combine(res, bb);
+      hash_combine(res, balance.depth);
+      hash_combine(res, balance.count);
+      hash_combine(res, intGuards.size());
+      for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
+        AllocaInst* var = gi->first;
+        IntGuardState s = gi->second;
+        hash_combine(res, (void *)var);
+        hash_combine(res, (char) s);
+      } // ordered map
+
+      hash_combine(res, sexpGuards.size());
+      for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
+        AllocaInst* var = gi->first;
+        SEXPGuardState s = gi->second;
+        hash_combine(res, (void *) var);
+        hash_combine(res, (char) s);
+      } // ordered map
+
+      hash_combine(res, freshVars.vars.size());
+      for(FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
+        AllocaInst* in = *fi;
+        hash_combine(res, (void *)in);
+      } // ordered set
+
+      hash_combine(res, freshVars.condMsgs.size());
+      for(ConditionalMessagesTy::iterator mi = freshVars.condMsgs.begin(), me = freshVars.condMsgs.end(); mi != me; ++mi) {
+        DelayedLineMessenger& msg = mi->second;
+        hash_combine(res, msg.size());
+        
+        for(LineInfoPtrSetTy::iterator li = msg.delayedLineBuffer.begin(), le = msg.delayedLineBuffer.end(); li != le; ++li) {
+          LineInfoTy* l = *li;
+          hash_combine(res, (void *)l);
+        }
+      } // condMsgs is unordered
+    
+      hashcode = res;
+    }
 
     void dump() {
       StateBaseTy::dump(VERBOSE_DUMP);
@@ -98,40 +148,43 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
 
 };
 
+// the hashcode is cached at the time of first hashing
+//   (and indeed is not copied)
+
 struct StateTy_hash {
   size_t operator()(const StateTy* t) const {
-
-    size_t res = 0;
-    hash_combine(res, t->bb);
-    hash_combine(res, t->balance.depth);
-    hash_combine(res, t->balance.count);
-    hash_combine(res, t->intGuards.size());
-    for(IntGuardsTy::const_iterator gi = t->intGuards.begin(), ge = t->intGuards.end(); gi != ge; *gi++) {
-      hash_combine(res, (int) gi->second);
-    } // ordered map
-    hash_combine(res, t->sexpGuards.size());
-    for(SEXPGuardsTy::const_iterator gi = t->sexpGuards.begin(), ge = t->sexpGuards.end(); gi != ge; *gi++) {
-      hash_combine(res, (int) gi->second);
-    } // ordered map
-    hash_combine(res, t->freshVars.vars.size());
-    // do not hash the content of freshVars.vars (it doesn't pay off and currently the set is unordered)
-    hash_combine(res, t->freshVars.condMsgs.size());
-    // condMsgs is unordered
-    return res;
+    return t->hashcode;
   }
 };
 
 struct StateTy_equal {
   bool operator() (const StateTy* lhs, const StateTy* rhs) const {
 
-    if (lhs == rhs) {
-      return true;
+    if (!FULL_COMPARISON) {
+      return lhs->hashcode == rhs->hashcode;
+      // we could just return true, because the map will not call this for objects with
+      // different hashcodes
     }
-    return lhs->bb == rhs->bb && 
+    
+    bool res;
+    if (lhs == rhs) {
+      res = true;
+    } else {
+      res = lhs->bb == rhs->bb && 
       lhs->balance.depth == rhs->balance.depth && lhs->balance.savedDepth == rhs->balance.savedDepth && lhs->balance.count == rhs->balance.count &&
       lhs->balance.countState == rhs->balance.countState && lhs->balance.counterVar == rhs->balance.counterVar &&
       lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
       lhs->freshVars.vars == rhs->freshVars.vars && lhs->freshVars.condMsgs == rhs->freshVars.condMsgs;
+    }
+    
+    if (PROGRESS_MARKS) {
+      if (res) {
+        nComparedEqual++;
+      } else {
+        nComparedDifferent++;
+      }
+    }
+    return res;
   }
 };
 
@@ -144,6 +197,7 @@ DoneSetTy doneSet;
 WorkListTy workList;   
 
 bool StateTy::add() {
+  hash(); // precompute hashcode
   auto sinsert = doneSet.insert(this);
   if (sinsert.second) {
     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == bb->getParent()->getName())) {
@@ -322,7 +376,8 @@ int main(int argc, char* argv[])
       
       if (PROGRESS_MARKS) {
         if (doneSet.size() % PROGRESS_STEP == 0) {
-          outs() << std::to_string(workList.size()) << "/" << std::to_string(doneSet.size()) << "\n";
+          outs() << "W" << std::to_string(workList.size()) << "/ D" << std::to_string(doneSet.size()) << 
+            "  equal: " << nComparedEqual << " different: " << nComparedDifferent << "\n";
         }
       }      
       

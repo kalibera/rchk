@@ -34,7 +34,7 @@ static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, Func
       }
     }
   }
-  for (VarsSetTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
+  for (FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = *fi;
     std::string message = "unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str();
     
@@ -155,7 +155,7 @@ void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAl
 void StateWithFreshVarsTy::dump(bool verbose) {
 
   errs() << "=== fresh vars: " << &freshVars << "\n";
-  for(VarsSetTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
+  for(FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = *fi;
     errs() << "   " << var->getName();
     if (verbose) {
