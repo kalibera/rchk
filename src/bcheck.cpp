@@ -326,13 +326,15 @@ class FunctionChecker {
 
   void checkFunction(bool intGuardsEnabled, bool sexpGuardsEnabled, bool balanceCheckingEnabled, bool freshVarsCheckingEnabled, unsigned& refinableInfos) {
   
-    refinableInfos = 0;    
+    refinableInfos = 0;
+    bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
     clearStates();
     {
       StateTy* initState = new StateTy(&fun->getEntryBlock());
       initState->add();
     }
     while(!workList.empty()) {
+      if (restartable && refinableInfos > 0) return;
       StateTy s(*workList.top());
       workList.pop();
       
@@ -367,19 +369,24 @@ class FunctionChecker {
    
         if (freshVarsCheckingEnabled) {
           handleFreshVarsForNonTerminator(in, m.possibleAllocators, m.allocatingFunctions, s.freshVars, m.msg, refinableInfos);
+          if (restartable && refinableInfos > 0) return;
         }
         if (balanceCheckingEnabled) {
           handleBalanceForNonTerminator(in, s.balance, m.gl, counterVarsCache, saveVarsCache, m.msg, refinableInfos);
+          if (restartable && refinableInfos > 0) return;
         }
  
         if (intGuardsEnabled) {
           handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, m.msg);
+          if (restartable && refinableInfos > 0) return;
           if (balanceCheckingEnabled) {
             handleUnprotectWithIntGuard(in, s, m.gl, intGuardVarsCache, m.msg, refinableInfos);
+            if (restartable && refinableInfos > 0) return;
           }
         }
         if (sexpGuardsEnabled) {
           handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, m.gl, m.msg, m.possibleAllocators, USE_ALLOCATOR_DETECTION);
+          if (restartable && refinableInfos > 0) return;
         }
       }
       
