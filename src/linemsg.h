@@ -77,15 +77,16 @@ class LineMessenger : public BaseLineMessenger {
     //   do without it
   
   Function *lastFunction;
+  std::string lastChecksName;
   LLVMContext& context;
   
   public:
     LineMessenger(LLVMContext& context, bool DEBUG, bool TRACE, bool UNIQUE_MSG):
-      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), context(context)  {};
+      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName(), context(context)  {};
       
     void flush();
     void clear();
-    void newFunction(Function *func);
+    void newFunction(Function *func, std::string checksName);
     
     LineInfoTy* intern(const LineInfoTy& li); // intern (but do not emit)
     void emitInterned(LineInfoTy* li); // emit line info interned in internTable

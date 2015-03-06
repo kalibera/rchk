@@ -50,6 +50,12 @@ const bool VERBOSE_DUMP = false;
 const bool PROGRESS_MARKS = false;
 const unsigned PROGRESS_STEP = 1000;
 
+const bool SEPARATE_CHECKING = false;
+  // check separate problems separately (e.g. balance, fresh SEXPs)
+  //   separate checking could be faster for certain programs where the
+  //   state space with join checking would be growing rapidly
+  //   (but in the end it seems so far it is usually not the case)
+
 const bool FULL_COMPARISON = true;
   // compare state precisely
   //   if disabled, only hashcodes are compared, which may cause some imprecision
@@ -102,6 +108,8 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
       hash_combine(res, bb);
       hash_combine(res, balance.depth);
       hash_combine(res, balance.count);
+      hash_combine(res, balance.savedDepth);
+      hash_combine(res, (int) balance.countState);
       hash_combine(res, intGuards.size());
       for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
         AllocaInst* var = gi->first;
@@ -121,7 +129,7 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
       hash_combine(res, freshVars.vars.size());
       for(FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
         AllocaInst* in = *fi;
-        hash_combine(res, (void *)in);
+        hash_combine(res, (void *) in);
       } // ordered set
 
       hash_combine(res, freshVars.condMsgs.size());
@@ -131,7 +139,7 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
         
         for(LineInfoPtrSetTy::iterator li = msg.delayedLineBuffer.begin(), le = msg.delayedLineBuffer.end(); li != le; ++li) {
           LineInfoTy* l = *li;
-          hash_combine(res, (void *)l);
+          hash_combine(res, (void *) l);
         }
       } // condMsgs is unordered
     
@@ -212,8 +220,11 @@ bool StateTy::add() {
   }
 }
 
+unsigned long totalStates = 0;
+
 void clearStates() {
   // clear the worklist and the doneset
+  totalStates += doneSet.size();
   for(DoneSetTy::iterator ds = doneSet.begin(), de = doneSet.end(); ds != de; ++ds) {
     StateTy *old = *ds;
     delete old;
@@ -290,6 +301,153 @@ void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, VarB
   }
 }
 
+struct ModuleCheckingStateTy {
+  FunctionsSetTy& possibleAllocators;
+  FunctionsSetTy& allocatingFunctions;
+  FunctionsSetTy& errorFunctions;
+  GlobalsTy& gl;
+  LineMessenger& msg;
+  
+  ModuleCheckingStateTy(FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, FunctionsSetTy& errorFunctions,
+      GlobalsTy& gl, LineMessenger& msg):
+    possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions), errorFunctions(errorFunctions), gl(gl), msg(msg) {};
+};
+
+class FunctionChecker {
+
+  Function *fun;
+  VarBoolCacheTy saveVarsCache;
+  VarBoolCacheTy counterVarsCache;
+  VarBoolCacheTy intGuardVarsCache;
+  VarBoolCacheTy sexpGuardVarsCache;
+  BasicBlocksSetTy errorBasicBlocks;
+
+  ModuleCheckingStateTy& m;
+
+  void checkFunction(bool intGuardsEnabled, bool sexpGuardsEnabled, bool balanceCheckingEnabled, bool freshVarsCheckingEnabled, unsigned& refinableInfos) {
+  
+    refinableInfos = 0;    
+    clearStates();
+    {
+      StateTy* initState = new StateTy(&fun->getEntryBlock());
+      initState->add();
+    }
+    while(!workList.empty()) {
+      StateTy s(*workList.top());
+      workList.pop();
+      
+      if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != fun->getName()) {
+        continue;
+      }
+      if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
+        m.msg.trace("going to work on this state:", s.bb->begin());
+        s.dump();
+      }
+      
+      if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
+        m.msg.debug("ignoring basic block on error path", s.bb->begin());
+        continue;
+      }
+      
+      if (doneSet.size() > MAX_STATES) {
+        m.msg.error("too many states (abstraction error?)", s.bb->begin());
+        return;
+      }
+      
+      if (PROGRESS_MARKS) {
+        if (doneSet.size() % PROGRESS_STEP == 0) {
+          outs() << "current worklist:" << std::to_string(workList.size()) << " current function:" << fun->getName() <<
+            " done:" << std::to_string(doneSet.size()) << " equal:" << nComparedEqual << " different:" << nComparedDifferent << "\n";
+        }
+      }      
+      
+      // process a single basic block
+      for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
+        m.msg.trace("visiting", in);
+   
+        if (freshVarsCheckingEnabled) {
+          handleFreshVarsForNonTerminator(in, m.possibleAllocators, m.allocatingFunctions, s.freshVars, m.msg, refinableInfos);
+        }
+        if (balanceCheckingEnabled) {
+          handleBalanceForNonTerminator(in, s.balance, m.gl, counterVarsCache, saveVarsCache, m.msg, refinableInfos);
+        }
+ 
+        if (intGuardsEnabled) {
+          handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, m.msg);
+          if (balanceCheckingEnabled) {
+            handleUnprotectWithIntGuard(in, s, m.gl, intGuardVarsCache, m.msg, refinableInfos);
+          }
+        }
+        if (sexpGuardsEnabled) {
+          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, m.gl, m.msg, m.possibleAllocators, USE_ALLOCATOR_DETECTION);
+        }
+      }
+      
+      TerminatorInst *t = s.bb->getTerminator();
+
+      if (balanceCheckingEnabled && handleBalanceForTerminator(t, s, m.gl, counterVarsCache, m.msg, refinableInfos)) {
+        // ignore successors in case important errors were already found, and hence further
+        // errors found will just confuse the user
+        continue;
+      }
+
+      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, m.gl, m.msg)) {
+        continue;
+      }
+
+        // int guards have to be after balance, so that "if (nprotect) UNPROTECT(nprotect)"
+        // is handled in preference of int guard
+      if (intGuardsEnabled && handleIntGuardsForTerminator(t, intGuardVarsCache, s, m.msg)) {
+        continue;
+      }
+      
+      // add conservatively all cfg successors
+      for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
+        BasicBlock *succ = t->getSuccessor(i);
+        {
+          StateTy* state = s.clone(succ);
+          if (state->add()) {
+            m.msg.trace("added successor of", t);
+          }
+        }
+      }
+    }
+  }
+  
+  public:
+    FunctionChecker(Function *fun, ModuleCheckingStateTy& moduleState): 
+        fun(fun), saveVarsCache(), counterVarsCache(), intGuardVarsCache(), sexpGuardVarsCache(), errorBasicBlocks(), m(moduleState) {
+        
+      findErrorBasicBlocks(fun, m.errorFunctions, errorBasicBlocks);
+    }  
+  
+    // handles restarts
+    void checkFunction(bool balanceCheckingEnabled, bool freshVarsCheckingEnabled, std::string checksName) {
+
+      m.msg.newFunction(fun, checksName);
+      bool intGuardsEnabled = false;
+      bool sexpGuardsEnabled = false;
+      unsigned refinableInfos;
+    
+      for(;;) {
+        checkFunction(intGuardsEnabled, sexpGuardsEnabled, balanceCheckingEnabled, freshVarsCheckingEnabled, refinableInfos);
+    
+        bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
+        if (restartable && refinableInfos>0) {
+          // retry with more precise checking
+          m.msg.clear();
+          if (!intGuardsEnabled) {
+            intGuardsEnabled = true;
+          } else if (!sexpGuardsEnabled) {
+            sexpGuardsEnabled = true;
+          }
+        } else {
+          break;
+        }
+      }
+    }
+};
+
 
 // -------------------------------- main  -----------------------------------
 
@@ -312,6 +470,8 @@ int main(int argc, char* argv[])
   FunctionsSetTy allocatingFunctions;
   findAllocatingFunctions(m, allocatingFunctions);
 
+  ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg);
+
   unsigned nAnalyzedFunctions = 0;
   for(FunctionsOrderedSetTy::iterator FI = functionsOfInterest.begin(), FE = functionsOfInterest.end(); FI != FE; ++FI) {
     Function *fun = *FI;
@@ -329,120 +489,19 @@ int main(int argc, char* argv[])
     }
     
     nAnalyzedFunctions++;
-    
-    BasicBlocksSetTy errorBasicBlocks;
-    findErrorBasicBlocks(fun, errorFunctions, errorBasicBlocks);
+    FunctionChecker fchk(fun, mstate);
 
-    bool intGuardsEnabled = false;
-    bool sexpGuardsEnabled = false;
-
-    VarBoolCacheTy saveVarsCache;
-    VarBoolCacheTy counterVarsCache;
-    VarBoolCacheTy intGuardVarsCache;
-    VarBoolCacheTy sexpGuardVarsCache;
-    
-    msg.newFunction(fun);
-
-  retry_function:
-  
-    unsigned refinableInfos = 0;
-    bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
-    clearStates();
-    {
-      StateTy* initState = new StateTy(&fun->getEntryBlock());
-      initState->add();
+    if (SEPARATE_CHECKING) {
+      fchk.checkFunction(true, false, " [balance]");
+      fchk.checkFunction(false, true, " [fresh SEXPs]");
+    } else {
+      fchk.checkFunction(true, true, "");  
     }
-    while(!workList.empty()) {
-      StateTy s(*workList.top());
-      workList.pop();
-      
-      if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != fun->getName()) {
-        continue;
-      }
-      if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-        msg.trace("going to work on this state:", s.bb->begin());
-        s.dump();
-      }
-      
-      if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
-        msg.debug("ignoring basic block on error path", s.bb->begin());
-        continue;
-      }
-      
-      if (doneSet.size() > MAX_STATES) {
-        msg.error("too many states (abstraction error?)", s.bb->begin());
-        goto abort_from_function;
-      }
-      
-      if (PROGRESS_MARKS) {
-        if (doneSet.size() % PROGRESS_STEP == 0) {
-          outs() << "W" << std::to_string(workList.size()) << "/ D" << std::to_string(doneSet.size()) << 
-            "  equal: " << nComparedEqual << " different: " << nComparedDifferent << "\n";
-        }
-      }      
-      
-      // process a single basic block
-      for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
-        msg.trace("visiting", in);
-   
-        handleFreshVarsForNonTerminator(in, possibleAllocators, allocatingFunctions, s.freshVars, msg, refinableInfos);
-        handleBalanceForNonTerminator(in, s.balance, gl, counterVarsCache, saveVarsCache, msg, refinableInfos);
- 
-        if (intGuardsEnabled) {
-          handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, msg);
-          handleUnprotectWithIntGuard(in, s, gl, intGuardVarsCache, msg, refinableInfos);
-        }
-        if (sexpGuardsEnabled) {
-          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, gl, msg, possibleAllocators, USE_ALLOCATOR_DETECTION);
-        }
-      }
-      
-      TerminatorInst *t = s.bb->getTerminator();
-
-      if (handleBalanceForTerminator(t, s, gl, counterVarsCache, msg, refinableInfos)) {
-        // ignore successors in case important errors were already found, and hence further
-        // errors found will just confuse the user
-        continue;
-      }
-
-      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, gl, msg)) {
-        continue;
-      }
-
-        // int guards have to be after balance, so that "if (nprotect) UNPROTECT(nprotect)"
-        // is handled in preference of int guard
-      if (intGuardsEnabled && handleIntGuardsForTerminator(t, intGuardVarsCache, s, msg)) {
-        continue;
-      }
-      
-      // add conservatively all cfg successors
-      for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
-        BasicBlock *succ = t->getSuccessor(i);
-        {
-          StateTy* state = s.clone(succ);
-          if (state->add()) {
-            msg.trace("added successor of", t);
-          }
-        }
-      }
-    }
-
-    abort_from_function:
-      if (restartable && refinableInfos>0) {
-        // retry with more precise checking
-        msg.clear();
-        if (!intGuardsEnabled) {
-          intGuardsEnabled = true;
-        } else if (!sexpGuardsEnabled) {
-          sexpGuardsEnabled = true;
-        }
-        goto retry_function;        
-      }
   }
   msg.flush();
   clearStates();
   delete m;
 
-  errs() << "Analyzed " << nAnalyzedFunctions << " functions\n";
+  errs() << "Analyzed " << nAnalyzedFunctions << " functions, traversed " << totalStates << " states.\n";
   return 0;
 }

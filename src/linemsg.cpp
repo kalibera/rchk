@@ -87,7 +87,7 @@ bool LineInfoTy_equal::operator() (const LineInfoTy& lhs, const LineInfoTy& rhs)
 
 void LineMessenger::flush() {
   if (lastFunction != NULL && !lineBuffer.empty()) {
-    errs() << "\nFunction " << demangle(lastFunction->getName()) << "\n";
+    errs() << "\nFunction " << demangle(lastFunction->getName())  << lastChecksName << "\n";
     for(LineInfoPtrSetTy::iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
       LineInfoTy* li = *liBuf;
       li->print();
@@ -98,12 +98,13 @@ void LineMessenger::flush() {
   lastFunction = NULL;
 }
 
-void LineMessenger::newFunction(Function *func) {
+void LineMessenger::newFunction(Function *func, std::string checksName) {
   if (!UNIQUE_MSG) {
-    errs() << "\nFunction " << demangle(func->getName()) << "\n";
+    errs() << "\nFunction " << demangle(func->getName()) << checksName << "\n";
   } else {
     flush();
   }
+  lastChecksName = checksName;
   lastFunction = func;
 }
 
