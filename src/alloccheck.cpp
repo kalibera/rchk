@@ -31,6 +31,9 @@ int main(int argc, char* argv[])
   
   for(FunctionsSetTy::iterator fi = possibleAllocators.begin(), fe = possibleAllocators.end(); fi != fe; ++fi) {
     Function *f = *fi;
+    if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
+      continue;
+    }
     errs() << "POSSIBLE ALLOCATOR: " << f->getName() << "\n";
   }
   

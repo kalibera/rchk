@@ -25,7 +25,8 @@ int main(int argc, char* argv[])
   FunctionsOrderedSetTy functionsOfInterest;
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
-
+    // NOTE: functionsOfInterest ignored but (re-)analyzing the R core is necessary
+  
   SymbolsMapTy symbolsMap;
   GlobalVarsSetTy symbolsSet;
   
