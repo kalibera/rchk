@@ -2,8 +2,10 @@
 #define RCHK_GUARDS_H
 
 #include "common.h"
+#include "callocators.h"
 #include "linemsg.h"
 #include "state.h"
+#include "symbols.h"
 
 #include <map>
 
@@ -33,19 +35,33 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
 
 enum SEXPGuardState {
   SGS_NIL = 0, // R_NilValue
+  SGS_SYMBOL,  // A specific symbol, name stored in symbolName
   SGS_NONNIL,
   SGS_UNKNOWN
 };
 
-typedef std::map<AllocaInst*,SEXPGuardState> SEXPGuardsTy;
+struct SEXPGuardTy {
+  SEXPGuardState state;
+  std::string symbolName;
+  
+  SEXPGuardTy(SEXPGuardState state, std::string& symbolName): state(state), symbolName(symbolName) {}
+  SEXPGuardTy(SEXPGuardState state): state(state), symbolName() { assert(state != SGS_SYMBOL); }
+  SEXPGuardTy() : SEXPGuardTy(SGS_UNKNOWN) {};
+  
+  bool operator==(const SEXPGuardTy& other) const { return state == other.state && symbolName == other.symbolName; };
+  
+};
+
+typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
 std::string sgs_name(SEXPGuardState sgs);
 SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache);
 void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalsTy& g, LineMessenger& msg, FunctionsSetTy& possibleAllocators, bool USE_ALLOCATOR_DETECTION = false);
-bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy& g, LineMessenger& msg);
+  GlobalsTy& g, ArgInfosTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators);
+bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, 
+  GlobalsTy& g, ArgInfosTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg);
 
 // checking state with guards
 

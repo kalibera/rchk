@@ -42,9 +42,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "modelmatrix"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "Rf_substituteList"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "modelmatrix";
+const std::string ONLY_FUNCTION_NAME = "Rf_substituteList";
 const bool VERBOSE_DUMP = false;
 
 const bool PROGRESS_MARKS = false;
@@ -121,9 +121,10 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
       hash_combine(res, sexpGuards.size());
       for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
         AllocaInst* var = gi->first;
-        SEXPGuardState s = gi->second;
+        const SEXPGuardTy& g = gi->second;
         hash_combine(res, (void *) var);
-        hash_combine(res, (char) s);
+        hash_combine(res, (char) g.state);
+        hash_combine(res, g.symbolName);
       } // ordered map
 
       hash_combine(res, freshVars.vars.size());
@@ -385,7 +386,7 @@ class FunctionChecker {
           }
         }
         if (sexpGuardsEnabled) {
-          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, m.gl, m.msg, m.possibleAllocators, USE_ALLOCATOR_DETECTION);
+          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, m.gl, NULL, NULL, m.msg, &m.possibleAllocators);
           if (restartable && refinableInfos > 0) return;
         }
       }
@@ -398,7 +399,7 @@ class FunctionChecker {
         continue;
       }
 
-      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, m.gl, m.msg)) {
+      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, m.gl, NULL, NULL, m.msg)) {
         continue;
       }
 
@@ -433,7 +434,7 @@ class FunctionChecker {
 
       m.msg.newFunction(fun, checksName);
       bool intGuardsEnabled = false;
-      bool sexpGuardsEnabled = false;
+      bool sexpGuardsEnabled = true;
       unsigned refinableInfos;
     
       for(;;) {

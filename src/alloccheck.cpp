@@ -2,7 +2,6 @@
   This tool attempts to detect "allocators". An allocator is a function that
   returns a newly allocated pointer.  An allocator may indeed be a wrapper
   for other allocators, so there is a lot of allocators in the R source code.
-
 */
        
 #include <llvm/IR/BasicBlock.h>

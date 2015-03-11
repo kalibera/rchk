@@ -154,6 +154,16 @@ bool isSEXP(Type* type) {
   return true;
 }
 
+bool isSEXPPtr(Type* type) {
+  if (!PointerType::classof(type)) {
+    return false;
+  }
+  return isSEXP(cast<PointerType>(type)->getPointerElementType());
+}
+
+bool isSEXP(GlobalVariable *var) {
+  return isSEXPPtr(var->getType());
+}
 
 bool isSEXP(AllocaInst* var) {
   if (var->isArrayAllocation() /* need to check this? */) {
