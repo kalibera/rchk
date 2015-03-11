@@ -16,6 +16,7 @@
 
 #include "common.h"
 #include "allocators.h"
+#include "callocators.h"
 
 using namespace llvm;
 
@@ -25,6 +26,19 @@ int main(int argc, char* argv[])
   FunctionsOrderedSetTy functionsOfInterest;
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+
+  // so far just a test for called allocators/called functions
+  SymbolsMapTy symbolsMap;
+  GlobalVarsSetTy symbolsSet;
+  findSymbols(m, symbolsSet, &symbolsMap);
+
+  CalledModuleTy cm(m, &symbolsMap);
+  CalledFunctionsSetTy* calledFunctions = cm.getCalledFunctions();
+  
+  for(CalledFunctionsSetTy::iterator cfi = calledFunctions->begin(), cfe = calledFunctions->end(); cfi != cfe; ++cfi) {
+    CalledFunctionTy *cf = *cfi;
+    errs() << "  called function " << cf->getName() << "\n";
+  }
 
   FunctionsSetTy possibleAllocators;
   findPossibleAllocators(m, possibleAllocators);

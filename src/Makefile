@@ -13,8 +13,8 @@ LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
 LLVMC := $(LLVM)/bin/llvm-config
 
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
-CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD
-#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD
+CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
@@ -32,7 +32,7 @@ TOOLS := errcheck symcheck sfpcheck maacheck bcheck ueacheck alloccheck
 
 all: $(TOOLS)
 
-alloccheck: alloccheck.o allocators.o errors.o cgclosure.o common.o
+alloccheck: alloccheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o
 
 errcheck: errcheck.o errors.o common.o
 

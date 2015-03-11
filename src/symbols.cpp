@@ -19,7 +19,7 @@ bool isInstallConstantCall(Value *inst, std::string& symbolName) {
     return false;
   }
   Function *tgt = cs.getCalledFunction();
-  if (tgt->getName() != "Rf_install") {
+  if (!tgt || tgt->getName() != "Rf_install") {
     return false;
   }
   Value *arg = cs.getArgument(0);
