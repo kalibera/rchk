@@ -40,12 +40,15 @@ unsigned getGCFunctionIndex(FunctionsInfoMapTy& functionsMap, Module *m) {
 // returning a fresh pointer at all or under certain conditions.  But, all
 // functions possibly returning a fresh pointer should be identified.
 
-static void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturned) {
+void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
 
-  if (DEBUG) errs() << "Function " << f.getName() << "...\n";
+  if (f->getReturnType()->isVoidTy()) {
+    return;
+  }
+  if (DEBUG) errs() << "Function " << f->getName() << "...\n";
   
   // insert variables values of which are directly returned
-  for(inst_iterator ini = inst_begin(f), ine = inst_end(f); ini != ine; ++ini) {
+  for(inst_iterator ini = inst_begin(*f), ine = inst_end(*f); ini != ine; ++ini) {
     Instruction *in = &*ini;
     if (ReturnInst::classof(in)) {
       Value* returnOperand = cast<ReturnInst>(in)->getReturnValue();
@@ -67,7 +70,7 @@ static void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturn
   while (addedVar) {
     addedVar = false;
     
-    for(inst_iterator ini = inst_begin(f), ine = inst_end(f); ini != ine; ++ini) {
+    for(inst_iterator ini = inst_begin(*f), ine = inst_end(*f); ini != ine; ++ini) {
       Instruction *in = &*ini;
       if (StoreInst::classof(in)) {
         Value *storePointerOperand = cast<StoreInst>(in)->getPointerOperand();
@@ -82,7 +85,7 @@ static void findPossiblyReturnedVariables(Function& f, VarsSetTy& possiblyReturn
         AllocaInst* varSrc = cast<AllocaInst>(loadOperand);
         
         if (possiblyReturned.find(varDst) != possiblyReturned.end() &&
-          possiblyReturned.find(varSrc) == possiblyReturned.end()) {
+          possiblyReturned.find(varSrc) == possiblyReturned.end()) { // FIXME: what about phi nodes?
           
           possiblyReturned.insert(varSrc);
           addedVar = true;
@@ -132,13 +135,13 @@ bool isKnownNonAllocator(Function *f) {
 //
 // returns an empty set if this function cannot be an allocator
 
-void getWrappedAllocators(Function& f, FunctionsSetTy& wrappedAllocators, Function* gcFunction) {
-  if (!isSEXP(f.getReturnType())) return; // allocator must return SEXP
+void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Function* gcFunction) {
+  if (!isSEXP(f->getReturnType())) return; // allocator must return SEXP
 
-  VarsSetTy possiblyReturnedVars; // true if value from this variable may be returned
+  VarsSetTy possiblyReturnedVars;
   findPossiblyReturnedVariables(f, possiblyReturnedVars);
       
-  for(Function::iterator bb = f.begin(), bbe = f.end(); bb != bbe; ++bb) {
+  for(Function::iterator bb = f->begin(), bbe = f->end(); bb != bbe; ++bb) {
     for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
       CallSite cs(cast<Value>(in));
       if (!cs) continue;
@@ -146,7 +149,7 @@ void getWrappedAllocators(Function& f, FunctionsSetTy& wrappedAllocators, Functi
       if (tgt == gcFunction) {
         // an exception: treat a call to R_gc_internal as an indication this is a direct allocator
         // (note: R_gc_internal itself does not return an SEXP)
-        if (DEBUG) errs() << "SEXP function " << f.getName() << " calls directly into " << tgt->getName() << "\n";
+        if (DEBUG) errs() << "SEXP function " << f->getName() << " calls directly into " << tgt->getName() << "\n";
         wrappedAllocators.insert(tgt);
         continue;
       }
@@ -156,7 +159,7 @@ void getWrappedAllocators(Function& f, FunctionsSetTy& wrappedAllocators, Functi
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
       if (valueMayBeReturned(cast<Value>(in), possiblyReturnedVars)) {
-        if (DEBUG) errs() << "SEXP function " << f.getName() << " wraps functions " << tgt->getName() << "\n";
+        if (DEBUG) errs() << "SEXP function " << f->getName() << " wraps functions " << tgt->getName() << "\n";
         wrappedAllocators.insert(tgt);
       }
     }
@@ -176,7 +179,7 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
       continue;
     }
     FunctionsSetTy wrappedAllocators;
-    getWrappedAllocators(*f, wrappedAllocators, gcFunction);
+    getWrappedAllocators(f, wrappedAllocators, gcFunction);
     if (!wrappedAllocators.empty()) {
       onlyEdges.insert({f, new FunctionsSetTy(wrappedAllocators)});
       onlyFunctions.insert(f);
@@ -200,6 +203,8 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
       possibleAllocators.insert(f);
     }
   }
+  
+  possibleAllocators.insert(gcFunction);
 }
 
 bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
@@ -231,4 +236,6 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
       allocatingFunctions.insert(f);
     }
   }
+  
+  allocatingFunctions.insert(getGCFunction(m));
 }

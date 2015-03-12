@@ -8,8 +8,8 @@
 
 using namespace llvm;
 
-bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions);
+bool isErrorFunction(Function *fun, FunctionsSetTy *knownErrorFunctions);
 void findErrorFunctions(Module *m, FunctionsSetTy& errorFunctions);
-void findErrorBasicBlocks(Function *fun, FunctionsSetTy& knownErrorFunctions, BasicBlocksSetTy& errorBlocks);
+void findErrorBasicBlocks(Function *fun, FunctionsSetTy *knownErrorFunctions, BasicBlocksSetTy& errorBlocks);
 
 #endif

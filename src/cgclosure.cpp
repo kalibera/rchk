@@ -56,7 +56,7 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
     
     BasicBlocksSetTy errorBlocks;
     if (ignoreErrorPaths) {
-      findErrorBasicBlocks(fun, errorFunctions, errorBlocks);
+      findErrorBasicBlocks(fun, &errorFunctions, errorBlocks);
     }
     
     for(CallGraphNode::const_iterator RI = sourceCGN->begin(), RE = sourceCGN->end(); RI != RE; ++RI) {

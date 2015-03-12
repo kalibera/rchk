@@ -386,7 +386,7 @@ class FunctionChecker {
           }
         }
         if (sexpGuardsEnabled) {
-          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, m.gl, NULL, NULL, m.msg, &m.possibleAllocators);
+          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, &m.gl, NULL, NULL, m.msg, &m.possibleAllocators);
           if (restartable && refinableInfos > 0) return;
         }
       }
@@ -399,7 +399,7 @@ class FunctionChecker {
         continue;
       }
 
-      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, m.gl, NULL, NULL, m.msg)) {
+      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, &m.gl, NULL, NULL, m.msg)) {
         continue;
       }
 
@@ -426,7 +426,7 @@ class FunctionChecker {
     FunctionChecker(Function *fun, ModuleCheckingStateTy& moduleState): 
         fun(fun), saveVarsCache(), counterVarsCache(), intGuardVarsCache(), sexpGuardVarsCache(), errorBasicBlocks(), m(moduleState) {
         
-      findErrorBasicBlocks(fun, m.errorFunctions, errorBasicBlocks);
+      findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
     }  
   
     // handles restarts

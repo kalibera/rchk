@@ -7,7 +7,7 @@
 using namespace llvm;
 
 // returns true iff the function is an error function
-static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions, BasicBlocksSetTy& returningBlocks, bool onlyCheck) {
+static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErrorFunctions, BasicBlocksSetTy& returningBlocks, bool onlyCheck) {
 
   if (fun->empty()) {
     // an empty function is not an error function
@@ -26,7 +26,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy& knownErr
       CallSite cs(cast<Value>(in));
       if (cs) {
         Function *tgt = cs.getCalledFunction();
-        if (knownErrorFunctions.find(tgt) != knownErrorFunctions.end()) {
+        if (knownErrorFunctions->find(tgt) != knownErrorFunctions->end()) {
           // this block calls into a function that does not return,
           // but does not have the noreturn attribute
           errorBlocks.insert(bb);
@@ -79,7 +79,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy& knownErr
 // an error function is a function in which no return instruction is
 // reachable from the entry block
 
-bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions) {
+bool isErrorFunction(Function *fun, FunctionsSetTy *knownErrorFunctions) {
 
   BasicBlocksSetTy returningBlocks;
   return checkAndAnalyzeErrorFunction(fun, knownErrorFunctions, returningBlocks, true);
@@ -88,7 +88,7 @@ bool isErrorFunction(Function *fun, FunctionsSetTy& knownErrorFunctions) {
 // returns a set of error basic blocks (those that always end up in an error, so from which
 // the program never returns using the regular function return
 
-void findErrorBasicBlocks(Function *fun, FunctionsSetTy& knownErrorFunctions, BasicBlocksSetTy& errorBlocks) {
+void findErrorBasicBlocks(Function *fun, FunctionsSetTy *knownErrorFunctions, BasicBlocksSetTy& errorBlocks) {
 
   BasicBlocksSetTy returningBlocks;  
   checkAndAnalyzeErrorFunction(fun, knownErrorFunctions, returningBlocks, false);
@@ -114,7 +114,7 @@ void findErrorFunctions(Module *m, FunctionsSetTy& errorFunctions) {
       if (!fun) continue;
       if (!fun->size()) continue;
     
-      if (errorFunctions.find(fun) == errorFunctions.end() && isErrorFunction(fun, errorFunctions)) {
+      if (errorFunctions.find(fun) == errorFunctions.end() && isErrorFunction(fun, &errorFunctions)) {
         errorFunctions.insert(fun);
         addedErrorFunction = true;
       }

@@ -33,12 +33,15 @@ struct SymbolArgInfoTy : public ArgInfoTy {
 
 typedef std::vector<ArgInfoTy*> ArgInfosTy;
 
+class CalledModuleTy;
+
 struct CalledFunctionTy {
 
   Function *fun;
   ArgInfosTy *argInfo; // NULL element means nothing known about that argument
+  CalledModuleTy *module;
 
-  CalledFunctionTy(Function *fun, ArgInfosTy *argInfo): fun(fun), argInfo(argInfo) {};
+  CalledFunctionTy(Function *fun, ArgInfosTy *argInfo, CalledModuleTy *module): fun(fun), argInfo(argInfo), module(module) {};
   std::string getName() const;
 };
 
@@ -50,7 +53,8 @@ struct CalledFunctionPtrTy_equal {
   bool operator() (const CalledFunctionTy* lhs, const CalledFunctionTy* rhs) const;
 };    
 
-typedef std::unordered_set<CalledFunctionTy*, CalledFunctionPtrTy_hash, CalledFunctionPtrTy_equal> CalledFunctionsSetTy;
+typedef std::unordered_set<CalledFunctionTy*, CalledFunctionPtrTy_hash, CalledFunctionPtrTy_equal> CalledFunctionsSetTy; // can be used for interning
+typedef std::set<CalledFunctionTy*> CalledFunctionsOrderedSetTy; // for interned functions
 
 struct ArgInfosPtrTy_hash {
   size_t operator()(const ArgInfosTy* t) const;
@@ -62,16 +66,56 @@ struct ArgInfosPtrTy_equal {
 
 typedef std::unordered_set<ArgInfosTy*, ArgInfosPtrTy_hash, ArgInfosPtrTy_equal> ArgInfosSetTy;
 
+struct ArgInfoPtrTy_hash {
+  size_t operator()(const ArgInfoTy* t) const;
+};
+
+struct ArgInfoPtrTy_equal {
+  bool operator() (const ArgInfoTy* lhs, const ArgInfoTy* rhs) const;
+};    
+
+
+typedef std::unordered_set<ArgInfoTy*, ArgInfoPtrTy_hash, ArgInfoPtrTy_equal> ArgInfoSetTy;
+
 class CalledModuleTy {
   CalledFunctionsSetTy calledFunctionsTable; // intern table
-  SymbolsMapTy* symbolsMap;
   ArgInfosSetTy argInfosTable; // intern table
+  ArgInfoSetTy argInfoTable; // intern table
   
+  SymbolsMapTy* symbolsMap;
+  Module *m;
+  FunctionsSetTy* errorFunctions;
+  GlobalsTy* globals;
+  FunctionsSetTy* possibleAllocators;
+  FunctionsSetTy* allocatingFunctions;
+  
+  CalledFunctionTy *gcFunction;
+
+  private:
+    ArgInfosTy* intern(ArgInfosTy& argInfos);
+    SymbolArgInfoTy* intern(SymbolArgInfoTy& argInfo);
+    CalledFunctionTy* intern(CalledFunctionTy& calledFunction);
+
   public:
-    CalledModuleTy(Module *m, SymbolsMapTy* symbolsMap);
+    CalledModuleTy(Module *m, SymbolsMapTy* symbolsMap, FunctionsSetTy* errorFunctions, GlobalsTy* globals,
+      FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions);
+      
     CalledFunctionTy* getCalledFunction(Value *inst);
+    CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
     CalledFunctionsSetTy* getCalledFunctions() { return &calledFunctionsTable; }
     virtual ~CalledModuleTy();
+    
+    bool isAllocating(Function *f) { return allocatingFunctions->find(f) != allocatingFunctions->end(); }
+    bool isPossibleAllocator(Function *f) { return possibleAllocators->find(f) != possibleAllocators->end(); }
+    
+    FunctionsSetTy* getErrorFunctions() { return errorFunctions; }
+    FunctionsSetTy* getPossibleAllocators() { return possibleAllocators; }
+    FunctionsSetTy* getAllocatingFunctions() { return allocatingFunctions; }
+    GlobalsTy* getGlobals() { return globals; }
+    Module* getModule() { return m; }
+    CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
 };
+
+void getCalledAllocators(CalledModuleTy *cm); // FIXME: eventually move this into CalledModuleTy
 
 #endif

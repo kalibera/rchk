@@ -17,6 +17,8 @@
 #include "common.h"
 #include "allocators.h"
 #include "callocators.h"
+#include "errors.h"
+
 
 using namespace llvm;
 
@@ -32,23 +34,49 @@ int main(int argc, char* argv[])
   GlobalVarsSetTy symbolsSet;
   findSymbols(m, symbolsSet, &symbolsMap);
 
-  CalledModuleTy cm(m, &symbolsMap);
-  CalledFunctionsSetTy* calledFunctions = cm.getCalledFunctions();
+  FunctionsSetTy errorFunctions;
+  findErrorFunctions(m, errorFunctions);
   
+  GlobalsTy globals(m);
+  
+  FunctionsSetTy possibleAllocators;
+  findPossibleAllocators(m, possibleAllocators);
+
+  FunctionsSetTy allocatingFunctions;
+  findAllocatingFunctions(m, allocatingFunctions);
+      
+  CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &globals, &possibleAllocators, &allocatingFunctions);
+  CalledFunctionsSetTy* calledFunctions = cm.getCalledFunctions();
+
+  if (0) {  
+  errs() << "Detected called functions: \n";
   for(CalledFunctionsSetTy::iterator cfi = calledFunctions->begin(), cfe = calledFunctions->end(); cfi != cfe; ++cfi) {
     CalledFunctionTy *cf = *cfi;
     errs() << "  called function " << cf->getName() << "\n";
   }
+  }
 
-  FunctionsSetTy possibleAllocators;
-  findPossibleAllocators(m, possibleAllocators);
-  
+  getCalledAllocators(&cm);
+
+  if(1) {
   for(FunctionsSetTy::iterator fi = possibleAllocators.begin(), fe = possibleAllocators.end(); fi != fe; ++fi) {
     Function *f = *fi;
     if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
       continue;
     }
     errs() << "POSSIBLE ALLOCATOR: " << f->getName() << "\n";
+  }
+  }
+  
+
+  if(1) {
+  for(FunctionsSetTy::iterator fi = allocatingFunctions.begin(), fe = allocatingFunctions.end(); fi != fe; ++fi) {
+    Function *f = *fi;
+    if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
+      continue;
+    }
+    errs() << "ALLOCATING FUNCTION: " << f->getName() << "\n";
+  }
   }
   
   delete m;

@@ -138,6 +138,22 @@ std::string instructionAsString(Instruction *in) {
   return str;
 }
 
+std::string functionName(Function *f) {
+  if (!f) {
+    return "<unknown function>";
+  }
+  return demangle(f->getName().str());
+}
+
+std::string varName(AllocaInst *var) {
+  std::string name = var->getName().str();
+  if (!name.empty()) {
+    return name;
+  }
+  return "<unnamed var: " + instructionAsString(var) + ">";
+
+}
+
 bool isSEXP(Type* type) {
 
   if (!PointerType::classof(type)) {

@@ -336,7 +336,7 @@ SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var, std:
 }
 
 void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalsTy& g, ArgInfosTy *argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators) {
+  GlobalsTy* g, ArgInfosTy *argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators) {
 
   if (!StoreInst::classof(in)) {
     return;
@@ -349,21 +349,21 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
     return;
   }
   AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-  if (!isSEXPGuardVariable(storePointerVar, g.nilVariable, g.isNullFunction, sexpGuardVarsCache)) {
+  if (!isSEXPGuardVariable(storePointerVar, g->nilVariable, g->isNullFunction, sexpGuardVarsCache)) {
     return;
   }
   // sexpguard = ...
               
   if (LoadInst::classof(storeValueOp)) {
     Value *src = cast<LoadInst>(storeValueOp)->getPointerOperand();
-    if (src == g.nilVariable) {  // sexpguard = R_NilValue
+    if (src == g->nilVariable) {  // sexpguard = R_NilValue
       msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to nil", store);
       SEXPGuardTy newGS(SGS_NIL);
       sexpGuards[storePointerVar] = newGS;
       return;
     }
     if (AllocaInst::classof(src) && 
-        isSEXPGuardVariable(cast<AllocaInst>(src), g.nilVariable, g.isNullFunction, sexpGuardVarsCache)) { // sexpguard1 = sexpguard2
+        isSEXPGuardVariable(cast<AllocaInst>(src), g->nilVariable, g->isNullFunction, sexpGuardVarsCache)) { // sexpguard1 = sexpguard2
 
       auto gsearch = sexpGuards.find(cast<AllocaInst>(src));
       if (gsearch == sexpGuards.end()) {
@@ -417,7 +417,7 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
   msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown", store);
 }
 
-bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy& g, ArgInfosTy* argInfos, 
+bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy *g, ArgInfosTy* argInfos, 
   SymbolsMapTy* symbolsMap, LineMessenger& msg) {
   
   if (!BranchInst::classof(t)) {
@@ -448,7 +448,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     gv = cast<GlobalVariable>(lo);
   }
 
-  if (!guard || !gv || !isSEXPGuardVariable(guard, g.nilVariable, g.isNullFunction, sexpGuardVarsCache)) {
+  if (!guard || !gv || !isSEXPGuardVariable(guard, g->nilVariable, g->isNullFunction, sexpGuardVarsCache)) {
     return false;
   }
   
@@ -456,7 +456,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
   SEXPGuardState gs = getSEXPGuardState(s.sexpGuards, guard, guardSymbolName);
   int succIndex = -1;
 
-  if (gv == g.nilVariable) {
+  if (gv == g->nilVariable) {
               
     // if (x == R_NilValue) ...
     // if (x != R_NilValue) ...

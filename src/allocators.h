@@ -20,4 +20,6 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators);
 bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex);
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions);
 
+void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned);
+
 #endif

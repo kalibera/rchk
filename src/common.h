@@ -33,6 +33,8 @@ std::string demangle(std::string name);
 bool sourceLocation(const Instruction *in, std::string& path, unsigned& line);
 std::string sourceLocation(const Instruction *in);
 std::string instructionAsString(Instruction *in);
+std::string functionName(Function *f);
+std::string varName(AllocaInst *var);
 
 bool isSEXP(AllocaInst *var);
 bool isSEXP(Type* type);

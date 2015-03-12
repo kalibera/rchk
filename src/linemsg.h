@@ -87,6 +87,7 @@ class LineMessenger : public BaseLineMessenger {
     void flush();
     void clear();
     void newFunction(Function *func, std::string checksName);
+    void newFunction(Function *func) { newFunction(func, ""); }
     
     LineInfoTy* intern(const LineInfoTy& li); // intern (but do not emit)
     void emitInterned(LineInfoTy* li); // emit line info interned in internTable
