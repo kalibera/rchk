@@ -46,38 +46,91 @@ int main(int argc, char* argv[])
   findAllocatingFunctions(m, allocatingFunctions);
       
   CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &globals, &possibleAllocators, &allocatingFunctions);
-  CalledFunctionsSetTy* calledFunctions = cm.getCalledFunctions();
+  CalledFunctionsVectorTy* calledFunctions = cm.getCalledFunctions();
 
   if (0) {  
-  errs() << "Detected called functions: \n";
-  for(CalledFunctionsSetTy::iterator cfi = calledFunctions->begin(), cfe = calledFunctions->end(); cfi != cfe; ++cfi) {
-    CalledFunctionTy *cf = *cfi;
-    errs() << "  called function " << cf->getName() << "\n";
-  }
+    errs() << "Detected called functions: \n";
+    for(CalledFunctionsVectorTy::iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
+      CalledFunctionTy *f = *fi;
+      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+        continue;
+      }      
+      errs() << "  called function " << f->getName() << "\n";
+    }
   }
 
-  getCalledAllocators(&cm);
+  CalledFunctionsVectorTy possibleCAllocators;
+  CalledFunctionsVectorTy allocatingCFunctions;
+  getCalledAllocators(&cm, possibleCAllocators, allocatingCFunctions);
+  
+  if(1) {
+    for(CalledFunctionsVectorTy::iterator fi = possibleCAllocators.begin(), fe = possibleCAllocators.end(); fi != fe; ++fi) {
+      CalledFunctionTy *f = *fi;
+      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+        continue;
+      }
+      errs() << "C-ALLOCATOR: " << f->getName() << "\n";
+    }
+  }
 
   if(1) {
-  for(FunctionsSetTy::iterator fi = possibleAllocators.begin(), fe = possibleAllocators.end(); fi != fe; ++fi) {
-    Function *f = *fi;
-    if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
-      continue;
+    for(CalledFunctionsVectorTy::iterator fi = allocatingCFunctions.begin(), fe = allocatingCFunctions.end(); fi != fe; ++fi) {
+      CalledFunctionTy *f = *fi;
+      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+        continue;
+      }
+      errs() << "C-ALLOCATING: " << f->getName() << "\n";
     }
-    errs() << "POSSIBLE ALLOCATOR: " << f->getName() << "\n";
   }
+
+  if(1) {
+    for(FunctionsSetTy::iterator fi = possibleAllocators.begin(), fe = possibleAllocators.end(); fi != fe; ++fi) {
+      Function *f = *fi;
+      if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
+        continue;
+      }
+      errs() << "ALLOCATOR: " << f->getName() << "\n";
+    }
   }
   
 
   if(1) {
-  for(FunctionsSetTy::iterator fi = allocatingFunctions.begin(), fe = allocatingFunctions.end(); fi != fe; ++fi) {
-    Function *f = *fi;
-    if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
-      continue;
+    for(FunctionsSetTy::iterator fi = allocatingFunctions.begin(), fe = allocatingFunctions.end(); fi != fe; ++fi) {
+      Function *f = *fi;
+      if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
+        continue;
+      }
+      errs() << "ALLOCATING: " << f->getName() << "\n";
     }
-    errs() << "ALLOCATING FUNCTION: " << f->getName() << "\n";
   }
+  
+  // check for which functions the context gave more precise result
+  if (1) {  
+    for(CalledFunctionsVectorTy::iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
+      CalledFunctionTy *f = *fi;
+      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+        continue;
+      }
+      bool callocator = std::find(possibleCAllocators.begin(), possibleCAllocators.end(), f) != possibleCAllocators.end();
+      bool callocating = std::find(allocatingCFunctions.begin(), allocatingCFunctions.end(), f) == allocatingCFunctions.end();
+      bool allocator = possibleAllocators.find(f->fun) != possibleAllocators.end();
+      bool allocating = allocatingFunctions.find(f->fun) != allocatingFunctions.end();
+      
+      if (!callocator && allocator) {
+        errs() << "GOOD: NOT-CALLOCATOR but ALLOCATOR: " << f->getName() << "\n";
+      }
+      if (!callocating && allocating) {
+        errs() << "GOOD: NOT-CALLOCATING but ALLOCATING: " << f->getName() << "\n";
+      }
+      if (callocator && !callocating) {
+        errs() << "ERROR: NOT-CALLOCATING but CALLOCATOR " << f->getName() << "\n";
+      }
+      if (allocator && !allocating) {
+        errs() << "ERROR: NOT-ALLOCATING but ALLOCATOR" << f->getName() << "\n";
+      }      
+    }
   }
+
   
   delete m;
 }

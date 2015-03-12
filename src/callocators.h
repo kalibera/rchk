@@ -40,8 +40,9 @@ struct CalledFunctionTy {
   Function *fun;
   ArgInfosTy *argInfo; // NULL element means nothing known about that argument
   CalledModuleTy *module;
+  unsigned idx; // filled in during interning
 
-  CalledFunctionTy(Function *fun, ArgInfosTy *argInfo, CalledModuleTy *module): fun(fun), argInfo(argInfo), module(module) {};
+  CalledFunctionTy(Function *fun, ArgInfosTy *argInfo, CalledModuleTy *module): fun(fun), argInfo(argInfo), module(module), idx(UINT_MAX) {};
   std::string getName() const;
 };
 
@@ -53,7 +54,7 @@ struct CalledFunctionPtrTy_equal {
   bool operator() (const CalledFunctionTy* lhs, const CalledFunctionTy* rhs) const;
 };    
 
-typedef std::unordered_set<CalledFunctionTy*, CalledFunctionPtrTy_hash, CalledFunctionPtrTy_equal> CalledFunctionsSetTy; // can be used for interning
+typedef std::unordered_set<CalledFunctionTy*, CalledFunctionPtrTy_hash, CalledFunctionPtrTy_equal> CalledFunctionsTableTy; // can be used for interning
 typedef std::set<CalledFunctionTy*> CalledFunctionsOrderedSetTy; // for interned functions
 
 struct ArgInfosPtrTy_hash {
@@ -75,10 +76,12 @@ struct ArgInfoPtrTy_equal {
 };    
 
 
-typedef std::unordered_set<ArgInfoTy*, ArgInfoPtrTy_hash, ArgInfoPtrTy_equal> ArgInfoSetTy;
+typedef std::unordered_set<ArgInfoTy*, ArgInfoPtrTy_hash, ArgInfoPtrTy_equal> ArgInfoSetTy; // can be used for interning
+typedef std::vector<CalledFunctionTy*> CalledFunctionsVectorTy;
 
 class CalledModuleTy {
-  CalledFunctionsSetTy calledFunctionsTable; // intern table
+  CalledFunctionsTableTy calledFunctionsTable; // intern table
+  CalledFunctionsVectorTy calledFunctionsVector; // for mapping idx -> function
   ArgInfosSetTy argInfosTable; // intern table
   ArgInfoSetTy argInfoTable; // intern table
   
@@ -102,7 +105,8 @@ class CalledModuleTy {
       
     CalledFunctionTy* getCalledFunction(Value *inst);
     CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
-    CalledFunctionsSetTy* getCalledFunctions() { return &calledFunctionsTable; }
+    CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsVector.at(idx); };
+    CalledFunctionsVectorTy* getCalledFunctions() { return &calledFunctionsVector; }
     virtual ~CalledModuleTy();
     
     bool isAllocating(Function *f) { return allocatingFunctions->find(f) != allocatingFunctions->end(); }
@@ -116,6 +120,7 @@ class CalledModuleTy {
     CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
 };
 
-void getCalledAllocators(CalledModuleTy *cm); // FIXME: eventually move this into CalledModuleTy
+void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCAllocators, CalledFunctionsVectorTy& allocatingCFunctions); 
+// FIXME: eventually move this into CalledModuleTy
 
 #endif

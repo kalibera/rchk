@@ -157,6 +157,8 @@ CalledFunctionTy* CalledModuleTy::intern(CalledFunctionTy& calledFunction) { // 
   } else {
     cfun = new CalledFunctionTy(calledFunction); // copy to heap
     calledFunctionsTable.insert(cfun);
+    cfun->idx = calledFunctionsVector.size();
+    calledFunctionsVector.push_back(cfun);
   }
   return cfun;
 }
@@ -229,7 +231,7 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
 CalledModuleTy::~CalledModuleTy() {
 
   // delete dynamically allocated elements in intern tables
-  for(CalledFunctionsSetTy::iterator cfi = calledFunctionsTable.begin(), cfe = calledFunctionsTable.end(); cfi != cfe; ++cfi) {
+  for(CalledFunctionsTableTy::iterator cfi = calledFunctionsTable.begin(), cfe = calledFunctionsTable.end(); cfi != cfe; ++cfi) {
     CalledFunctionTy *cfun = *cfi;
     delete cfun;
   }
@@ -486,7 +488,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         called.insert(s.called.begin(), s.called.end());      
 
         if (trackOrigins) {
-          if (called.find(cm->getCalledGCFunction()) != called.end()) {
+          if (s.called.find(cm->getCalledGCFunction()) != s.called.end()) {
             // the GC function is an exception
             //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it
             //   (this is a heuristic)
@@ -537,7 +539,31 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     }
 }
 
-void getCalledAllocators(CalledModuleTy *cm) {
+typedef std::vector<std::vector<bool>> BoolMatrixTy;
+
+void buildClosure(BoolMatrixTy& m, unsigned n) {
+
+  bool added = true;
+  while(added) {
+    added = false;
+    
+    for(unsigned i = 0; i < n; i++) {
+      for(unsigned j = 0; j < n; j++) {
+        if (m[i][j]) continue;
+        
+        for(unsigned k = 0; k < n; k++) {
+          if (m[i][k] && m[k][j]) {
+            m[i][j] = true;
+            added = true;
+          }
+        }
+      }
+    }
+  }
+}
+
+  // FIXME: should return unordered sets instead of vectors (and/or remember the result in CalledFunctionTy)
+void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCAllocators, CalledFunctionsVectorTy& allocatingCFunctions) {
 
   // find calls and variable origins for each called function
   // then create a "callgraph" out of these
@@ -548,7 +574,13 @@ void getCalledAllocators(CalledModuleTy *cm) {
   
   LineMessenger msg(cm->getModule()->getContext(), DEBUG, TRACE, UNIQUE_MSG);
   
-  for(CalledFunctionsSetTy::iterator fi = cm->getCalledFunctions()->begin(), fe = cm->getCalledFunctions()->end(); fi != fe; ++fi) {
+  unsigned nfuncs = cm->getCalledFunctions()->size();
+
+  BoolMatrixTy calls(nfuncs, std::vector<bool>(nfuncs));  // calls[i][j] - function i calls function j
+  BoolMatrixTy wraps(nfuncs, std::vector<bool>(nfuncs));  // weaps[i][j] - function i wraps function j
+  
+  // prepare matrix of direct calls/wraps
+  for(CalledFunctionsVectorTy::iterator fi = cm->getCalledFunctions()->begin(), fe = cm->getCalledFunctions()->end(); fi != fe; ++fi) {
     CalledFunctionTy *f = *fi;
 
     if (!f->fun || !f->fun->size()) {
@@ -559,19 +591,46 @@ void getCalledAllocators(CalledModuleTy *cm) {
     CalledFunctionsOrderedSetTy wrapped;
     getCalledAndWrappedFunctions(f, msg, called, wrapped);
     
-    if (called.size()) {
+    if (0 && called.size()) {
       errs() << "\nDetected (possible allocators) called by function " << f->getName() << ":\n";
       for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
         CalledFunctionTy *cf = *cfi;
         errs() << "   " << cf->getName() << "\n";
       }
     }
-    if (wrapped.size()) {
+    if (0 && wrapped.size()) {
       errs() << "\nDetected (possible allocators) wrapped by function " << f->getName() << ":\n";
       for(CalledFunctionsOrderedSetTy::iterator cfi = wrapped.begin(), cfe = wrapped.end(); cfi != cfe; ++cfi) {
         CalledFunctionTy *cf = *cfi;
         errs() << "   " << cf->getName() << "\n";
       }
     }
+    
+    for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
+      CalledFunctionTy *cf = *cfi;
+      calls[f->idx][cf->idx] = true;
+    }
+
+    for(CalledFunctionsOrderedSetTy::iterator wfi = wrapped.begin(), wfe = wrapped.end(); wfi != wfe; ++wfi) {
+      CalledFunctionTy *wf = *wfi;
+      wraps[f->idx][wf->idx] = true;
+    }    
+  }
+  
+  // calculate transitive closure
+    // FIXME: should use the list of neighbors as well so speed this up
+  buildClosure(calls, nfuncs);
+  buildClosure(wraps, nfuncs);
+  
+  // fill in results
+  
+  unsigned gcidx = cm->getCalledGCFunction()->idx;
+  for(unsigned i = 0; i < nfuncs; i++) {
+    if (calls[i][gcidx]) {
+      allocatingCFunctions.push_back(cm->getCalledFunction(i));
+    }
+    if (wraps[i][gcidx]) {
+      possibleCAllocators.push_back(cm->getCalledFunction(i));
+    }    
   }
 }
