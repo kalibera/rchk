@@ -48,8 +48,8 @@ typedef std::unordered_set<LineInfoTy, LineInfoTy_hash, LineInfoTy_equal> LineIn
 class BaseLineMessenger {
 
   protected:
-    const bool DEBUG;
-    const bool TRACE;
+    bool DEBUG;
+    bool TRACE;
     const bool UNIQUE_MSG;  
   
   public:
@@ -62,6 +62,8 @@ class BaseLineMessenger {
     void error(std::string msg, Instruction *in);
     bool debug() { return DEBUG; }
     bool trace() { return TRACE; }
+    void debug(bool v) { DEBUG = v; }
+    void trace(bool v) { TRACE = v; }
     bool uniqueMsg() { return UNIQUE_MSG; }
     
     void emit(std::string kind, std::string message, Instruction *in);

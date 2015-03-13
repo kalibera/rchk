@@ -24,9 +24,11 @@ const int MAX_STATES = 1000000;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "Rf_getAttrib(?,S:class)"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "getAttrib0(?,S:class)"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "Rf_getAttrib(?,S:class)";
+const std::string ONLY_FUNCTION_NAME = "getAttrib0(?,S:class)";
+const bool ONLY_DEBUG_ONLY_FUNCTION = true;
+const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
 std::string CalledFunctionTy::getName() const {
   std::string res = fun->getName();
@@ -422,6 +424,22 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     
     bool trackOrigins = isSEXP(f->fun->getReturnType());
     
+    if (DEBUG && ONLY_DEBUG_ONLY_FUNCTION) {
+      if (ONLY_FUNCTION_NAME == f->getName()) {
+        msg.debug(true);
+      } else {
+        msg.debug(false);
+      }
+    }
+
+    if (TRACE && ONLY_TRACE_ONLY_FUNCTION) {
+      if (ONLY_FUNCTION_NAME == f->getName()) {
+        msg.trace(true);
+      } else {
+        msg.trace(false);
+      }
+    }
+    
     msg.newFunction(f->fun, " - " + f->getName());
 
     clearStates();
@@ -458,7 +476,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         msg.trace("visiting", in);
    
         handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, msg);
-        handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, cm->getGlobals(), f->argInfo, NULL, msg, NULL);
+        handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, cm->getGlobals(), f->argInfo, cm->getSymbolsMap(), msg, NULL);
         
         // handle stores
         if (trackOrigins && StoreInst::classof(in)) {
@@ -553,7 +571,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         }
       }
 
-      if (handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, cm->getGlobals(), f->argInfo, NULL, msg)) {
+      if (handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, cm->getGlobals(), f->argInfo, cm->getSymbolsMap(), msg)) {
         continue;
       }
 

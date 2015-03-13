@@ -726,7 +726,7 @@ void StateWithGuardsTy::dump(bool verbose) {
   for(IntGuardsTy::iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
     AllocaInst *i = gi->first;
     IntGuardState s = gi->second;
-    errs() << "   " << demangle(i->getName()) << " ";
+    errs() << "   " << varName(i) << " ";
     if (verbose) {
       errs() << *i << " ";
     }
@@ -738,7 +738,7 @@ void StateWithGuardsTy::dump(bool verbose) {
     AllocaInst *i = gi->first;
     SEXPGuardTy &g = gi->second;
     
-    errs() << "   " << demangle(i->getName()) << " ";
+    errs() << "   " << varName(i) << " ";
     if (verbose) {
       errs() << *i << " ";
     }

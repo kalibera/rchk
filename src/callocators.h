@@ -125,6 +125,7 @@ class CalledModuleTy {
     GlobalsTy* getGlobals() { return globals; }
     Module* getModule() { return m; }
     CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
+    SymbolsMapTy* getSymbolsMap() { return symbolsMap; }
 };
 
 void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllocators, CalledFunctionsSetTy& allocatingCFunctions); 
