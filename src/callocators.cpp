@@ -24,9 +24,9 @@ const int MAX_STATES = 1000000;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "Rf_getAttrib"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "Rf_getAttrib(?,S:class)"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "Rf_getAttrib";
+const std::string ONLY_FUNCTION_NAME = "Rf_getAttrib(?,S:class)";
 
 std::string CalledFunctionTy::getName() const {
   std::string res = fun->getName();
@@ -171,6 +171,10 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Function *f) {
 }
 
 CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst) {
+  return getCalledFunction(inst, NULL);
+}
+
+CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards) {
   // FIXME: this is quite inefficient, does a lot of allocation
   
   CallSite cs (inst);
@@ -199,6 +203,19 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst) {
           continue;
         }
       }
+      if (sexpGuards && AllocaInst::classof(src)) {
+        AllocaInst *var = cast<AllocaInst>(src);
+        auto gsearch = sexpGuards->find(var);
+        if (gsearch != sexpGuards->end()) {
+          std::string symbolName;
+          SEXPGuardState gs = getSEXPGuardState(*sexpGuards, var, symbolName);
+          if (gs == SGS_SYMBOL) {
+            SymbolArgInfoTy ai(symbolName);
+            argInfo[i] = intern(ai);
+            continue;
+          }
+        }
+      }
     }
     std::string symbolName;  // install("X")
     if (isInstallConstantCall(arg, symbolName)) {
@@ -222,7 +239,7 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
 
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
       User *u = *ui;
-      getCalledFunction(cast<Value>(u));
+      getCalledFunction(cast<Value>(u)); // FIXME: this only gets contexts that are constant
     }
   }  
   gcFunction = getCalledFunction(getGCFunction(m));
@@ -306,6 +323,25 @@ struct CAllocStateTy : public StateWithGuardsTy {
   void dump() {
     StateBaseTy::dump(VERBOSE_DUMP);
     StateWithGuardsTy::dump(VERBOSE_DUMP);
+
+    errs() << "=== called (allocating):\n";
+    for(CalledFunctionsOrderedSetTy::iterator fi = called.begin(), fe = called.end(); fi != fe; *fi++) {
+      CalledFunctionTy* f = *fi;
+      errs() << "   " << f->getName() << "\n";
+    }
+    errs() << "=== origins (allocators):\n";
+    for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
+      AllocaInst* var = oi->first;
+      CalledFunctionsOrderedSetTy& srcs = oi->second;
+
+      errs() << "   " << varName(var) << ":";
+        
+      for(CalledFunctionsOrderedSetTy::iterator fi = srcs.begin(), fe = srcs.end(); fi != fe; ++fi) {
+        CalledFunctionTy *f = *fi;
+        errs() << " " << f->getName();
+      }
+      errs() << "\n";
+    }
     errs() << " ######################            ######################\n";
   }
     
@@ -397,10 +433,10 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       CAllocStateTy s(*workList.top());
       workList.pop();    
 
-      if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->fun->getName()) {
+      if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->getName()) {
         continue;
       }      
-      if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->fun->getName())) {
+      if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
         msg.trace("going to work on this state:", s.bb->begin());
         s.dump();
       }
@@ -453,8 +489,8 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
                 }
                 continue;
               }
-              CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand());
-              if (tgt && cm->isAllocating(tgt->fun)) {
+              CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards);
+              if (tgt && cm->isPossibleAllocator(tgt->fun)) {
                 // storing a value gotten from a (possibly allocating) function
                 if (msg.debug()) msg.debug("adding origin " + tgt->getName() + " of " + varName(dst), in); 
                 auto orig = s.varOrigins.find(dst);
@@ -473,7 +509,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         }
         
         // handle calls
-        CalledFunctionTy *tgt = cm->getCalledFunction(in);
+        CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards);
         if (tgt && cm->isAllocating(tgt->fun)) {
           msg.debug("recording call to " + tgt->getName(), in); 
           s.called.insert(tgt);
@@ -484,7 +520,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       
       if (ReturnInst::classof(t)) { // handle return statement
 
-        msg.debug("collecting " + std::to_string(s.called.size()) + " calls at function return", t);
+        if (msg.debug()) msg.debug("collecting " + std::to_string(s.called.size()) + " calls at function return", t);
         called.insert(s.called.begin(), s.called.end());      
 
         if (trackOrigins) {
@@ -509,13 +545,12 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
             }
           }
-          CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand);
+          CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards);
           if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
             msg.debug("collecting immediate origin " + tgt->getName() + " at function return", t); 
            wrapped.insert(tgt);
           }   
         }
-
       }
 
       if (handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, cm->getGlobals(), f->argInfo, NULL, msg)) {
@@ -542,6 +577,21 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
 typedef std::vector<std::vector<bool>> BoolMatrixTy;
 typedef std::vector<unsigned> AdjacencyListRow;
 typedef std::vector<AdjacencyListRow> AdjacencyListTy;
+
+void resize(AdjacencyListTy& list, unsigned n) {
+  list.resize(n);
+}
+
+void resize(BoolMatrixTy& matrix, unsigned n) {
+  unsigned oldn = matrix.size();
+  if (n <= oldn) {
+    return;
+  }
+  matrix.resize(n);
+  for (int i = 0; i < n; i++) {
+    matrix[i].resize(n);
+  }
+}
 
 void buildClosure(BoolMatrixTy& mat, AdjacencyListTy& list, unsigned n) {
 
@@ -572,7 +622,7 @@ void buildClosure(BoolMatrixTy& mat, AdjacencyListTy& list, unsigned n) {
 }
 
   // FIXME: should return unordered sets instead of vectors (and/or remember the result in CalledFunctionTy)
-void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCAllocators, CalledFunctionsVectorTy& allocatingCFunctions) {
+void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllocators, CalledFunctionsSetTy& allocatingCFunctions) {
 
   // find calls and variable origins for each called function
   // then create a "callgraph" out of these
@@ -583,7 +633,7 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCA
   
   LineMessenger msg(cm->getModule()->getContext(), DEBUG, TRACE, UNIQUE_MSG);
   
-  unsigned nfuncs = cm->getCalledFunctions()->size();
+  unsigned nfuncs = cm->getCalledFunctions()->size(); // NOTE: nfuncs can increase during the checking
 
   BoolMatrixTy callsMat(nfuncs, std::vector<bool>(nfuncs));  // calls[i][j] - function i calls function j
   AdjacencyListTy callsList(nfuncs, AdjacencyListRow()); // calls[i] - list of functions called by i
@@ -591,9 +641,12 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCA
   AdjacencyListTy wrapsList(nfuncs, AdjacencyListRow()); // wraps[i] - list of functions wrapped by i
   
   // prepare matrix of direct calls/wraps
-  for(CalledFunctionsVectorTy::iterator fi = cm->getCalledFunctions()->begin(), fe = cm->getCalledFunctions()->end(); fi != fe; ++fi) {
-    CalledFunctionTy *f = *fi;
+//  for(CalledFunctionsVectorTy::iterator fi = cm->getCalledFunctions()->begin(), fe = cm->getCalledFunctions()->end(); fi != fe; ++fi) {
+//    CalledFunctionTy *f = *fi;
 
+  for(unsigned i = 0; i < cm->getCalledFunctions()->size(); i++) {
+
+    CalledFunctionTy *f = (*cm->getCalledFunctions())[i];
     if (!f->fun || !f->fun->size()) {
       continue;
     }
@@ -609,13 +662,19 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCA
         errs() << "   " << cf->getName() << "\n";
       }
     }
-    if (0 && wrapped.size()) {
+    if (1 && wrapped.size()) {
       errs() << "\nDetected (possible allocators) wrapped by function " << f->getName() << ":\n";
       for(CalledFunctionsOrderedSetTy::iterator cfi = wrapped.begin(), cfe = wrapped.end(); cfi != cfe; ++cfi) {
         CalledFunctionTy *cf = *cfi;
         errs() << "   " << cf->getName() << "\n";
       }
     }
+    
+    nfuncs = cm->getCalledFunctions()->size(); // get the current size
+    resize(callsList, nfuncs);
+    resize(wrapsList, nfuncs);
+    resize(callsMat, nfuncs);
+    resize(wrapsMat, nfuncs);
     
     for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
       CalledFunctionTy *cf = *cfi;
@@ -640,10 +699,12 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCA
   unsigned gcidx = cm->getCalledGCFunction()->idx;
   for(unsigned i = 0; i < nfuncs; i++) {
     if (callsMat[i][gcidx]) {
-      allocatingCFunctions.push_back(cm->getCalledFunction(i));
+      allocatingCFunctions.insert(cm->getCalledFunction(i));
     }
     if (wrapsMat[i][gcidx]) {
-      possibleCAllocators.push_back(cm->getCalledFunction(i));
+      possibleCAllocators.insert(cm->getCalledFunction(i));
     }    
   }
+  allocatingCFunctions.insert(cm->getCalledGCFunction());
+  possibleCAllocators.insert(cm->getCalledGCFunction());
 }

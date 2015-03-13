@@ -54,10 +54,14 @@ struct SEXPGuardTy {
 
 typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
+  // yikes, need forward type-def
+struct ArgInfoTy;
+typedef std::vector<ArgInfoTy*> ArgInfosTy;
+
 std::string sgs_name(SEXPGuardState sgs);
-SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var);
-bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction);
-bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache);
+SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName);
+bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, Function* isNullFunction);
+bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, Function* isNullFunction, VarBoolCacheTy& cache);
 void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
   GlobalsTy *g, ArgInfosTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators);
 bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, 

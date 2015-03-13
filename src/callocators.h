@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "allocators.h"
+#include "guards.h"
 #include "symbols.h"
 
 #include <unordered_set>
@@ -56,6 +57,7 @@ struct CalledFunctionPtrTy_equal {
 
 typedef std::unordered_set<CalledFunctionTy*, CalledFunctionPtrTy_hash, CalledFunctionPtrTy_equal> CalledFunctionsTableTy; // can be used for interning
 typedef std::set<CalledFunctionTy*> CalledFunctionsOrderedSetTy; // for interned functions
+typedef std::unordered_set<CalledFunctionTy*> CalledFunctionsSetTy; // for interned functions
 
 struct ArgInfosPtrTy_hash {
   size_t operator()(const ArgInfosTy* t) const;
@@ -78,6 +80,10 @@ struct ArgInfoPtrTy_equal {
 
 typedef std::unordered_set<ArgInfoTy*, ArgInfoPtrTy_hash, ArgInfoPtrTy_equal> ArgInfoSetTy; // can be used for interning
 typedef std::vector<CalledFunctionTy*> CalledFunctionsVectorTy;
+
+  // yikes, need forward type def
+struct SEXPGuardTy;
+typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
 class CalledModuleTy {
   CalledFunctionsTableTy calledFunctionsTable; // intern table
@@ -104,6 +110,7 @@ class CalledModuleTy {
       FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions);
       
     CalledFunctionTy* getCalledFunction(Value *inst);
+    CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards); // takes context from guards
     CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
     CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsVector.at(idx); };
     CalledFunctionsVectorTy* getCalledFunctions() { return &calledFunctionsVector; }
@@ -120,7 +127,7 @@ class CalledModuleTy {
     CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
 };
 
-void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCAllocators, CalledFunctionsVectorTy& allocatingCFunctions); 
+void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllocators, CalledFunctionsSetTy& allocatingCFunctions); 
 // FIXME: eventually move this into CalledModuleTy
 
 #endif

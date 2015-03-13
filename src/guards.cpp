@@ -120,15 +120,15 @@ void handleIntGuardsForNonTerminator(Instruction *in, VarBoolCacheTy& intGuardVa
     ConstantInt* constOp = cast<ConstantInt>(storeValueOp);
     if (constOp->isZero()) {
       newState = IGS_ZERO;
-      msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to zero", store);
+      if (msg.debug()) msg.debug("integer guard variable " + varName(storePointerVar) + " set to zero", store);
     } else {
       newState = IGS_NONZERO;
-      msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to nonzero", store);
+      if (msg.debug()) msg.debug("integer guard variable " + varName(storePointerVar) + " set to nonzero", store);
     }
   } else {
     // FIXME: could add support for intguarda = intguardb, if needed
     newState = IGS_UNKNOWN;
-    msg.debug("integer guard variable " + storePointerVar->getName().str() + " set to unknown", store);
+    if (msg.debug()) msg.debug("integer guard variable " + varName(storePointerVar) + " set to unknown", store);
   }
   intGuards[storePointerVar] = newState;
 }
@@ -189,13 +189,13 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
   if (msg.debug()) {
     switch(succIndex) {
       case -1:
-        msg.debug("undecided branch on integer guard variable " + var->getName().str(), branch);
+        msg.debug("undecided branch on integer guard variable " + varName(var), branch);
         break;
       case 0:
-        msg.debug("taking true branch on integer guard variable " + var->getName().str(), branch);
+        msg.debug("taking true branch on integer guard variable " + varName(var), branch);
         break;
       case 1:
-        msg.debug("taking false branch on integer guard variable " + var->getName().str(), branch);
+        msg.debug("taking false branch on integer guard variable " + varName(var), branch);
         break;
     }
   }
@@ -226,7 +226,7 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
 //   that follows the heuristics included below
 //   these heuristics are important because the keep the state space small(er)
 
-bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction) {
+bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g) {
   if (!isSEXP(var)) {
     return false;
   }
@@ -235,6 +235,7 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function*
   unsigned nCopies = 0;
   unsigned nStoresFromArgument = 0;
   unsigned nStoresFromFunction = 0;
+  unsigned nEscapesToCalls = 0;
   for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
     User *u = *ui;
 
@@ -265,9 +266,13 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function*
         continue;
       }
       CallSite cs(cast<Value>(uu));
-      if (cs && cs.getCalledFunction() == isNullFunction) {
-        // isNull(guard);
-        nComparisons++;
+      if (cs) {
+        if (isTypeTest(cs.getCalledFunction(), g)) {
+          // isNull(guard);
+          nComparisons++;
+        } else if (cs.getCalledFunction()) {
+          nEscapesToCalls++;
+        }
         continue;
       }      
       if (StoreInst::classof(uu)) {
@@ -281,7 +286,7 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function*
       if (LoadInst::classof(v)) {
         // guard = R_NilValue;
         LoadInst *l = cast<LoadInst>(v);
-        if (l->getPointerOperand() == nilVariable) {
+        if (l->getPointerOperand() == g->nilVariable) {
           nNilAssignments++;
         }
       }
@@ -299,16 +304,16 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function*
     return false;
   } 
   
-  return nComparisons >= 2 || (nComparisons == 1 && (nNilAssignments + nCopies + nStoresFromArgument + nStoresFromFunction > 0));
+  return nComparisons >= 2 || ((nComparisons == 1 || nEscapesToCalls > 0) && (nNilAssignments + nCopies + nStoresFromArgument + nStoresFromFunction > 0));
 }
 
-bool isSEXPGuardVariable(AllocaInst* var, GlobalVariable* nilVariable, Function* isNullFunction, VarBoolCacheTy& cache) {
+bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, VarBoolCacheTy& cache) {
   auto csearch = cache.find(var);
   if (csearch != cache.end()) {
     return csearch->second;
   }
 
-  bool res = isSEXPGuardVariable(var, nilVariable, isNullFunction);
+  bool res = isSEXPGuardVariable(var, g);
   
   cache.insert({var, res});
   return res;
@@ -349,58 +354,55 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
     return;
   }
   AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-  if (!isSEXPGuardVariable(storePointerVar, g->nilVariable, g->isNullFunction, sexpGuardVarsCache)) {
+  if (!isSEXPGuardVariable(storePointerVar, g, sexpGuardVarsCache)) {
     return;
   }
   // sexpguard = ...
+
+  if (argInfos && Argument::classof(storeValueOp))  { // sexpguard = symbol_argument
+    Argument *arg = cast<Argument>(storeValueOp);
+    ArgInfoTy *ai = (*argInfos)[arg->getArgNo()];
+    if (ai && ai->isSymbol()) {
+      SEXPGuardTy newGS(SGS_SYMBOL, cast<SymbolArgInfoTy>(ai)->symbolName);
+      sexpGuards[storePointerVar] = newGS;
+      if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" +
+        cast<SymbolArgInfoTy>(ai)->symbolName + "\" from argument\n", store);
+      return;
+    }
+  }
               
   if (LoadInst::classof(storeValueOp)) {
     Value *src = cast<LoadInst>(storeValueOp)->getPointerOperand();
     if (src == g->nilVariable) {  // sexpguard = R_NilValue
-      msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to nil", store);
+      if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to nil", store);
       SEXPGuardTy newGS(SGS_NIL);
       sexpGuards[storePointerVar] = newGS;
       return;
     }
     if (AllocaInst::classof(src) && 
-        isSEXPGuardVariable(cast<AllocaInst>(src), g->nilVariable, g->isNullFunction, sexpGuardVarsCache)) { // sexpguard1 = sexpguard2
+        isSEXPGuardVariable(cast<AllocaInst>(src), g, sexpGuardVarsCache)) { // sexpguard1 = sexpguard2
 
       auto gsearch = sexpGuards.find(cast<AllocaInst>(src));
       if (gsearch == sexpGuards.end()) {
         sexpGuards.erase(storePointerVar);
-        msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown state because " +
-          cast<AllocaInst>(src)->getName().str() + " is also unknown.", store);
+        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to unknown state because " +
+          varName(cast<AllocaInst>(src)) + " is also unknown.", store);
       } else {
         sexpGuards[storePointerVar] = gsearch->second;
-        msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to state of " +
-          cast<AllocaInst>(src)->getName().str() + ", which is " + sgs_name(gsearch->second), store);
+        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to state of " +
+          varName(cast<AllocaInst>(src)) + ", which is " + sgs_name(gsearch->second), store);
       }
       return;
     }
-    
-    if (argInfos && Argument::classof(src))  { // sexpguard = symbol_argument
-      Argument *arg = cast<Argument>(src);
-      ArgInfoTy *ai = (*argInfos)[arg->getArgNo()];
-      if (ai->isSymbol()) {
-        SEXPGuardTy newGS(SGS_SYMBOL, cast<SymbolArgInfoTy>(ai)->symbolName);
-        sexpGuards[storePointerVar] = newGS;
-        msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to symbol \"" +
-          cast<SymbolArgInfoTy>(ai)->symbolName + "\" from argument\n", store);
-        return;
-      }
-      
-    }
-    
     if (symbolsMap && GlobalVariable::classof(src)) {
       auto sfind = symbolsMap->find(cast<GlobalVariable>(src));
       if (sfind != symbolsMap->end()) {
         SEXPGuardTy newGS(SGS_SYMBOL, sfind->second);
         sexpGuards[storePointerVar] = newGS;
-        msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to symbol \"" + sfind->second + "\" at assignment\n", store);
+        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + sfind->second + "\" at assignment\n", store);
         return;
       } 
     }
-      
   } else {
     CallSite acs(storeValueOp);
     if (acs && possibleAllocators) { // sexpguard = fooAlloc()
@@ -408,13 +410,145 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
       if (possibleAllocators->find(afun) != possibleAllocators->end()) {
         SEXPGuardTy newGS(SGS_NONNIL);
         sexpGuards[storePointerVar] = newGS;
-        msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to non-nill (allocated by " + afun->getName().str() + ")", store);
+        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to non-nill (allocated by " + funName(afun) + ")", store);
         return;
       }
     }
   }
   sexpGuards.erase(storePointerVar);
-  msg.debug("sexp guard variable " + storePointerVar->getName().str() + " set to unknown", store);
+  if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to unknown", store);
+}
+
+bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s, LineMessenger& msg) {
+
+  int succIndex = -1;
+    
+  // if (x == R_NilValue) ... positive == true
+  // if (x != R_NilValue) ... positive == false
+
+  if (gs != SGS_UNKNOWN) {
+    // note a symbol cannot be R_NilValue
+
+    if (positive) {       
+      // guard == R_NilValue
+      succIndex = (gs == SGS_NIL) ? 0 : 1;
+    } else {
+      // guard != R_NilValue
+      succIndex = (gs == SGS_NIL) ? 1 : 0;
+    }
+  }
+
+  if (msg.debug()) {
+    switch(succIndex) {
+      case -1:
+        msg.debug("undecided branch on sexp guard variable " + varName(guard), branch);
+        break;
+      case 0:
+        msg.debug("taking true branch on sexp guard variable " + varName(guard), branch);
+        break;
+      case 1:
+        msg.debug("taking false branch on sexp guard variable " + varName(guard), branch);
+        break;
+    }
+  }
+  if (succIndex != 1) {
+    // true branch is possible
+    {
+      StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
+      if (gs != SGS_SYMBOL) {
+        SEXPGuardTy newGS(positive ? SGS_NIL : SGS_NONNIL);
+        state->sexpGuards[guard] = newGS;
+      }
+      if (state->add()) {
+        msg.trace("added true branch on sexp guard of branch at", branch);
+      }
+    }
+  }
+  if (succIndex != 0) {
+    // false branch is possible
+    {
+      StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
+      if (gs != SGS_SYMBOL) {
+        SEXPGuardTy newGS(positive ? SGS_NONNIL : SGS_NIL);
+        state->sexpGuards[guard] = newGS;
+      }
+      if (state->add()) {
+        msg.trace("added false branch on sexp guard of branch at", branch);
+      }
+    }
+  }
+  return true;
+}
+
+
+bool handleTypeCheck(bool positive, Function *testf, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s, LineMessenger& msg, GlobalsTy* g) {
+
+  SEXPGuardState testedState = SGS_UNKNOWN;
+  if (testf == g->isSymbolFunction) {
+    testedState = SGS_SYMBOL;
+  }
+  
+  bool canBeTrue = true;
+  bool canBeFalse = true;
+
+  // SGS_NONNIL and SGS_UNKNOWN are special states
+  // SGS_NIL corresponds to a tested type and has a complement SGS_NONNIL
+  // SGS_SYMBOL correspond to tested types (and this list can be extended), but does not have the complement (SGS_NONSYMBOL)
+  
+  // handling type checks: isSymbol
+  assert(testedState == SGS_SYMBOL); // add more types here
+  
+  if (positive && gs == testedState) {
+    canBeFalse = false; // isSymbol(symbol)
+  }
+  if (positive && gs != SGS_NONNIL && gs != SGS_UNKNOWN) {
+    canBeTrue = false; // isSymbol(nonsymbol)
+  }
+  if (!positive && gs == testedState) {
+    canBeTrue = false; // !isSymbol(symbol)
+  }
+  if (!positive && gs != SGS_NONNIL && gs != SGS_UNKNOWN) {
+    canBeFalse = false; // !isSymbol(nonsymbol)
+  }
+
+  assert(canBeTrue || canBeFalse);
+  
+  int succIndex = -1;
+  if (!canBeFalse) succIndex = 0;
+  if (!canBeTrue) succIndex = 1;
+  
+  if (msg.debug()) {
+    switch(succIndex) {
+      case -1:
+        msg.debug("undecided type branch on sexp guard variable " + varName(guard), branch);
+        break;
+      case 0:
+        msg.debug("taking true type branch on sexp guard variable " + varName(guard), branch);
+        break;
+      case 1:
+        msg.debug("taking false type branch on sexp guard variable " + varName(guard), branch);
+        break;
+    }
+  }
+  if (succIndex != 1) {
+    // true branch is possible
+    {
+      StateWithGuardsTy* state = s.clone(branch->getSuccessor(0)); // FIXME: capture that something is a symbol even if we don't know which one
+      if (state->add()) {
+        msg.trace("added true type branch on sexp guard of branch at", branch);
+      }
+    }
+  }
+  if (succIndex != 0) {
+    // false branch is possible
+    {
+      StateWithGuardsTy* state = s.clone(branch->getSuccessor(1)); // FIXME: capture that something is a symbol even if we don't know which one
+      if (state->add()) {
+        msg.trace("added false type branch on sexp guard of branch at", branch);
+      }
+    }
+  }
+  return true;
 }
 
 bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy *g, ArgInfosTy* argInfos, 
@@ -431,6 +565,47 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
   if (!ci->isEquality()) {
     return false;
   }
+  if (ConstantInt::classof(ci->getOperand(0)) || ConstantInt::classof(ci->getOperand(1))) {
+    // comparison against a constant integer
+    
+    Value *op = NULL;
+    if (ConstantInt::classof(ci->getOperand(0)) && cast<ConstantInt>(ci->getOperand(0))->isZero()) {
+      op = ci->getOperand(1);
+    } else if (ConstantInt::classof(ci->getOperand(1)) && cast<ConstantInt>(ci->getOperand(1))->isZero()) {
+      op = ci->getOperand(0);
+    }
+    
+    AllocaInst *guard = NULL;
+    Function *f = NULL;
+    if (op) {
+      CallSite cs(op);
+      if (cs && isTypeTest(cs.getCalledFunction(), g)) {
+        f = cs.getCalledFunction();
+        
+        if (LoadInst::classof(cs.getArgument(0))) {
+          Value *loadOp = cast<LoadInst>(cs.getArgument(0))->getPointerOperand();
+          if (AllocaInst::classof(loadOp)) {
+            guard = cast<AllocaInst>(loadOp);
+          }
+        }
+      }
+    }
+    
+    if (!guard || !isSEXPGuardVariable(guard, g, sexpGuardVarsCache)) {
+      return false;
+    }
+  
+    std::string guardSymbolName;
+    SEXPGuardState gs = getSEXPGuardState(s.sexpGuards, guard, guardSymbolName);
+    
+    if (f == g->isNullFunction) {
+      return handleNullCheck(ci->isTrueWhenEqual(), gs, guard, branch, s, msg);  // if (isNull(x)), if (!isNull(x))
+    }
+    
+    return handleTypeCheck(ci->isTrueWhenEqual(), f, gs, guard, branch, s, msg, g);
+  }
+  
+  
   if (!LoadInst::classof(ci->getOperand(0)) || !LoadInst::classof(ci->getOperand(1))) {
     return false;
   }
@@ -448,7 +623,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     gv = cast<GlobalVariable>(lo);
   }
 
-  if (!guard || !gv || !isSEXPGuardVariable(guard, g->nilVariable, g->isNullFunction, sexpGuardVarsCache)) {
+  if (!guard || !gv || !isSEXPGuardVariable(guard, g, sexpGuardVarsCache)) {
     return false;
   }
   
@@ -457,64 +632,14 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
   int succIndex = -1;
 
   if (gv == g->nilVariable) {
-              
+
+    // handle comparisons with R_NilValue
+                  
     // if (x == R_NilValue) ...
     // if (x != R_NilValue) ...
-
-    if (gs != SGS_UNKNOWN) {
-      if (ci->isTrueWhenEqual()) {
-        // note a symbol cannot be R_NilValue
-        
-        // guard == R_NilValue
-        succIndex = (gs == SGS_NIL) ? 0 : 1;
-      } else {
-        // guard != R_NilValue
-        succIndex = (gs == SGS_NIL) ? 1 : 0;
-      }
-    }
-
-    if (msg.debug()) {
-      switch(succIndex) {
-        case -1:
-          msg.debug("undecided branch on sexp guard variable " + guard->getName().str(), branch);
-          break;
-        case 0:
-          msg.debug("taking true branch on sexp guard variable " + guard->getName().str(), branch);
-          break;
-        case 1:
-          msg.debug("taking false branch on sexp guard variable " + guard->getName().str(), branch);
-          break;
-      }
-    }
-    if (succIndex != 1) {
-      // true branch is possible
-      {
-        StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
-        if (gs != SGS_SYMBOL) {
-          SEXPGuardTy newGS(ci->isTrueWhenEqual() ? SGS_NIL : SGS_NONNIL);
-          state->sexpGuards[guard] = newGS;
-        }
-        if (state->add()) {
-          msg.trace("added true branch on sexp guard of branch at", branch);
-        }
-      }
-    }
-    if (succIndex != 0) {
-      // false branch is possible
-      {
-        StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
-        if (gs != SGS_SYMBOL) {
-          SEXPGuardTy newGS(ci->isTrueWhenEqual() ? SGS_NONNIL : SGS_NIL);
-          state->sexpGuards[guard] = newGS;
-        }
-        if (state->add()) {
-          msg.trace("added false branch on sexp guard of branch at", branch);
-        }
-      }
-    }
-    return true;
+    
+    return handleNullCheck(ci->isTrueWhenEqual(), gs, guard, branch, s, msg);
   }
-
   // handle comparisons with symbols
   
   if (!symbolsMap) {
@@ -553,13 +678,13 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
   if (msg.debug()) {
     switch(succIndex) {
       case -1:
-        msg.debug("undecided symbol branch on sexp guard variable " + guard->getName().str(), branch);
+        msg.debug("undecided symbol branch on sexp guard variable " + varName(guard), branch);
         break;
       case 0:
-        msg.debug("taking true symbol branch on sexp guard variable " + guard->getName().str(), branch);
+        msg.debug("taking true symbol branch on sexp guard variable " + varName(guard), branch);
         break;
       case 1:
-        msg.debug("taking false symbol branch on sexp guard variable " + guard->getName().str(), branch);
+        msg.debug("taking false symbol branch on sexp guard variable " + varName(guard), branch);
         break;
     }
   }

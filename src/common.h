@@ -33,21 +33,16 @@ std::string demangle(std::string name);
 bool sourceLocation(const Instruction *in, std::string& path, unsigned& line);
 std::string sourceLocation(const Instruction *in);
 std::string instructionAsString(Instruction *in);
-std::string functionName(Function *f);
+std::string funName(Function *f);
 std::string varName(AllocaInst *var);
-
-bool isSEXP(AllocaInst *var);
-bool isSEXP(Type* type);
-bool isSEXPPtr(Type *type);
-bool isSEXP(GlobalVariable *var);
-bool isInstall(Function *f);
 
 struct GlobalsTy {
   Function *protectFunction, *protectWithIndexFunction, *unprotectFunction, *unprotectPtrFunction;
   GlobalVariable *ppStackTopVariable;
   
   GlobalVariable *nilVariable;
-  Function *isNullFunction;
+  Function *isNullFunction, *isSymbolFunction, *isLogicalFunction, *isRealFunction,
+    *isComplexFunction, *isExpressionFunction, *isEnvironmentFunction, *isStringFunction;
   
   public:
     GlobalsTy(Module *m);
@@ -56,6 +51,13 @@ struct GlobalsTy {
     Function *getSpecialFunction(Module *m, std::string name);
     GlobalVariable *getSpecialVariable(Module *m, std::string name);
 };
+
+bool isSEXP(AllocaInst *var);
+bool isSEXP(Type* type);
+bool isSEXPPtr(Type *type);
+bool isSEXP(GlobalVariable *var);
+bool isInstall(Function *f);
+bool isTypeTest(Function *f, GlobalsTy* g);
 
 // from Boost
 template <class T>

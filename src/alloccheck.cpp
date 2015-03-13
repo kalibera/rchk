@@ -59,12 +59,12 @@ int main(int argc, char* argv[])
     }
   }
 
-  CalledFunctionsVectorTy possibleCAllocators;
-  CalledFunctionsVectorTy allocatingCFunctions;
+  CalledFunctionsSetTy possibleCAllocators;
+  CalledFunctionsSetTy allocatingCFunctions;
   getCalledAllocators(&cm, possibleCAllocators, allocatingCFunctions);
   
   if(1) {
-    for(CalledFunctionsVectorTy::iterator fi = possibleCAllocators.begin(), fe = possibleCAllocators.end(); fi != fe; ++fi) {
+    for(CalledFunctionsSetTy::iterator fi = possibleCAllocators.begin(), fe = possibleCAllocators.end(); fi != fe; ++fi) {
       CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
   }
 
   if(1) {
-    for(CalledFunctionsVectorTy::iterator fi = allocatingCFunctions.begin(), fe = allocatingCFunctions.end(); fi != fe; ++fi) {
+    for(CalledFunctionsSetTy::iterator fi = allocatingCFunctions.begin(), fe = allocatingCFunctions.end(); fi != fe; ++fi) {
       CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
@@ -111,8 +111,8 @@ int main(int argc, char* argv[])
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
-      bool callocator = std::find(possibleCAllocators.begin(), possibleCAllocators.end(), f) != possibleCAllocators.end();
-      bool callocating = std::find(allocatingCFunctions.begin(), allocatingCFunctions.end(), f) == allocatingCFunctions.end();
+      bool callocator = possibleCAllocators.find(f) != possibleCAllocators.end();
+      bool callocating = allocatingCFunctions.find(f) != allocatingCFunctions.end();
       bool allocator = possibleAllocators.find(f->fun) != possibleAllocators.end();
       bool allocating = allocatingFunctions.find(f->fun) != allocatingFunctions.end();
       

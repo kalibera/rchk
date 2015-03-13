@@ -138,7 +138,7 @@ std::string instructionAsString(Instruction *in) {
   return str;
 }
 
-std::string functionName(Function *f) {
+std::string funName(Function *f) {
   if (!f) {
     return "<unknown function>";
   }
@@ -193,6 +193,11 @@ bool isInstall(Function *f) {
     f->getName() == "Rf_installChar" || f->getName() == "Rf_installS3Signature");
 }
 
+bool isTypeTest(Function *f, GlobalsTy* g) {
+  return f == g->isNullFunction || f == g->isSymbolFunction || f == g->isLogicalFunction || f == g->isRealFunction ||
+    f == g->isComplexFunction || f == g->isExpressionFunction || f == g->isEnvironmentFunction || f == g->isStringFunction;
+}
+
 GlobalsTy::GlobalsTy(Module *m) {
   protectFunction = getSpecialFunction(m, "Rf_protect");
   protectWithIndexFunction = getSpecialFunction(m, "R_ProtectWithIndex");
@@ -200,7 +205,16 @@ GlobalsTy::GlobalsTy(Module *m) {
   unprotectPtrFunction = getSpecialFunction(m, "Rf_unprotect_ptr");
   ppStackTopVariable = getSpecialVariable(m, "R_PPStackTop");
   nilVariable = getSpecialVariable(m, "R_NilValue");
+  
+    // mutually exclusive test functions
   isNullFunction = getSpecialFunction(m, "Rf_isNull");
+  isSymbolFunction = getSpecialFunction(m, "Rf_isSymbol");
+  isLogicalFunction = getSpecialFunction(m, "Rf_isLogical");
+  isRealFunction = getSpecialFunction(m, "Rf_isReal");
+  isComplexFunction = getSpecialFunction(m, "Rf_isComplex");
+  isExpressionFunction = getSpecialFunction(m, "Rf_isExpression");
+  isEnvironmentFunction = getSpecialFunction(m, "Rf_isEnvironment");
+  isStringFunction = getSpecialFunction(m, "Rf_isString");
 }
   
 Function* GlobalsTy::getSpecialFunction(Module *m, std::string name) {
