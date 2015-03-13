@@ -540,20 +540,29 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
 }
 
 typedef std::vector<std::vector<bool>> BoolMatrixTy;
+typedef std::vector<unsigned> AdjacencyListRow;
+typedef std::vector<AdjacencyListRow> AdjacencyListTy;
 
-void buildClosure(BoolMatrixTy& m, unsigned n) {
+void buildClosure(BoolMatrixTy& mat, AdjacencyListTy& list, unsigned n) {
 
   bool added = true;
   while(added) {
     added = false;
     
     for(unsigned i = 0; i < n; i++) {
-      for(unsigned j = 0; j < n; j++) {
-        if (m[i][j]) continue;
-        
-        for(unsigned k = 0; k < n; k++) {
-          if (m[i][k] && m[k][j]) {
-            m[i][j] = true;
+      for(unsigned jidx = 0; jidx < list[i].size(); jidx++) {
+        unsigned j = list[i][jidx];
+        if (i == j) {
+          continue;
+        }
+        for(unsigned kidx = 0; kidx < list[j].size(); kidx++) {
+          unsigned k = list[j][kidx];
+          if (j == k) {
+            continue;
+          }
+          if (!mat[i][k]) {
+            mat[i][k] = true;
+            list[i].push_back(k);
             added = true;
           }
         }
@@ -576,8 +585,10 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCA
   
   unsigned nfuncs = cm->getCalledFunctions()->size();
 
-  BoolMatrixTy calls(nfuncs, std::vector<bool>(nfuncs));  // calls[i][j] - function i calls function j
-  BoolMatrixTy wraps(nfuncs, std::vector<bool>(nfuncs));  // weaps[i][j] - function i wraps function j
+  BoolMatrixTy callsMat(nfuncs, std::vector<bool>(nfuncs));  // calls[i][j] - function i calls function j
+  AdjacencyListTy callsList(nfuncs, AdjacencyListRow()); // calls[i] - list of functions called by i
+  BoolMatrixTy wrapsMat(nfuncs, std::vector<bool>(nfuncs));  // wraps[i][j] - function i wraps function j
+  AdjacencyListTy wrapsList(nfuncs, AdjacencyListRow()); // wraps[i] - list of functions wrapped by i
   
   // prepare matrix of direct calls/wraps
   for(CalledFunctionsVectorTy::iterator fi = cm->getCalledFunctions()->begin(), fe = cm->getCalledFunctions()->end(); fi != fe; ++fi) {
@@ -608,28 +619,30 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsVectorTy& possibleCA
     
     for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
       CalledFunctionTy *cf = *cfi;
-      calls[f->idx][cf->idx] = true;
+      callsMat[f->idx][cf->idx] = true;
+      callsList[f->idx].push_back(cf->idx);
     }
 
     for(CalledFunctionsOrderedSetTy::iterator wfi = wrapped.begin(), wfe = wrapped.end(); wfi != wfe; ++wfi) {
       CalledFunctionTy *wf = *wfi;
-      wraps[f->idx][wf->idx] = true;
+      wrapsMat[f->idx][wf->idx] = true;
+      wrapsList[f->idx].push_back(wf->idx);
     }    
   }
   
   // calculate transitive closure
-    // FIXME: should use the list of neighbors as well so speed this up
-  buildClosure(calls, nfuncs);
-  buildClosure(wraps, nfuncs);
+
+  buildClosure(callsMat, callsList, nfuncs);
+  buildClosure(wrapsMat, wrapsList, nfuncs);
   
   // fill in results
   
   unsigned gcidx = cm->getCalledGCFunction()->idx;
   for(unsigned i = 0; i < nfuncs; i++) {
-    if (calls[i][gcidx]) {
+    if (callsMat[i][gcidx]) {
       allocatingCFunctions.push_back(cm->getCalledFunction(i));
     }
-    if (wraps[i][gcidx]) {
+    if (wrapsMat[i][gcidx]) {
       possibleCAllocators.push_back(cm->getCalledFunction(i));
     }    
   }
