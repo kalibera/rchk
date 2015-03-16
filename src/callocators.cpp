@@ -14,6 +14,8 @@
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 
+#include <llvm/Support/InstIterator.h>
+
 using namespace llvm;
 
   // FIXME: could reduce copy-paste vs. bcheck?
@@ -254,9 +256,10 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = fi;
 
+    getCalledFunction(fun); // make sure each function has a context-function counterpart
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
       User *u = *ui;
-      getCalledFunction(cast<Value>(u)); // FIXME: this only gets contexts that are constant
+      getCalledFunction(cast<Value>(u)); // NOTE: this only gets contexts that are constant, more are gotten during allocators computation
     }
   }  
   gcFunction = getCalledFunction(getGCFunction(m));
@@ -517,7 +520,26 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       }
       
       if (doneSet.size() > MAX_STATES) {
-        msg.error("too many states (abstraction error?)", s.bb->begin());
+        msg.error("too many states (abstraction error?) - returning path-insensitive allocation info", s.bb->begin());
+        
+        // NOTE: some callsites may have already been registered to more specific called functions
+        
+        for(inst_iterator ini = inst_begin(*f->fun), ine = inst_end(*f->fun); ini != ine; ++ini) {
+          Instruction *in = &*ini;
+          CallSite cs(in);
+          CalledFunctionTy *ct = cm->getCalledFunction(in, true);
+          if (cs) {
+            assert(ct);
+
+            Function *t = cs.getCalledFunction();
+            if (cm->isAllocating(t)) {
+              called.insert(ct);
+            }
+            if (cm->isPossibleAllocator(t)) {
+              wrapped.insert(ct);
+            }
+          }
+        }
         return;
       }
       
