@@ -85,6 +85,8 @@ typedef std::vector<CalledFunctionTy*> CalledFunctionsVectorTy;
 struct SEXPGuardTy;
 typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
+typedef std::map<Value*, CalledFunctionsSetTy> CallSiteTargetsTy;
+
 class CalledModuleTy {
   CalledFunctionsTableTy calledFunctionsTable; // intern table
   CalledFunctionsVectorTy calledFunctionsVector; // for mapping idx -> function
@@ -99,6 +101,7 @@ class CalledModuleTy {
   FunctionsSetTy* allocatingFunctions;
   CalledFunctionsSetTy* possibleCAllocators;
   CalledFunctionsSetTy* allocatingCFunctions;
+  CallSiteTargetsTy callSiteTargets; // maps  call instruction -> set of target functions
   
   CalledFunctionTy *gcFunction;
 
@@ -115,13 +118,14 @@ class CalledModuleTy {
     static CalledModuleTy* create(Module *m);
     static void release(CalledModuleTy *cm);
       
-    CalledFunctionTy* getCalledFunction(Value *inst);
-    CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards); // takes context from guards
+    CalledFunctionTy* getCalledFunction(Value *inst, bool registerCallSite = false);
+    CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards, bool registerCallSite); // takes context from guards
     CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
     CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsVector.at(idx); };
     CalledFunctionsVectorTy* getCalledFunctions() { return &calledFunctionsVector; }
     CalledFunctionsSetTy* getPossibleCAllocators() { computeCalledAllocators(); return possibleCAllocators; }
     CalledFunctionsSetTy* getAllocatingCFunctions() { computeCalledAllocators(); return allocatingCFunctions; }
+    CallSiteTargetsTy* getCallSiteTargets() { computeCalledAllocators(); return &callSiteTargets; }
     
     virtual ~CalledModuleTy();
     

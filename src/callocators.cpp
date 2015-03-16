@@ -172,11 +172,11 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Function *f) {
   return intern(calledFunction);
 }
 
-CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst) {
-  return getCalledFunction(inst, NULL);
+CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, bool registerCallSite) {
+  return getCalledFunction(inst, NULL, registerCallSite);
 }
 
-CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards) {
+CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards, bool registerCallSite) {
   // FIXME: this is quite inefficient, does a lot of allocation
   
   CallSite cs (inst);
@@ -228,13 +228,28 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *s
   }
       
   CalledFunctionTy calledFunction(fun, intern(argInfo), this);
-  return intern(calledFunction);
+  CalledFunctionTy* cf = intern(calledFunction);
+  
+  if (registerCallSite) {
+    auto csearch = callSiteTargets.find(inst);
+    if (csearch == callSiteTargets.end()) {
+      CalledFunctionsSetTy newSet;
+      newSet.insert(cf);
+      callSiteTargets.insert({inst, newSet});
+    } else {
+      CalledFunctionsSetTy& existingSet = csearch->second;
+      existingSet.insert(cf);
+    }
+  }
+  
+  return cf;
 }
 
 CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSetTy* errorFunctions, GlobalsTy* globals, 
   FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions):
   
-  m(m), symbolsMap(symbolsMap), errorFunctions(errorFunctions), globals(globals), possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions) {
+  m(m), symbolsMap(symbolsMap), errorFunctions(errorFunctions), globals(globals), possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions),
+  callSiteTargets() {
 
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = fi;
@@ -544,7 +559,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
                 }
                 continue;
               }
-              CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards);
+              CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
               if (tgt && cm->isPossibleAllocator(tgt->fun)) {
                 // storing a value gotten from a (possibly allocating) function
                 if (msg.debug()) msg.debug("adding origin " + tgt->getName() + " of " + varName(dst), in); 
@@ -564,7 +579,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         }
         
         // handle calls
-        CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards);
+        CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards, true);
         if (tgt && cm->isAllocating(tgt->fun)) {
           msg.debug("recording call to " + tgt->getName(), in); 
           s.called.insert(tgt);
@@ -600,7 +615,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
             }
           }
-          CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards);
+          CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards, true);
           if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
             msg.debug("collecting immediate origin " + tgt->getName() + " at function return", t); 
            wrapped.insert(tgt);
@@ -712,14 +727,14 @@ void CalledModuleTy::computeCalledAllocators() {
     CalledFunctionsOrderedSetTy wrapped;
     getCalledAndWrappedFunctions(f, msg, called, wrapped);
     
-    if (0 && called.size()) {
+    if (DEBUG && called.size()) {
       errs() << "\nDetected (possible allocators) called by function " << f->getName() << ":\n";
       for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
         CalledFunctionTy *cf = *cfi;
         errs() << "   " << cf->getName() << "\n";
       }
     }
-    if (1 && wrapped.size()) {
+    if (DEBUG && wrapped.size()) {
       errs() << "\nDetected (possible allocators) wrapped by function " << f->getName() << ":\n";
       for(CalledFunctionsOrderedSetTy::iterator cfi = wrapped.begin(), cfe = wrapped.end(); cfi != cfe; ++cfi) {
         CalledFunctionTy *cf = *cfi;

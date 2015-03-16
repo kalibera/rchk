@@ -11,7 +11,6 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 
-#include <llvm/Support/InstIterator.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include "common.h"
@@ -40,7 +39,7 @@ int main(int argc, char* argv[])
       CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
-      }      
+      }
       errs() << "  called function " << f->getName() << "\n";
     }
   }
