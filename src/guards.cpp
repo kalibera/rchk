@@ -1,5 +1,6 @@
 
 #include "guards.h"
+#include "patterns.h"
 
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
@@ -236,6 +237,7 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g) {
   unsigned nStoresFromArgument = 0;
   unsigned nStoresFromFunction = 0;
   unsigned nEscapesToCalls = 0;
+  unsigned nGEPs = 0;
   for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
     User *u = *ui;
 
@@ -279,6 +281,10 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g) {
         nCopies++;
         continue;
       }
+      if (GetElementPtrInst::classof(uu)) {
+        nGEPs++; // this almost always means a type check, such as isNull(x) or isSymbol(x)
+        continue;
+      }
       continue;
     }
     if (StoreInst::classof(u)) {
@@ -304,7 +310,7 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g) {
     return false;
   } 
   
-  return nComparisons >= 2 || ((nComparisons == 1 || nEscapesToCalls > 0) && (nNilAssignments + nCopies + nStoresFromArgument + nStoresFromFunction > 0));
+  return nComparisons >= 2 || ((nComparisons == 1 || nGEPs > 0 || nEscapesToCalls > 0) && (nNilAssignments + nCopies + nStoresFromArgument + nStoresFromFunction > 0));
 }
 
 bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, VarBoolCacheTy& cache) {
@@ -336,6 +342,15 @@ SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var, std:
     return SGS_UNKNOWN;
   } else {
     symbolName = gsearch->second.symbolName;
+    return gsearch->second.state;
+  }
+}
+
+SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var) {
+  auto gsearch = sexpGuards.find(var);
+  if (gsearch == sexpGuards.end()) {
+    return SGS_UNKNOWN;
+  } else {
     return gsearch->second.state;
   }
 }
@@ -480,37 +495,49 @@ bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, Branch
   return true;
 }
 
-
-bool handleTypeCheck(bool positive, Function *testf, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s, LineMessenger& msg, GlobalsTy* g) {
-
-  SEXPGuardState testedState = SGS_UNKNOWN;
-  if (testf == g->isSymbolFunction) {
-    testedState = SGS_SYMBOL;
-  }
-  
-  bool canBeTrue = true;
-  bool canBeFalse = true;
+bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s, LineMessenger& msg, GlobalsTy* g) {
 
   // SGS_NONNIL and SGS_UNKNOWN are special states
   // SGS_NIL corresponds to a tested type and has a complement SGS_NONNIL
   // SGS_SYMBOL correspond to tested types (and this list can be extended), but does not have the complement (SGS_NONSYMBOL)
-  
-  // handling type checks: isSymbol
-  assert(testedState == SGS_SYMBOL); // add more types here
-  
-  if (positive && gs == testedState) {
-    canBeFalse = false; // isSymbol(symbol)
-  }
-  if (positive && gs != SGS_NONNIL && gs != SGS_UNKNOWN) {
-    canBeTrue = false; // isSymbol(nonsymbol)
-  }
-  if (!positive && gs == testedState) {
-    canBeTrue = false; // !isSymbol(symbol)
-  }
-  if (!positive && gs != SGS_NONNIL && gs != SGS_UNKNOWN) {
-    canBeFalse = false; // !isSymbol(nonsymbol)
+
+  if (testedType == RT_UNKNOWN) { // not a type check, or one that we do not support
+    return false;
   }
 
+  if (testedType == RT_NIL) {
+    return handleNullCheck(positive, gs, guard, branch, s, msg);
+  }
+  
+  SEXPGuardState testedState = SGS_UNKNOWN;
+  if (testedType == RT_SYMBOL) {
+    testedState = SGS_SYMBOL;
+  }
+
+  assert(testedState != SGS_NIL && testedState != SGS_NONNIL);
+  // testedState == SGS_UNKNOWN means testing for a known, specific, but unsupported state (unsupported type)
+  
+  bool canBeTrue = true;
+  bool canBeFalse = true;
+  
+  if (positive) {
+    if (gs == testedState && gs != SGS_UNKNOWN) {
+      canBeFalse = false; // isSymbol(symbol)
+    } 
+    if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL) {  // gs == SGS_NONNIL can be any type...
+      canBeTrue = false; // isSymbol(nonsymbol)
+    }
+  }
+  
+  if (!positive) {
+    if (gs == testedState && gs != SGS_UNKNOWN) {
+      canBeTrue = false; // !isSymbol(symbol)
+    }
+    if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL) {
+      canBeFalse = false; // !isSymbol(nonsymbol)
+    }
+  }
+  
   assert(canBeTrue || canBeFalse);
   
   int succIndex = -1;
@@ -548,7 +575,8 @@ bool handleTypeCheck(bool positive, Function *testf, SEXPGuardState gs, AllocaIn
       }
     }
   }
-  return true;
+  return true;  
+  
 }
 
 bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy *g, ArgInfosTy* argInfos, 
@@ -561,13 +589,23 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
   if (!branch->isConditional() || !CmpInst::classof(branch->getCondition())) {
     return false;
   }
+  
+  // handle (inlined) type checks
+  bool tcPositive;
+  AllocaInst* tcVar;
+  unsigned tcType;
+  if (isTypeCheck(branch->getCondition(), tcPositive, tcVar, tcType) && isSEXPGuardVariable(tcVar, g, sexpGuardVarsCache)) {
+    return handleTypeCheck(tcPositive, tcType, getSEXPGuardState(s.sexpGuards, tcVar), tcVar, branch, s, msg, g);
+  }
+  
   CmpInst* ci = cast<CmpInst>(branch->getCondition());
   if (!ci->isEquality()) {
     return false;
   }
   if (ConstantInt::classof(ci->getOperand(0)) || ConstantInt::classof(ci->getOperand(1))) {
+    // handle non-inlined type check
+   
     // comparison against a constant integer
-    
     Value *op = NULL;
     if (ConstantInt::classof(ci->getOperand(0)) && cast<ConstantInt>(ci->getOperand(0))->isZero()) {
       op = ci->getOperand(1);
@@ -577,10 +615,12 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     
     AllocaInst *guard = NULL;
     Function *f = NULL;
+    SEXPType tcType;
     if (op) {
       CallSite cs(op);
-      if (cs && isTypeTest(cs.getCalledFunction(), g)) {
+      if (cs) {
         f = cs.getCalledFunction();
+        tcType = g->getTypeForTypeTest(cs.getCalledFunction());
         
         if (LoadInst::classof(cs.getArgument(0))) {
           Value *loadOp = cast<LoadInst>(cs.getArgument(0))->getPointerOperand();
@@ -591,18 +631,12 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
       }
     }
     
-    if (!guard || !isSEXPGuardVariable(guard, g, sexpGuardVarsCache)) {
+    if (tcType == RT_UNKNOWN || !guard || !isSEXPGuardVariable(guard, g, sexpGuardVarsCache)) {
       return false;
     }
-  
-    std::string guardSymbolName;
-    SEXPGuardState gs = getSEXPGuardState(s.sexpGuards, guard, guardSymbolName);
+    SEXPGuardState gs = getSEXPGuardState(s.sexpGuards, guard);
     
-    if (f == g->isNullFunction) {
-      return handleNullCheck(ci->isTrueWhenEqual(), gs, guard, branch, s, msg);  // if (isNull(x)), if (!isNull(x))
-    }
-    
-    return handleTypeCheck(ci->isTrueWhenEqual(), f, gs, guard, branch, s, msg, g);
+    return handleTypeCheck(ci->isTrueWhenEqual(), tcType, gs, guard, branch, s, msg, g);
   }
   
   

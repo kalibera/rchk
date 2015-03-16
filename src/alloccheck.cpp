@@ -83,7 +83,7 @@ int main(int argc, char* argv[])
     }
   }
 
-  if(1) {
+  if(0) {
     for(FunctionsSetTy::iterator fi = possibleAllocators.begin(), fe = possibleAllocators.end(); fi != fe; ++fi) {
       Function *f = *fi;
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
@@ -94,7 +94,7 @@ int main(int argc, char* argv[])
   }
   
 
-  if(1) {
+  if(0) {
     for(FunctionsSetTy::iterator fi = allocatingFunctions.begin(), fe = allocatingFunctions.end(); fi != fe; ++fi) {
       Function *f = *fi;
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {

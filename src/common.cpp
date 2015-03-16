@@ -198,7 +198,16 @@ bool isTypeTest(Function *f, GlobalsTy* g) {
     f == g->isComplexFunction || f == g->isExpressionFunction || f == g->isEnvironmentFunction || f == g->isStringFunction;
 }
 
-GlobalsTy::GlobalsTy(Module *m) {
+
+SEXPType GlobalsTy::getTypeForTypeTest(Function *f) {
+  auto tsearch = typesMap.find(f);
+  if (tsearch != typesMap.end()) {
+    return tsearch->second;
+  }
+  return RT_UNKNOWN;
+}
+
+GlobalsTy::GlobalsTy(Module *m) : typesMap() {
   protectFunction = getSpecialFunction(m, "Rf_protect");
   protectWithIndexFunction = getSpecialFunction(m, "R_ProtectWithIndex");
   unprotectFunction = getSpecialFunction(m, "Rf_unprotect");
@@ -215,6 +224,15 @@ GlobalsTy::GlobalsTy(Module *m) {
   isExpressionFunction = getSpecialFunction(m, "Rf_isExpression");
   isEnvironmentFunction = getSpecialFunction(m, "Rf_isEnvironment");
   isStringFunction = getSpecialFunction(m, "Rf_isString");
+  
+  typesMap.insert({isNullFunction, RT_NIL});
+  typesMap.insert({isSymbolFunction, RT_SYMBOL});
+  typesMap.insert({isLogicalFunction, RT_LOGICAL});
+  typesMap.insert({isRealFunction, RT_REAL});
+  typesMap.insert({isComplexFunction, RT_COMPLEX});
+  typesMap.insert({isExpressionFunction, RT_EXPRESSION});
+  typesMap.insert({isEnvironmentFunction, RT_ENVIRONMENT});
+  typesMap.insert({isStringFunction, RT_STRING});
 }
   
 Function* GlobalsTy::getSpecialFunction(Module *m, std::string name) {

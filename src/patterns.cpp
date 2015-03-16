@@ -25,8 +25,6 @@ bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) 
     return false;
   }
   
-  errs() << "HEREHERE" << *ci << " of " << *ci->getOperand(0) << " AND " << *ci->getOperand(1) << "\n";
-  
   positive = ci->isTrueWhenEqual();
   
   ConstantInt* ctype;
@@ -83,7 +81,7 @@ bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) 
     return false;
   }
   
-  Value *varv = cast<LoadInst>(gep->getPointerOperand());
+  Value *varv = cast<LoadInst>(gep->getPointerOperand())->getPointerOperand();
   if (!AllocaInst::classof(varv)) {
     return false;
   }

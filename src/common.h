@@ -36,6 +36,37 @@ std::string instructionAsString(Instruction *in);
 std::string funName(Function *f);
 std::string varName(AllocaInst *var);
 
+enum SEXPType {
+  RT_NIL = 0,
+  RT_SYMBOL = 1,
+  RT_LIST = 2,
+  RT_CLOSURE = 3,
+  RT_ENVIRONMENT = 4,
+  RT_PROMISE = 5,
+  RT_LANGUAGE = 6,
+  RT_SPECIAL = 7,
+  RT_BUILTIN = 8,
+  RT_CHAR = 9,
+  RT_LOGICAL = 10,
+  RT_INT = 13,
+  RT_REAL = 14,
+  RT_COMPLEX = 15,
+  RT_STRING = 16,
+  RT_DOT = 17,
+  RT_ANY = 18,
+  RT_VECTOR = 19,
+  RT_EXPRESSION = 20,
+  RT_BYTECODE = 21,
+  RT_EXTPTR = 22,
+  RT_WEAKREF = 23,
+  RT_RAW = 24,
+  RT_S4 = 25,
+  
+  RT_UNKNOWN = -1  // not really an R type
+};
+
+typedef std::map<Function*, SEXPType> TypeNamesMapTy;
+
 struct GlobalsTy {
   Function *protectFunction, *protectWithIndexFunction, *unprotectFunction, *unprotectPtrFunction;
   GlobalVariable *ppStackTopVariable;
@@ -44,8 +75,11 @@ struct GlobalsTy {
   Function *isNullFunction, *isSymbolFunction, *isLogicalFunction, *isRealFunction,
     *isComplexFunction, *isExpressionFunction, *isEnvironmentFunction, *isStringFunction;
   
+  TypeNamesMapTy typesMap;
+  
   public:
     GlobalsTy(Module *m);
+    SEXPType getTypeForTypeTest(Function *f);
   
   private:
     Function *getSpecialFunction(Module *m, std::string name);
@@ -57,8 +91,9 @@ bool isSEXP(Type* type);
 bool isSEXPPtr(Type *type);
 bool isSEXP(GlobalVariable *var);
 bool isInstall(Function *f);
-bool isTypeTest(Function *f, GlobalsTy* g);
 
+bool isTypeTest(Function *f, GlobalsTy* g);
+  
 // from Boost
 template <class T>
 inline void hash_combine(std::size_t& seed, const T& v) {
