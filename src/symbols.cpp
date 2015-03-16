@@ -52,7 +52,7 @@ bool isInstallConstantCall(Value *inst, std::string& symbolName) {
   return true;   
 }
 
-void findSymbols(Module *m, GlobalVarsSetTy& symbols, SymbolsMapTy* symbolsMap) {
+void findSymbols(Module *m, SymbolsMapTy* symbolsMap) {
 
   for(Module::global_iterator gi = m->global_begin(), ge = m->global_end(); gi != ge ; ++gi) {
     GlobalVariable *gv = gi;
@@ -91,10 +91,7 @@ void findSymbols(Module *m, GlobalVarsSetTy& symbols, SymbolsMapTy* symbolsMap) 
       }
     }
     if (foundInstall) {
-      symbols.insert(gv);
-      if (symbolsMap) {
-        symbolsMap->insert({gv, symbolName});
-      }
+      symbolsMap->insert({gv, symbolName});
     }
     cannot_be_symbol:
       ;    

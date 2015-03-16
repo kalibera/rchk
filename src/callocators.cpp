@@ -245,6 +245,10 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
     }
   }  
   gcFunction = getCalledFunction(getGCFunction(m));
+  
+    // only compute on demand - it takes a bit of time
+  possibleCAllocators = NULL;
+  allocatingCFunctions = NULL;
 }
 
 CalledModuleTy::~CalledModuleTy() {
@@ -258,6 +262,39 @@ CalledModuleTy::~CalledModuleTy() {
     ArgInfosTy *a = *ai;
     delete a;
   }
+  if (possibleCAllocators) {
+    delete possibleCAllocators;
+  }
+  if (allocatingCFunctions) {
+    delete allocatingCFunctions;
+  }
+}
+
+CalledModuleTy* CalledModuleTy::create(Module *m) {
+  SymbolsMapTy *symbolsMap = new SymbolsMapTy();
+  findSymbols(m, symbolsMap);
+
+  FunctionsSetTy *errorFunctions = new FunctionsSetTy();
+  findErrorFunctions(m, *errorFunctions);
+  
+  GlobalsTy *globals = new GlobalsTy(m);
+  
+  FunctionsSetTy *possibleAllocators = new FunctionsSetTy();
+  findPossibleAllocators(m, *possibleAllocators);
+
+  FunctionsSetTy *allocatingFunctions = new FunctionsSetTy();
+  findAllocatingFunctions(m, *allocatingFunctions);
+      
+  return new CalledModuleTy(m, symbolsMap, errorFunctions, globals, possibleAllocators, allocatingFunctions);
+}
+
+void CalledModuleTy::release(CalledModuleTy *cm) {
+  delete cm->getAllocatingFunctions();
+  delete cm->getPossibleAllocators();
+  delete cm->getGlobals();
+  delete cm->getErrorFunctions();
+  delete cm->getSymbolsMap();
+  delete cm;
 }
 
 typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy> VarOriginsTy;
@@ -596,11 +633,11 @@ typedef std::vector<std::vector<bool>> BoolMatrixTy;
 typedef std::vector<unsigned> AdjacencyListRow;
 typedef std::vector<AdjacencyListRow> AdjacencyListTy;
 
-void resize(AdjacencyListTy& list, unsigned n) {
+static void resize(AdjacencyListTy& list, unsigned n) {
   list.resize(n);
 }
 
-void resize(BoolMatrixTy& matrix, unsigned n) {
+static void resize(BoolMatrixTy& matrix, unsigned n) {
   unsigned oldn = matrix.size();
   if (n <= oldn) {
     return;
@@ -611,7 +648,7 @@ void resize(BoolMatrixTy& matrix, unsigned n) {
   }
 }
 
-void buildClosure(BoolMatrixTy& mat, AdjacencyListTy& list, unsigned n) {
+static void buildClosure(BoolMatrixTy& mat, AdjacencyListTy& list, unsigned n) {
 
   bool added = true;
   while(added) {
@@ -639,8 +676,7 @@ void buildClosure(BoolMatrixTy& mat, AdjacencyListTy& list, unsigned n) {
   }
 }
 
-  // FIXME: should return unordered sets instead of vectors (and/or remember the result in CalledFunctionTy)
-void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllocators, CalledFunctionsSetTy& allocatingCFunctions) {
+void CalledModuleTy::computeCalledAllocators() {
 
   // find calls and variable origins for each called function
   // then create a "callgraph" out of these
@@ -649,22 +685,25 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllo
   // for performance, restrict variable origins to possible allocators
   // and restrict calls to possibly allocating functions
   
-  LineMessenger msg(cm->getModule()->getContext(), DEBUG, TRACE, UNIQUE_MSG);
+  if (possibleCAllocators && allocatingCFunctions) {
+    return;
+  }
   
-  unsigned nfuncs = cm->getCalledFunctions()->size(); // NOTE: nfuncs can increase during the checking
+  possibleCAllocators = new CalledFunctionsSetTy();
+  allocatingCFunctions = new CalledFunctionsSetTy();
+  
+  LineMessenger msg(m->getContext(), DEBUG, TRACE, UNIQUE_MSG);
+  
+  unsigned nfuncs = calledFunctionsVector.size(); // NOTE: nfuncs can increase during the checking
 
   BoolMatrixTy callsMat(nfuncs, std::vector<bool>(nfuncs));  // calls[i][j] - function i calls function j
   AdjacencyListTy callsList(nfuncs, AdjacencyListRow()); // calls[i] - list of functions called by i
   BoolMatrixTy wrapsMat(nfuncs, std::vector<bool>(nfuncs));  // wraps[i][j] - function i wraps function j
   AdjacencyListTy wrapsList(nfuncs, AdjacencyListRow()); // wraps[i] - list of functions wrapped by i
   
-  // prepare matrix of direct calls/wraps
-//  for(CalledFunctionsVectorTy::iterator fi = cm->getCalledFunctions()->begin(), fe = cm->getCalledFunctions()->end(); fi != fe; ++fi) {
-//    CalledFunctionTy *f = *fi;
+  for(unsigned i = 0; i < calledFunctionsVector.size(); i++) {
 
-  for(unsigned i = 0; i < cm->getCalledFunctions()->size(); i++) {
-
-    CalledFunctionTy *f = (*cm->getCalledFunctions())[i];
+    CalledFunctionTy *f = calledFunctionsVector[i];
     if (!f->fun || !f->fun->size()) {
       continue;
     }
@@ -688,7 +727,7 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllo
       }
     }
     
-    nfuncs = cm->getCalledFunctions()->size(); // get the current size
+    nfuncs = calledFunctionsVector.size(); // get the current size
     resize(callsList, nfuncs);
     resize(wrapsList, nfuncs);
     resize(callsMat, nfuncs);
@@ -714,15 +753,15 @@ void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllo
   
   // fill in results
   
-  unsigned gcidx = cm->getCalledGCFunction()->idx;
+  unsigned gcidx = gcFunction->idx;
   for(unsigned i = 0; i < nfuncs; i++) {
     if (callsMat[i][gcidx]) {
-      allocatingCFunctions.insert(cm->getCalledFunction(i));
+      allocatingCFunctions->insert(getCalledFunction(i));
     }
     if (wrapsMat[i][gcidx]) {
-      possibleCAllocators.insert(cm->getCalledFunction(i));
+      possibleCAllocators->insert(getCalledFunction(i));
     }    
   }
-  allocatingCFunctions.insert(cm->getCalledGCFunction());
-  possibleCAllocators.insert(cm->getCalledGCFunction());
+  allocatingCFunctions->insert(gcFunction);
+  possibleCAllocators->insert(gcFunction);
 }

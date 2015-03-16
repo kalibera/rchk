@@ -11,6 +11,6 @@ using namespace llvm;
 typedef std::unordered_map<GlobalVariable*, std::string> SymbolsMapTy;
 
 bool isInstallConstantCall(Value *inst, std::string& symbolName);
-void findSymbols(Module *m, GlobalVarsSetTy& symbols, SymbolsMapTy* symbolsMap = NULL);
+void findSymbols(Module *m, SymbolsMapTy* symbolsMap = NULL);
 
 #endif

@@ -25,28 +25,14 @@ using namespace llvm;
 int main(int argc, char* argv[])
 {
   LLVMContext context;
+
   FunctionsOrderedSetTy functionsOfInterest;
-  
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  CalledModuleTy *cm = CalledModuleTy::create(m);
 
-  // so far just a test for called allocators/called functions
-  SymbolsMapTy symbolsMap;
-  GlobalVarsSetTy symbolsSet;
-  findSymbols(m, symbolsSet, &symbolsMap);
-
-  FunctionsSetTy errorFunctions;
-  findErrorFunctions(m, errorFunctions);
-  
-  GlobalsTy globals(m);
-  
-  FunctionsSetTy possibleAllocators;
-  findPossibleAllocators(m, possibleAllocators);
-
-  FunctionsSetTy allocatingFunctions;
-  findAllocatingFunctions(m, allocatingFunctions);
-      
-  CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &globals, &possibleAllocators, &allocatingFunctions);
-  CalledFunctionsVectorTy* calledFunctions = cm.getCalledFunctions();
+  FunctionsSetTy *possibleAllocators = cm->getPossibleAllocators();
+  FunctionsSetTy *allocatingFunctions = cm->getAllocatingFunctions();
+  CalledFunctionsVectorTy* calledFunctions = cm->getCalledFunctions();
 
   if (0) {  
     errs() << "Detected called functions: \n";
@@ -59,12 +45,11 @@ int main(int argc, char* argv[])
     }
   }
 
-  CalledFunctionsSetTy possibleCAllocators;
-  CalledFunctionsSetTy allocatingCFunctions;
-  getCalledAllocators(&cm, possibleCAllocators, allocatingCFunctions);
+  CalledFunctionsSetTy *possibleCAllocators = cm->getPossibleCAllocators();
+  CalledFunctionsSetTy *allocatingCFunctions = cm->getAllocatingCFunctions();
   
   if(1) {
-    for(CalledFunctionsSetTy::iterator fi = possibleCAllocators.begin(), fe = possibleCAllocators.end(); fi != fe; ++fi) {
+    for(CalledFunctionsSetTy::iterator fi = possibleCAllocators->begin(), fe = possibleCAllocators->end(); fi != fe; ++fi) {
       CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
@@ -74,7 +59,7 @@ int main(int argc, char* argv[])
   }
 
   if(1) {
-    for(CalledFunctionsSetTy::iterator fi = allocatingCFunctions.begin(), fe = allocatingCFunctions.end(); fi != fe; ++fi) {
+    for(CalledFunctionsSetTy::iterator fi = allocatingCFunctions->begin(), fe = allocatingCFunctions->end(); fi != fe; ++fi) {
       CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
@@ -84,7 +69,7 @@ int main(int argc, char* argv[])
   }
 
   if(0) {
-    for(FunctionsSetTy::iterator fi = possibleAllocators.begin(), fe = possibleAllocators.end(); fi != fe; ++fi) {
+    for(FunctionsSetTy::iterator fi = possibleAllocators->begin(), fe = possibleAllocators->end(); fi != fe; ++fi) {
       Function *f = *fi;
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
         continue;
@@ -95,7 +80,7 @@ int main(int argc, char* argv[])
   
 
   if(0) {
-    for(FunctionsSetTy::iterator fi = allocatingFunctions.begin(), fe = allocatingFunctions.end(); fi != fe; ++fi) {
+    for(FunctionsSetTy::iterator fi = allocatingFunctions->begin(), fe = allocatingFunctions->end(); fi != fe; ++fi) {
       Function *f = *fi;
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
         continue;
@@ -111,10 +96,10 @@ int main(int argc, char* argv[])
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
-      bool callocator = possibleCAllocators.find(f) != possibleCAllocators.end();
-      bool callocating = allocatingCFunctions.find(f) != allocatingCFunctions.end();
-      bool allocator = possibleAllocators.find(f->fun) != possibleAllocators.end();
-      bool allocating = allocatingFunctions.find(f->fun) != allocatingFunctions.end();
+      bool callocator = possibleCAllocators->find(f) != possibleCAllocators->end();
+      bool callocating = allocatingCFunctions->find(f) != allocatingCFunctions->end();
+      bool allocator = possibleAllocators->find(f->fun) != possibleAllocators->end();
+      bool allocating = allocatingFunctions->find(f->fun) != allocatingFunctions->end();
       
       if (!callocator && allocator) {
         errs() << "GOOD: NOT-CALLOCATOR but ALLOCATOR: " << f->getName() << "\n";
@@ -131,6 +116,6 @@ int main(int argc, char* argv[])
     }
   }
 
-  
+  CalledModuleTy::release(cm);  
   delete m;
 }

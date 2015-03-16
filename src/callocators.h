@@ -97,6 +97,8 @@ class CalledModuleTy {
   GlobalsTy* globals;
   FunctionsSetTy* possibleAllocators;
   FunctionsSetTy* allocatingFunctions;
+  CalledFunctionsSetTy* possibleCAllocators;
+  CalledFunctionsSetTy* allocatingCFunctions;
   
   CalledFunctionTy *gcFunction;
 
@@ -104,16 +106,23 @@ class CalledModuleTy {
     ArgInfosTy* intern(ArgInfosTy& argInfos);
     SymbolArgInfoTy* intern(SymbolArgInfoTy& argInfo);
     CalledFunctionTy* intern(CalledFunctionTy& calledFunction);
+    void computeCalledAllocators();
 
   public:
     CalledModuleTy(Module *m, SymbolsMapTy* symbolsMap, FunctionsSetTy* errorFunctions, GlobalsTy* globals,
       FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions);
+      
+    static CalledModuleTy* create(Module *m);
+    static void release(CalledModuleTy *cm);
       
     CalledFunctionTy* getCalledFunction(Value *inst);
     CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards); // takes context from guards
     CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
     CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsVector.at(idx); };
     CalledFunctionsVectorTy* getCalledFunctions() { return &calledFunctionsVector; }
+    CalledFunctionsSetTy* getPossibleCAllocators() { computeCalledAllocators(); return possibleCAllocators; }
+    CalledFunctionsSetTy* getAllocatingCFunctions() { computeCalledAllocators(); return allocatingCFunctions; }
+    
     virtual ~CalledModuleTy();
     
     bool isAllocating(Function *f) { return allocatingFunctions->find(f) != allocatingFunctions->end(); }
@@ -127,8 +136,5 @@ class CalledModuleTy {
     CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
     SymbolsMapTy* getSymbolsMap() { return symbolsMap; }
 };
-
-void getCalledAllocators(CalledModuleTy *cm, CalledFunctionsSetTy& possibleCAllocators, CalledFunctionsSetTy& allocatingCFunctions); 
-// FIXME: eventually move this into CalledModuleTy
 
 #endif

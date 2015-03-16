@@ -28,9 +28,7 @@ int main(int argc, char* argv[])
     // NOTE: functionsOfInterest ignored but (re-)analyzing the R core is necessary
   
   SymbolsMapTy symbolsMap;
-  GlobalVarsSetTy symbolsSet;
-  
-  findSymbols(m, symbolsSet, &symbolsMap);
+  findSymbols(m, &symbolsMap);
   
   for(SymbolsMapTy::iterator si = symbolsMap.begin(), se = symbolsMap.end(); si != se; ++si) {
     GlobalVariable *gv = si->first;
