@@ -1,5 +1,6 @@
 
 #include "freshvars.h"
+#include "guards.h"
 
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Function.h>
@@ -7,36 +8,31 @@
 
 using namespace llvm;
 
-static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, FreshVarsTy& freshVars,
+static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos) {
   
-  CallSite cs(cast<Value>(in));
-  if (!cs) {
-    return;
-  }
-  const Function* targetFunc = cs.getCalledFunction();
-  if (!targetFunc) {
+  CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuards);
+  if (!tgt || !cm->isCAllocating(tgt)) {
     return;
   }
   
-  if (allocatingFunctions.find(const_cast<Function*>(targetFunc)) == allocatingFunctions.end()) {
-    return;
-  }
+  CallSite cs(cast<Value>(in));
+  assert(cs);
+  assert(cs.getCalledFunction());
 
   for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
     Value *arg = *ai;
-    CallSite csa(arg);
-    if (csa) {
-      Function *srcFun = csa.getCalledFunction();
-      if (srcFun && possibleAllocators.find(srcFun) != possibleAllocators.end()) {
-        msg.info("calling allocating function " + targetFunc->getName().str() + " with argument allocated using " + srcFun->getName().str(), in);
-        refinableInfos++;
-      }
+    CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
+    if (!src || !cm->isPossibleCAllocator(src)) {
+      continue;
     }
+    msg.info("calling allocating function " + funName(tgt) + " with argument allocated using " + funName(src), in);
+    refinableInfos++;
   }
+  
   for (FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = *fi;
-    std::string message = "unprotected variable " + var->getName().str() + " while calling allocating function " + targetFunc->getName().str();
+    std::string message = "unprotected variable " + varName(var) + " while calling allocating function " + funName(tgt);
     
     // prepare a conditional message
     auto vsearch = freshVars.condMsgs.find(var);
@@ -44,16 +40,16 @@ static void handleCall(Instruction *in, FunctionsSetTy& possibleAllocators, Func
       DelayedLineMessenger dmsg(&msg);
       dmsg.info(message, in);
       freshVars.condMsgs.insert({var, dmsg});
-      msg.debug("created conditional message \"" + message + "\" first for variable " + var->getName().str(), in);
+      msg.debug("created conditional message \"" + message + "\" first for variable " + varName(var), in);
     } else {
       DelayedLineMessenger& dmsg = vsearch->second;
       dmsg.info(message, in);
-      msg.debug("added conditional message \"" + message + "\" for variable " + var->getName().str() + "(size " + std::to_string(dmsg.size()) + ")", in);
+      msg.debug("added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
     }
   }
 }
 
-static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
   if (!LoadInst::classof(in)) {
     return;
   }
@@ -70,7 +66,7 @@ static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, Fre
     vsearch->second.flush();
     refinableInfos++;
     freshVars.condMsgs.erase(vsearch);
-    msg.debug("printed conditional messages on use of variable " + var->getName().str(), in);
+    if (msg.debug()) msg.debug("printed conditional messages on use of variable " + varName(var), in);
   }
   
   if (freshVars.vars.find(var) == freshVars.vars.end()) { 
@@ -78,38 +74,36 @@ static void handleLoad(Instruction *in, FunctionsSetTy& allocatingFunctions, Fre
   }
   // a fresh variable is being loaded
 
-  msg.debug("fresh variable " + var->getName().str() + " loaded and thus no longer fresh", in);
+  if (msg.debug()) msg.debug("fresh variable " + varName(var) + " loaded and thus no longer fresh", in);
   freshVars.vars.erase(var);
 
   if (!li->hasOneUse()) { // too restrictive? should look at other uses too?
     return;
   }
-  CallSite cs(li->user_back());
-  if (!cs) {
+  CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
+  if (!tgt || !cm->isCAllocating(tgt)) {
     return;
   }
-  Function *targetFun = cs.getCalledFunction();
   
   // fresh variable passed to an allocating function - but this may be ok if it is callee-protect function
   //   or if the function allocates only after the fresh argument is no longer needed
-  if (allocatingFunctions.find(targetFun) != allocatingFunctions.end()) {
-    std::string varName = var->getName().str();
-    if (varName.empty()) {
-      unsigned i;
-      for(i = 0; i < cs.arg_size(); i++) {
-        if (cs.getArgument(i) == li) {
-          varName = "arg " + std::to_string(i+1);
-          break;
-        }
+  std::string nameSuffix = "";
+  if (var->getName().str().empty()) {
+    unsigned i;
+    CallSite cs(cast<Value>(li->user_back()));
+    assert(cs);
+    for(i = 0; i < cs.arg_size(); i++) {
+      if (cs.getArgument(i) == li) {
+        nameSuffix = " <arg " + std::to_string(i+1) + ">";
+        break;
       }
     }
-    msg.info("calling allocating function " + targetFun->getName().str() + " with a fresh pointer (" + varName + ")", in);
-    refinableInfos++;
   }
-  return;
+  msg.info("calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
+  refinableInfos++;
 }
 
-static void handleStore(Instruction *in, FunctionsSetTy& possibleAllocators, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
   if (!StoreInst::classof(in)) {
     return;
   }
@@ -123,16 +117,15 @@ static void handleStore(Instruction *in, FunctionsSetTy& possibleAllocators, Fre
   
   // a variable is being killed by the store, erase conditional messages if any
   if (freshVars.condMsgs.erase(var)) {
-    msg.debug("removed conditional messages as variable " + var->getName().str() + " is rewritten.", in);
+    if (msg.debug()) msg.debug("removed conditional messages as variable " + varName(var) + " is rewritten.", in);
   }
   
-  CallSite csv(storeValueOp);
-  if (csv) {
-    Function *vf = csv.getCalledFunction();
-    if (vf && possibleAllocators.find(const_cast<Function*>(vf)) != possibleAllocators.end()) {
+  CalledFunctionTy *srcFun = cm->getCalledFunction(storeValueOp, sexpGuards);
+  if (srcFun) {
+    if (cm->isPossibleCAllocator(srcFun)) { // FIXME: this is very approximative -- we would rather need to know guaranteed allocators
       // the store (re-)creates a fresh variable
       freshVars.vars.insert(var);
-      msg.debug("initialized fresh SEXP variable " + var->getName().str(), in);
+      if (msg.debug()) msg.debug("initialized fresh SEXP variable " + varName(var), in);
       return;
     }
   }
@@ -140,16 +133,16 @@ static void handleStore(Instruction *in, FunctionsSetTy& possibleAllocators, Fre
   // the store turns a variable into non-fresh  
   if (freshVars.vars.find(var) != freshVars.vars.end()) {
     freshVars.vars.erase(var);
-    msg.debug("fresh variable " + var->getName().str() + " rewritten and thus no longer fresh", in);
+    if (msg.debug()) msg.debug("fresh variable " + varName(var) + " rewritten and thus no longer fresh", in);
   }
 }
 
-void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, 
+void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
     FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
 
-  handleCall(in, possibleAllocators, allocatingFunctions, freshVars, msg, refinableInfos);
-  handleLoad(in, allocatingFunctions, freshVars, msg, refinableInfos);
-  handleStore(in, possibleAllocators, freshVars, msg, refinableInfos);
+  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
 }
 
 void StateWithFreshVarsTy::dump(bool verbose) {

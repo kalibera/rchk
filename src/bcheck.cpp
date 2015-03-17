@@ -30,11 +30,13 @@
 
 #include "common.h"
 #include "errors.h"
+#include "callocators.h"
 #include "allocators.h"
 #include "balance.h"
 #include "freshvars.h"
 #include "guards.h"
 #include "linemsg.h"
+#include "symbols.h"
 
 using namespace llvm;
 
@@ -308,10 +310,11 @@ struct ModuleCheckingStateTy {
   FunctionsSetTy& errorFunctions;
   GlobalsTy& gl;
   LineMessenger& msg;
+  CalledModuleTy& cm;
   
   ModuleCheckingStateTy(FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, FunctionsSetTy& errorFunctions,
-      GlobalsTy& gl, LineMessenger& msg):
-    possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions), errorFunctions(errorFunctions), gl(gl), msg(msg) {};
+      GlobalsTy& gl, LineMessenger& msg, CalledModuleTy& cm):
+    possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions), errorFunctions(errorFunctions), gl(gl), msg(msg), cm(cm) {};
 };
 
 class FunctionChecker {
@@ -369,7 +372,7 @@ class FunctionChecker {
         m.msg.trace("visiting", in);
    
         if (freshVarsCheckingEnabled) {
-          handleFreshVarsForNonTerminator(in, m.possibleAllocators, m.allocatingFunctions, s.freshVars, m.msg, refinableInfos);
+          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos);
           if (restartable && refinableInfos > 0) return;
         }
         if (balanceCheckingEnabled) {
@@ -386,7 +389,7 @@ class FunctionChecker {
           }
         }
         if (sexpGuardsEnabled) {
-          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, &m.gl, NULL, NULL, m.msg, &m.possibleAllocators);
+          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, &m.gl, NULL, m.cm.getSymbolsMap(), m.msg, &m.possibleAllocators);
           if (restartable && refinableInfos > 0) return;
         }
       }
@@ -399,7 +402,7 @@ class FunctionChecker {
         continue;
       }
 
-      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, &m.gl, NULL, NULL, m.msg)) {
+      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, &m.gl, NULL, m.cm.getSymbolsMap(), m.msg)) {
         continue;
       }
 
@@ -478,7 +481,13 @@ int main(int argc, char* argv[])
   FunctionsSetTy allocatingFunctions;
   findAllocatingFunctions(m, allocatingFunctions);
 
-  ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg);
+  SymbolsMapTy symbolsMap;
+  findSymbols(m, &symbolsMap);
+  
+  CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &gl, &possibleAllocators, &allocatingFunctions);
+  
+  ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg, cm); 
+    // FIXME: perhaps get rid of ModuleCheckingState now that we have CalledModule
 
   unsigned nAnalyzedFunctions = 0;
   for(FunctionsOrderedSetTy::iterator FI = functionsOfInterest.begin(), FE = functionsOfInterest.end(); FI != FE; ++FI) {

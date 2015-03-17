@@ -131,6 +131,8 @@ class CalledModuleTy {
     
     bool isAllocating(Function *f) { return allocatingFunctions->find(f) != allocatingFunctions->end(); }
     bool isPossibleAllocator(Function *f) { return possibleAllocators->find(f) != possibleAllocators->end(); }
+    bool isCAllocating(CalledFunctionTy *cf) { computeCalledAllocators(); return allocatingCFunctions->find(cf) != allocatingCFunctions->end(); }
+    bool isPossibleCAllocator(CalledFunctionTy *cf) { computeCalledAllocators(); return possibleCAllocators->find(cf) != possibleCAllocators->end(); }
     
     FunctionsSetTy* getErrorFunctions() { return errorFunctions; }
     FunctionsSetTy* getPossibleAllocators() { return possibleAllocators; }
@@ -140,5 +142,7 @@ class CalledModuleTy {
     CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
     SymbolsMapTy* getSymbolsMap() { return symbolsMap; }
 };
+
+std::string funName(CalledFunctionTy *cf);
 
 #endif

@@ -4,6 +4,7 @@
 #include "common.h"
 #include "linemsg.h"
 #include "state.h"
+#include "guards.h"
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Instruction.h>
@@ -34,7 +35,7 @@ struct StateWithFreshVarsTy : virtual public StateBaseTy {
   void dump(bool verbose);
 };
 
-void handleFreshVarsForNonTerminator(Instruction *in, FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions,
+void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
   FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos);
 
 #endif

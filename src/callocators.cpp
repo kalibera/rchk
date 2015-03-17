@@ -256,6 +256,7 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = fi;
 
+    assert(fun);
     getCalledFunction(fun); // make sure each function has a context-function counterpart
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
       User *u = *ui;
@@ -523,19 +524,33 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         msg.error("too many states (abstraction error?) - returning path-insensitive allocation info", s.bb->begin());
         
         // NOTE: some callsites may have already been registered to more specific called functions
+        bool originAllocating = cm->isAllocating(f->fun);
+        bool originAllocator = cm->isPossibleAllocator(f->fun);
         
+        if (!originAllocating && !originAllocator) {
+          return;
+        }
         for(inst_iterator ini = inst_begin(*f->fun), ine = inst_end(*f->fun); ini != ine; ++ini) {
           Instruction *in = &*ini;
+          
+          if (errorBasicBlocks.find(in->getParent()) != errorBasicBlocks.end()) {
+            continue;
+          }
           CallSite cs(in);
           CalledFunctionTy *ct = cm->getCalledFunction(in, true);
           if (cs) {
             assert(ct);
-
             Function *t = cs.getCalledFunction();
-            if (cm->isAllocating(t)) {
+            // note that this is a heuristic, best-effort approach that is not equivalent to what allocators.cpp do
+            //   this heuristic may treat a function as wrapped even when allocators.cpp will not
+            //
+            // on the other hand, we may discover that a call is in a context that makes it non-allocating/non-allocator
+            // it would perhaps be cleaner to re-use the context-insensitive algorithm here
+            // or just improve performance so that we don't run out of states in the first place
+            if (originAllocating && cm->isAllocating(t)) {
               called.insert(ct);
             }
-            if (cm->isPossibleAllocator(t)) {
+            if (originAllocator && cm->isPossibleAllocator(t)) {
               wrapped.insert(ct);
             }
           }
@@ -583,7 +598,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               }
               CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
               if (tgt && cm->isPossibleAllocator(tgt->fun)) {
-                // storing a value gotten from a (possibly allocating) function
+                // storing a value gotten from a (possibly allocator) function
                 if (msg.debug()) msg.debug("adding origin " + tgt->getName() + " of " + varName(dst), in); 
                 auto orig = s.varOrigins.find(dst);
                 if (orig == s.varOrigins.end()) {
@@ -640,7 +655,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
           CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards, true);
           if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
             msg.debug("collecting immediate origin " + tgt->getName() + " at function return", t); 
-           wrapped.insert(tgt);
+            wrapped.insert(tgt);
           }   
         }
       }
@@ -796,9 +811,16 @@ void CalledModuleTy::computeCalledAllocators() {
       allocatingCFunctions->insert(getCalledFunction(i));
     }
     if (wrapsMat[i][gcidx]) {
-      possibleCAllocators->insert(getCalledFunction(i));
+      CalledFunctionTy *tgt = getCalledFunction(i);
+      if (!isKnownNonAllocator(tgt->fun)) {
+        possibleCAllocators->insert(tgt);
+      }
     }    
   }
   allocatingCFunctions->insert(gcFunction);
   possibleCAllocators->insert(gcFunction);
+}
+
+std::string funName(CalledFunctionTy *cf) {
+  return cf->getName();  
 }

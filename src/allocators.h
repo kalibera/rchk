@@ -22,4 +22,6 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions);
 
 void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned);
 
+bool isKnownNonAllocator(Function *f);
+
 #endif

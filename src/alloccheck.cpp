@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
     }
   }
 
-  if(0) {
+  if(1) {
     for(FunctionsSetTy::iterator fi = possibleAllocators->begin(), fe = possibleAllocators->end(); fi != fe; ++fi) {
       Function *f = *fi;
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
   }
   
 
-  if(0) {
+  if(1) {
     for(FunctionsSetTy::iterator fi = allocatingFunctions->begin(), fe = allocatingFunctions->end(); fi != fe; ++fi) {
       Function *f = *fi;
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
@@ -107,11 +107,17 @@ int main(int argc, char* argv[])
         errs() << "GOOD: NOT-CALLOCATING but ALLOCATING: " << f->getName() << "\n";
       }
       if (callocator && !callocating) {
-        errs() << "ERROR: NOT-CALLOCATING but CALLOCATOR " << f->getName() << "\n";
+        errs() << "ERROR: NOT-CALLOCATING but CALLOCATOR: " << f->getName() << "\n";
       }
       if (allocator && !allocating) {
-        errs() << "ERROR: NOT-ALLOCATING but ALLOCATOR" << f->getName() << "\n";
-      }      
+        errs() << "ERROR: NOT-ALLOCATING but ALLOCATOR: " << f->getName() << "\n";
+      }
+      if (callocator && !allocator) {
+        errs() << "ERROR: C-ALLOCATOR but not ALLOCATOR: " << f->getName() << "\n";
+      }
+      if (callocating && !allocating) {
+        errs() << "ERROR: C-ALLOCATING but not ALLOCATING: " << f->getName() << "\n";
+      }
     }
   }
 
