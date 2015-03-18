@@ -85,7 +85,7 @@ bool EXCLUDE_PROTECTION_FUNCTIONS = true;
 
 // -------------------------------- basic block state -----------------------------------
 
-const int MAX_STATES = 3000000;        // maximum number of states visited per function
+const int MAX_STATES = BCHECK_MAX_STATES;        // maximum number of states visited per function
 
 unsigned int nComparedEqual = 0;
 unsigned int nComparedDifferent = 0;

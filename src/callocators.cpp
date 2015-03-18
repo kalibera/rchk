@@ -21,7 +21,7 @@ using namespace llvm;
 const bool DEBUG = false;
 const bool TRACE = false;
 const bool UNIQUE_MSG = true;
-const int MAX_STATES = 1000000;
+const int MAX_STATES = CALLOCATORS_MAX_STATES;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;

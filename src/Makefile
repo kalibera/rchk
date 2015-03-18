@@ -3,17 +3,26 @@
 
 # Set the root directory for LLVM here
 
-LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
+HOST := $(shell hostname -s)
 
-# r-lnx400, LLVM 3.5 
-#LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.5.0-x86_64-fedora20
+ifeq ($(HOST), prg)
+  LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
+  BCHECK_MAX_STATES := 3000000
+  CALLOCATORS_MAX_STATES := 1000000
+else ifeq ($(HOST), r-lnx400)
+  LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.5.0-x86_64-fedora20
+  BCHECK_MAX_STATES := 30000000
+  CALLOCATORS_MAX_STATES := 3000000
+endif
 
 # ---------------------
 
 LLVMC := $(LLVM)/bin/llvm-config
 
+HOSTFLAGS := -DBCHECK_MAX_STATES=$(BCHECK_MAX_STATES) -DCALLOCATORS_MAX_STATES=$(CALLOCATORS_MAX_STATES)
+
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
-CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD
+CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
 #CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
