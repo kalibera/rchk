@@ -574,6 +574,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
             AllocaInst *dst = cast<AllocaInst>(st->getPointerOperand());
             if (possiblyReturnedVars.find(dst) != possiblyReturnedVars.end()) {
             
+              // FIXME: should also handle phi nodes here, currently we may miss some allocators
               if (msg.debug()) msg.debug("dropping origins of " + varName(dst) + " at variable overwrite", in);
               s.varOrigins.erase(dst);
             
