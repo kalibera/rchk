@@ -589,6 +589,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
                       s.varOrigins.insert({dst, srcOrigs}); // set origins
                     } else {
                       CalledFunctionsOrderedSetTy& dstOrigs = dorig->second;
+                      dstOrigs.clear(); // delete old origins
                       dstOrigs.insert(srcOrigs.begin(), srcOrigs.end()); // copy origins
                     }
                   }
@@ -606,6 +607,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
                   s.varOrigins.insert({dst, newOrigins});
                 } else {
                   CalledFunctionsOrderedSetTy& existingOrigins = orig->second;
+                  existingOrigins.clear(); // delete old origins
                   existingOrigins.insert(tgt);
                 }
                 continue;
