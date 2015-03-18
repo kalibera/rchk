@@ -6,10 +6,10 @@ using namespace llvm;
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 
-#include <llvm/Support/InstIterator.h>
 #include <llvm/Support/raw_ostream.h>
 
 const bool DEBUG = false;

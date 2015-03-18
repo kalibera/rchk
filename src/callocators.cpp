@@ -12,9 +12,8 @@
 
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
-
-#include <llvm/Support/InstIterator.h>
 
 using namespace llvm;
 
