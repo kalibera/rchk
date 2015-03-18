@@ -574,6 +574,9 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
             AllocaInst *dst = cast<AllocaInst>(st->getPointerOperand());
             if (possiblyReturnedVars.find(dst) != possiblyReturnedVars.end()) {
             
+              if (msg.debug()) msg.debug("dropping origins of " + varName(dst) + " at variable overwrite", in);
+              s.varOrigins.erase(dst);
+            
               // dst is a variable to be tracked
               if (LoadInst::classof(st->getValueOperand())) {
                 Value *src = cast<LoadInst>(st->getValueOperand())->getPointerOperand();
@@ -583,15 +586,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
                   auto sorig = s.varOrigins.find(cast<AllocaInst>(src));
                   if (sorig != s.varOrigins.end()) {
                     CalledFunctionsOrderedSetTy& srcOrigs = sorig->second;
-                    
-                    auto dorig = s.varOrigins.find(dst);
-                    if (dorig == s.varOrigins.end()) {
-                      s.varOrigins.insert({dst, srcOrigs}); // set origins
-                    } else {
-                      CalledFunctionsOrderedSetTy& dstOrigs = dorig->second;
-                      dstOrigs.clear(); // delete old origins
-                      dstOrigs.insert(srcOrigs.begin(), srcOrigs.end()); // copy origins
-                    }
+                    s.varOrigins.insert({dst, srcOrigs}); // set (copy) origins
                   }
                 }
                 continue;
@@ -599,17 +594,10 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
               if (tgt && cm->isPossibleAllocator(tgt->fun)) {
                 // storing a value gotten from a (possibly allocator) function
-                if (msg.debug()) msg.debug("adding origin " + tgt->getName() + " of " + varName(dst), in); 
-                auto orig = s.varOrigins.find(dst);
-                if (orig == s.varOrigins.end()) {
-                  CalledFunctionsOrderedSetTy newOrigins;
-                  newOrigins.insert(tgt);
-                  s.varOrigins.insert({dst, newOrigins});
-                } else {
-                  CalledFunctionsOrderedSetTy& existingOrigins = orig->second;
-                  existingOrigins.clear(); // delete old origins
-                  existingOrigins.insert(tgt);
-                }
+                if (msg.debug()) msg.debug("setting origin " + tgt->getName() + " of " + varName(dst), in); 
+                CalledFunctionsOrderedSetTy newOrigins;
+                newOrigins.insert(tgt);
+                s.varOrigins.insert({dst, newOrigins});
                 continue;
               }
             }
