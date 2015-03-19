@@ -40,11 +40,11 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       DelayedLineMessenger dmsg(&msg);
       dmsg.info(message, in);
       freshVars.condMsgs.insert({var, dmsg});
-      msg.debug("created conditional message \"" + message + "\" first for variable " + varName(var), in);
+      if (msg.debug()) msg.debug("created conditional message \"" + message + "\" first for variable " + varName(var), in);
     } else {
       DelayedLineMessenger& dmsg = vsearch->second;
       dmsg.info(message, in);
-      msg.debug("added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
+      if (msg.debug()) msg.debug("added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
     }
   }
 }
