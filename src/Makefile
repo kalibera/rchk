@@ -11,7 +11,7 @@ ifeq ($(HOST), prg)
   CALLOCATORS_MAX_STATES := 1000000
 else ifeq ($(HOST), r-lnx400)
   LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.5.0-x86_64-fedora20
-  BCHECK_MAX_STATES := 30000000
+  BCHECK_MAX_STATES := 6000000
   CALLOCATORS_MAX_STATES := 1000000
 endif
 
@@ -23,7 +23,7 @@ HOSTFLAGS := -DBCHECK_MAX_STATES=$(BCHECK_MAX_STATES) -DCALLOCATORS_MAX_STATES=$
 
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
 CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
-#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS)
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
