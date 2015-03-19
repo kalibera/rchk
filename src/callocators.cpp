@@ -25,9 +25,9 @@ const int MAX_STATES = CALLOCATORS_MAX_STATES;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "getAttrib0(?,S:class)"; // only dump states in this function
-const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "getAttrib0(?,S:class)";
+const std::string DUMP_STATES_FUNCTION = "bcEval"; // only dump states in this function
+const bool ONLY_CHECK_ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
+const std::string ONLY_FUNCTION_NAME = "bcEval";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
@@ -506,7 +506,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       CAllocStateTy s(*workList.top());
       workList.pop();    
 
-      if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->getName()) {
+      if (ONLY_CHECK_ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->getName()) {
         continue;
       }      
       if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
