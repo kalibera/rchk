@@ -559,6 +559,6 @@ void StateWithBalanceTy::dump(bool verbose) {
     errs() << "=== countState: " << cs_name(balance.countState) << "\n";
   }
   if (balance.counterVar != NULL) {
-    errs() << "=== counterVar: " << balance.counterVar->getName() << "\n";
+    errs() << "=== counterVar: " << varName(balance.counterVar) << "\n";
   }
 }

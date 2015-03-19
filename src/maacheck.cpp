@@ -122,8 +122,8 @@ int main(int argc, char* argv[])
         }
         
         if (nAllocatingArgs >= 2 && nFreshObjects >= 1 ) {
-          outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << demangle(middleFinfo->function->getName()) <<
-            " at " << demangle(finfo->function->getName()) << " " << sourceLocation(inst) << "\n";
+          outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << funName(middleFinfo->function) <<
+            " at " << funName(finfo->function) << " " << sourceLocation(inst) << "\n";
         }
       }
     }

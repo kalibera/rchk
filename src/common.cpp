@@ -133,21 +133,21 @@ std::string sourceLocation(const Instruction *in) {
   }
 }
 
-std::string instructionAsString(Instruction *in) {
+std::string instructionAsString(const Instruction *in) {
   std::string str;
   raw_string_ostream os(str);
   os << *in;
   return str;
 }
 
-std::string funName(Function *f) {
+std::string funName(const Function *f) {
   if (!f) {
     return "<unknown function>";
   }
-  return demangle(f->getName().str());
+  return demangle(f->getName());
 }
 
-std::string varName(AllocaInst *var) {
+std::string varName(const AllocaInst *var) {
   std::string name = var->getName().str();
   if (!name.empty()) {
     return name;

@@ -384,7 +384,7 @@ struct CAllocStateTy : public StateWithGuardsTy {
     errs() << "=== called (allocating):\n";
     for(CalledFunctionsOrderedSetTy::iterator fi = called.begin(), fe = called.end(); fi != fe; *fi++) {
       CalledFunctionTy* f = *fi;
-      errs() << "   " << f->getName() << "\n";
+      errs() << "   " << funName(f) << "\n";
     }
     errs() << "=== origins (allocators):\n";
     for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
@@ -395,7 +395,7 @@ struct CAllocStateTy : public StateWithGuardsTy {
         
       for(CalledFunctionsOrderedSetTy::iterator fi = srcs.begin(), fe = srcs.end(); fi != fe; ++fi) {
         CalledFunctionTy *f = *fi;
-        errs() << " " << f->getName();
+        errs() << " " << funName(f);
       }
       errs() << "\n";
     }
@@ -480,7 +480,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     bool trackOrigins = isSEXP(f->fun->getReturnType());
     
     if (DEBUG && ONLY_DEBUG_ONLY_FUNCTION) {
-      if (ONLY_FUNCTION_NAME == f->getName()) {
+      if (ONLY_FUNCTION_NAME == funName(f)) {
         msg.debug(true);
       } else {
         msg.debug(false);
@@ -488,14 +488,14 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     }
 
     if (TRACE && ONLY_TRACE_ONLY_FUNCTION) {
-      if (ONLY_FUNCTION_NAME == f->getName()) {
+      if (ONLY_FUNCTION_NAME == funName(f)) {
         msg.trace(true);
       } else {
         msg.trace(false);
       }
     }
     
-    msg.newFunction(f->fun, " - " + f->getName());
+    msg.newFunction(f->fun, " - " + funName(f));
 
     clearStates();
     {
@@ -595,7 +595,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
               if (tgt && cm->isPossibleAllocator(tgt->fun)) {
                 // storing a value gotten from a (possibly allocator) function
-                if (msg.debug()) msg.debug("setting origin " + tgt->getName() + " of " + varName(dst), in); 
+                if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
                 CalledFunctionsOrderedSetTy newOrigins;
                 newOrigins.insert(tgt);
                 s.varOrigins.insert({dst, newOrigins});
@@ -608,7 +608,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         // handle calls
         CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards, true);
         if (tgt && cm->isAllocating(tgt->fun)) {
-          msg.debug("recording call to " + tgt->getName(), in); 
+          if (msg.debug()) msg.debug("recording call to " + funName(tgt), in); 
           s.called.insert(tgt);
         }
       }
@@ -644,7 +644,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
           }
           CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards, true);
           if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
-            msg.debug("collecting immediate origin " + tgt->getName() + " at function return", t); 
+            if (msg.debug()) msg.debug("collecting immediate origin " + funName(tgt) + " at function return", t); 
             wrapped.insert(tgt);
           }   
         }
@@ -755,17 +755,17 @@ void CalledModuleTy::computeCalledAllocators() {
     getCalledAndWrappedFunctions(f, msg, called, wrapped);
     
     if (DEBUG && called.size()) {
-      errs() << "\nDetected (possible allocators) called by function " << f->getName() << ":\n";
+      errs() << "\nDetected (possible allocators) called by function " << funName(f) << ":\n";
       for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
         CalledFunctionTy *cf = *cfi;
-        errs() << "   " << cf->getName() << "\n";
+        errs() << "   " << funName(cf) << "\n";
       }
     }
     if (DEBUG && wrapped.size()) {
-      errs() << "\nDetected (possible allocators) wrapped by function " << f->getName() << ":\n";
+      errs() << "\nDetected (possible allocators) wrapped by function " << funName(f) << ":\n";
       for(CalledFunctionsOrderedSetTy::iterator cfi = wrapped.begin(), cfe = wrapped.end(); cfi != cfe; ++cfi) {
         CalledFunctionTy *cf = *cfi;
-        errs() << "   " << cf->getName() << "\n";
+        errs() << "   " << funName(cf) << "\n";
       }
     }
     

@@ -32,9 +32,9 @@ std::string demangle(std::string name);
 
 bool sourceLocation(const Instruction *in, std::string& path, unsigned& line);
 std::string sourceLocation(const Instruction *in);
-std::string instructionAsString(Instruction *in);
-std::string funName(Function *f);
-std::string varName(AllocaInst *var);
+std::string instructionAsString(const Instruction *in);
+std::string funName(const Function *f);
+std::string varName(const AllocaInst *var);
 
 enum SEXPType {
   RT_NIL = 0,

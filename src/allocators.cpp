@@ -45,7 +45,7 @@ void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
   if (f->getReturnType()->isVoidTy()) {
     return;
   }
-  if (DEBUG) errs() << "Function " << f->getName() << "...\n";
+  if (DEBUG) errs() << "Function " << funName(f) << "...\n";
   
   // insert variables values of which are directly returned
   for(inst_iterator ini = inst_begin(*f), ine = inst_end(*f); ini != ine; ++ini) {
@@ -57,7 +57,7 @@ void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
         if (AllocaInst::classof(loadOperand)) {
           AllocaInst* var = cast<AllocaInst>(loadOperand);
           possiblyReturned.insert(var);
-          if (DEBUG) errs() << "  directly returned " << var->getName() << "(" << *var << ")\n";
+          if (DEBUG) errs() << "  directly returned " << varName(var) << "(" << *var << ")\n";
         }
       }
     }
@@ -89,7 +89,7 @@ void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
           
           possiblyReturned.insert(varSrc);
           addedVar = true;
-          if (DEBUG) errs() << "  indirectly returned " << varSrc->getName() << " through " << varDst->getName() 
+          if (DEBUG) errs() << "  indirectly returned " << varName(varSrc) << " through " << varName(varDst) 
             << " via load " << *storeValueOperand << " and store " << *in << "\n";
         }
       }
@@ -149,7 +149,7 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
       if (tgt == gcFunction) {
         // an exception: treat a call to R_gc_internal as an indication this is a direct allocator
         // (note: R_gc_internal itself does not return an SEXP)
-        if (DEBUG) errs() << "SEXP function " << f->getName() << " calls directly into " << tgt->getName() << "\n";
+        if (DEBUG) errs() << "SEXP function " << funName(f) << " calls directly into " << funName(tgt) << "\n";
         wrappedAllocators.insert(tgt);
         continue;
       }
@@ -159,7 +159,7 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
       if (valueMayBeReturned(cast<Value>(in), possiblyReturnedVars)) {
-        if (DEBUG) errs() << "SEXP function " << f->getName() << " wraps functions " << tgt->getName() << "\n";
+        if (DEBUG) errs() << "SEXP function " << funName(f) << " wraps functions " << funName(tgt) << "\n";
         wrappedAllocators.insert(tgt);
       }
     }

@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
         errs() << "UNMARKED ";
       }
       
-      errs() << "error function " << demangle(fun->getName());
+      errs() << "error function " << funName(fun);
       printFunctionInfo(fun);
 
     } else {

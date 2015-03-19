@@ -92,15 +92,15 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
       }
       
       if (targetFun->doesNotReturn()) {
-        if (DEBUG) errs() << " ignoring edge to function " << targetFun->getName() << " as it does not return.\n";
+        if (DEBUG) errs() << " ignoring edge to function " << funName(targetFun) << " as it does not return.\n";
         continue;
       }
       
       BasicBlock *bb = callInst->getParent();
       if (errorBlocks.find(bb) != errorBlocks.end()) {
         if (DEBUG) {
-          errs() << " in function " << fun->getName() << " ignoring edge to function " << 
-            targetFun->getName() << " as it is called from a basic block that always results in error.\n";
+          errs() << " in function " << funName(fun) << " ignoring edge to function " << 
+            funName(targetFun) << " as it is called from a basic block that always results in error.\n";
         }
         continue;
       }
@@ -112,9 +112,9 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
       finfo->calledFunctionsList.push_back(targetFunctionInfo);
       edges++;
       
-      if (DEBUG) errs() << " when recording call from " << finfo->function->getName() << " to " << targetFunctionInfo->function->getName() << "\n";
+      if (DEBUG) errs() << " when recording call from " << funName(finfo->function) << " to " << funName(targetFunctionInfo->function) << "\n";
     }
-    if (DEBUG) errs() << " mapped function " << finfo->function->getName() << "\n";
+    if (DEBUG) errs() << " mapped function " << funName(finfo->function) << "\n";
   }
   
   // fill-in bitmaps of which functions are reachable from which - now we know the number of functions to do that

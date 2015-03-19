@@ -13,7 +13,7 @@ using namespace llvm;
 void StateBaseTy::dump(bool verbose) {
   errs() << "\n ###################### STATE DUMP " << this << " ######################\n";
   Function *fun = bb->getParent();
-  errs() << "=== Function: " << ((fun == NULL) ? "NULL" : demangle(fun->getName())) << "\n";
+  errs() << "=== Function: " << funName(fun) << "\n";
   if (verbose) {
     errs() << "=== Basic block: \n" << *bb << "\n";
   }

@@ -87,7 +87,7 @@ bool LineInfoTy_equal::operator() (const LineInfoTy& lhs, const LineInfoTy& rhs)
 
 void LineMessenger::flush() {
   if (lastFunction != NULL && !lineBuffer.empty()) {
-    errs() << "\nFunction " << demangle(lastFunction->getName())  << lastChecksName << "\n";
+    errs() << "\nFunction " << funName(lastFunction) << lastChecksName << "\n";
     for(LineInfoPtrSetTy::iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
       LineInfoTy* li = *liBuf;
       li->print();
@@ -100,7 +100,7 @@ void LineMessenger::flush() {
 
 void LineMessenger::newFunction(Function *func, std::string checksName) {
   if (!UNIQUE_MSG) {
-    errs() << "\nFunction " << demangle(func->getName()) << checksName << "\n";
+    errs() << "\nFunction " << funName(func) << checksName << "\n";
   } else {
     flush();
   }
@@ -128,7 +128,7 @@ LineInfoTy* LineMessenger::intern(const LineInfoTy& li) {
 
 void LineMessenger::clear() {
   if (!UNIQUE_MSG) {
-    errs() << " ---- restarting checking for function " << demangle(lastFunction->getName()) << " (previous messages for it to be ignored) ----\n";
+    errs() << " ---- restarting checking for function " << funName(lastFunction) << " (previous messages for it to be ignored) ----\n";
   } else {
     lineBuffer.clear();
     // not clearing the intern table
