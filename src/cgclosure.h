@@ -40,4 +40,6 @@ typedef std::map<Function*, FunctionsSetTy*> CallEdgesMapTy;
 
 void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths = true, FunctionsSetTy *onlyFunctions = NULL, CallEdgesMapTy *onlyEdges = NULL);
 
+void releaseMap(FunctionsInfoMapTy& map);
+
 #endif
