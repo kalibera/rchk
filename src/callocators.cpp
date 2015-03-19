@@ -342,7 +342,7 @@ struct CAllocStateTy : public StateWithGuardsTy {
       AllocaInst* var = gi->first;
       IntGuardState s = gi->second;
       hash_combine(res, (void *)var);
-      hash_combine(res, (char) s);
+      hash_combine(res, (size_t) s);
     } // ordered map
 
     hash_combine(res, sexpGuards.size()); // FIXME: avoid copy-paste
@@ -350,7 +350,7 @@ struct CAllocStateTy : public StateWithGuardsTy {
       AllocaInst* var = gi->first;
       const SEXPGuardTy& g = gi->second;
       hash_combine(res, (void *) var);
-      hash_combine(res, (char) g.state);
+      hash_combine(res, (size_t) g.state);
       hash_combine(res, g.symbolName);
     } // ordered map
 
@@ -377,7 +377,7 @@ struct CAllocStateTy : public StateWithGuardsTy {
     hashcode = res;
   }
 
-  void dump() {
+  void dump(std::string dumpMsg) {
     StateBaseTy::dump(VERBOSE_DUMP);
     StateWithGuardsTy::dump(VERBOSE_DUMP);
 
@@ -399,7 +399,8 @@ struct CAllocStateTy : public StateWithGuardsTy {
       }
       errs() << "\n";
     }
-    errs() << " ######################            ######################\n";
+    errs() << "=== hash: " << std::to_string(hashcode) << "\n";
+    errs() << " ######################" << dumpMsg << "######################\n";
   }
     
   virtual bool add();
@@ -504,16 +505,16 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
   }
   while(!workList.empty()) {
     CAllocStateTy s(*workList.top());
+    if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
+      msg.trace("going to work on this state:", s.bb->begin());
+      workList.top()->dump("worklist top");
+    }    
     workList.pop();    
 
     if (ONLY_CHECK_ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->getName()) {
       continue;
     }      
-    if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
-      msg.trace("going to work on this state:", s.bb->begin());
-      s.dump();
-    }
-      
+
     if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
       msg.debug("ignoring basic block on error path", s.bb->begin());
       continue;

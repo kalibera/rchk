@@ -15,9 +15,9 @@ void StateBaseTy::dump(bool verbose) {
   Function *fun = bb->getParent();
   errs() << "=== Function: " << funName(fun) << "\n";
   if (verbose) {
-    errs() << "=== Basic block: \n" << *bb << "\n";
+    errs() << "=== Basic block:\n" << *bb << "\n";
   }
       
   Instruction *in = bb->begin();
-  errs() << "=== Basic block src: " << sourceLocation(in) << "\n";
+  errs() << "=== Basic block " << bb << " src: " << sourceLocation(in) << "\n";
 }
