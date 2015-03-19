@@ -746,7 +746,7 @@ void CalledModuleTy::computeCalledAllocators() {
   for(unsigned i = 0; i < calledFunctionsVector.size(); i++) {
 
     CalledFunctionTy *f = calledFunctionsVector[i];
-    if (!f->fun || !f->fun->size()) {
+    if (!f->fun || !f->fun->size() || !isAllocating(f->fun)) {
       continue;
     }
     
