@@ -315,19 +315,33 @@ void CalledModuleTy::release(CalledModuleTy *cm) {
   delete cm;
 }
 
-typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy> VarOriginsTy;
+typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy*> VarOriginsTy;
   // for a local variable, a list of functions whose return values may have
   // been assigned, possibly indirectly, to that variable
 
+struct CalledFunctionsOSTableTy_hash {
+  size_t operator()(const CalledFunctionsOrderedSetTy& t) const {
+    size_t res = 0;
+    hash_combine(res, t.size());
+        
+    for(CalledFunctionsOrderedSetTy::iterator fi = t.begin(), fe = t.end(); fi != fe; ++fi) {
+      CalledFunctionTy *f = *fi;
+      hash_combine(res, (void *) f);
+    } // ordered set
+    return res;
+  }
+};
+
+typedef std::unordered_set<CalledFunctionsOrderedSetTy, CalledFunctionsOSTableTy_hash> CalledFunctionsOSTableTy;
 
 struct CAllocStateTy : public StateWithGuardsTy {
   size_t hashcode;
-  CalledFunctionsOrderedSetTy called;
+  CalledFunctionsOrderedSetTy *called;
   VarOriginsTy varOrigins;
 
-  CAllocStateTy(BasicBlock *bb): StateBaseTy(bb), StateWithGuardsTy(bb), hashcode(0), called(), varOrigins() {};
+  CAllocStateTy(BasicBlock *bb): StateBaseTy(bb), StateWithGuardsTy(bb), hashcode(0), called(NULL), varOrigins() {};
 
-  CAllocStateTy(BasicBlock *bb, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, CalledFunctionsOrderedSetTy& called, VarOriginsTy& varOrigins):
+  CAllocStateTy(BasicBlock *bb, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, CalledFunctionsOrderedSetTy* called, VarOriginsTy& varOrigins):
       StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), hashcode(0), called(called), varOrigins(varOrigins) {};
       
   virtual CAllocStateTy* clone(BasicBlock *newBB) {
@@ -354,24 +368,14 @@ struct CAllocStateTy : public StateWithGuardsTy {
       hash_combine(res, g.symbolName);
     } // ordered map
 
-    hash_combine(res, called.size());
-    for(CalledFunctionsOrderedSetTy::iterator fi = called.begin(), fe = called.end(); fi != fe; ++fi) {
-      CalledFunctionTy *f = *fi;
-      hash_combine(res, (void *) f);
-    } // ordered set
+    hash_combine(res, (void *)called); // interned
 
     hash_combine(res, varOrigins.size());
     for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
       AllocaInst* var = oi->first;
-      CalledFunctionsOrderedSetTy& srcs = oi->second;
+      CalledFunctionsOrderedSetTy* srcs = oi->second;
         
-      hash_combine(res, (void *)var);
-      hash_combine(res, srcs.size());
-        
-      for(CalledFunctionsOrderedSetTy::iterator fi = srcs.begin(), fe = srcs.end(); fi != fe; ++fi) {
-        CalledFunctionTy *f = *fi;
-        hash_combine(res, (void *) f);
-      } // ordered set
+      hash_combine(res, (void *)srcs); // interned
     } // ordered map
     
     hashcode = res;
@@ -382,18 +386,18 @@ struct CAllocStateTy : public StateWithGuardsTy {
     StateWithGuardsTy::dump(VERBOSE_DUMP);
 
     errs() << "=== called (allocating):\n";
-    for(CalledFunctionsOrderedSetTy::iterator fi = called.begin(), fe = called.end(); fi != fe; *fi++) {
+    for(CalledFunctionsOrderedSetTy::iterator fi = called->begin(), fe = called->end(); fi != fe; *fi++) {
       CalledFunctionTy* f = *fi;
       errs() << "   " << funName(f) << "\n";
     }
     errs() << "=== origins (allocators):\n";
     for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
       AllocaInst* var = oi->first;
-      CalledFunctionsOrderedSetTy& srcs = oi->second;
+      CalledFunctionsOrderedSetTy* srcs = oi->second;
 
       errs() << "   " << varName(var) << ":";
         
-      for(CalledFunctionsOrderedSetTy::iterator fi = srcs.begin(), fe = srcs.end(); fi != fe; ++fi) {
+      for(CalledFunctionsOrderedSetTy::iterator fi = srcs->begin(), fe = srcs->end(); fi != fe; ++fi) {
         CalledFunctionTy *f = *fi;
         errs() << " " << funName(f);
       }
@@ -436,8 +440,31 @@ typedef std::unordered_set<CAllocStateTy*, CAllocStatePtrTy_hash, CAllocStatePtr
 
 static WorkListTy workList; // FIXME: avoid these "globals"
 static DoneSetTy doneSet;   // FIXME: avoid these "globals"
+static CalledFunctionsOSTableTy osTable; // interned ordered sets
+
+static CalledFunctionsOrderedSetTy* intern(CalledFunctionsOrderedSetTy *set) {
+  if (!set) {
+    return NULL;
+  }
+  auto ssearch = osTable.find(*set);
+  if (ssearch != osTable.end()) {
+    const CalledFunctionsOrderedSetTy *s = &*ssearch;
+    return const_cast<CalledFunctionsOrderedSetTy*>(s);
+  }
+  const CalledFunctionsOrderedSetTy *s = &*osTable.insert(*set).first;
+  return const_cast<CalledFunctionsOrderedSetTy*>(s);
+}
 
 bool CAllocStateTy::add() { // FIXME: avoid copy paste (vs. bcheck)
+
+    // intern sets of functions
+  called = intern(called);
+  for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
+    AllocaInst* var = oi->first;
+    CalledFunctionsOrderedSetTy* srcs = oi->second;
+    srcs = intern(srcs);
+  }
+  
   hash(); // precompute hashcode
   auto sinsert = doneSet.insert(this);
   if (sinsert.second) {
@@ -459,6 +486,7 @@ static void clearStates() { // FIXME: avoid copy paste (vs. bcheck)
   WorkListTy empty;
   std::swap(workList, empty);
   // all elements in worklist are also in doneset, so no need to call destructors
+  osTable.clear();
 }
 
 static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg, 
@@ -588,8 +616,8 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
                 if (msg.debug()) msg.debug("propagating origins on assignment of " + varName(cast<AllocaInst>(src)) + " to " + varName(dst), in); 
                 auto sorig = s.varOrigins.find(cast<AllocaInst>(src));
                 if (sorig != s.varOrigins.end()) {
-                  CalledFunctionsOrderedSetTy& srcOrigs = sorig->second;
-                  s.varOrigins.insert({dst, srcOrigs}); // set (copy) origins
+                  CalledFunctionsOrderedSetTy* srcOrigs = sorig->second;
+                  s.varOrigins.insert({dst, srcOrigs}); // set (shallow copy) origins
                 }
               }
               continue;
@@ -600,7 +628,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
               CalledFunctionsOrderedSetTy newOrigins;
               newOrigins.insert(tgt);
-              s.varOrigins.insert({dst, newOrigins});
+              s.varOrigins.insert({dst, intern(&newOrigins)});
               continue;
             }
           }
@@ -613,7 +641,16 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
         if (msg.debug()) msg.debug("recording call to " + funName(tgt), in);
           
         if (called.find(tgt) == called.end()) { // if we already know the function is called, don't add, save memory
-          s.called.insert(tgt);
+      
+          if (s.called) {
+            CalledFunctionsOrderedSetTy newCalls(*s.called);
+            newCalls.insert(tgt);
+            s.called = intern(&newCalls); // FIXME: may be interning too many times
+          } else {
+            CalledFunctionsOrderedSetTy newCalls;
+            newCalls.insert(tgt);
+            s.called = intern(&newCalls); // FIXME: may be interning too many times
+          }
         }
       }
     }
@@ -622,11 +659,13 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       
     if (ReturnInst::classof(t)) { // handle return statement
 
-      if (msg.debug()) msg.debug("collecting " + std::to_string(s.called.size()) + " calls at function return", t);
-      called.insert(s.called.begin(), s.called.end());      
+      if (msg.debug()) msg.debug("collecting " + std::to_string(s.called->size()) + " calls at function return", t);
+      if (s.called) {
+        called.insert(s.called->begin(), s.called->end());
+      }
 
       if (trackOrigins) {
-        if (s.called.find(cm->getCalledGCFunction()) != s.called.end()) {
+        if (s.called && s.called->find(cm->getCalledGCFunction()) != s.called->end()) {
           // the GC function is an exception
           //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it
           //   (this is a heuristic)
@@ -640,9 +679,9 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
             auto origins = s.varOrigins.find(cast<AllocaInst>(src));
             size_t nOrigins = 0;
             if (origins != s.varOrigins.end()) {
-              CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
-              wrapped.insert(knownOrigins.begin(), knownOrigins.end()); // copy origins as result
-              nOrigins = knownOrigins.size();
+              CalledFunctionsOrderedSetTy* knownOrigins = origins->second;
+              wrapped.insert(knownOrigins->begin(), knownOrigins->end()); // copy origins as result
+              nOrigins = knownOrigins->size();
             }
             if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
           }
