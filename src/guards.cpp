@@ -615,7 +615,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     
     AllocaInst *guard = NULL;
     Function *f = NULL;
-    SEXPType tcType;
+    SEXPType tcType = RT_UNKNOWN;
     if (op) {
       CallSite cs(op);
       if (cs) {
