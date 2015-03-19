@@ -463,212 +463,217 @@ static void clearStates() { // FIXME: avoid copy paste (vs. bcheck)
 static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg, 
   CalledFunctionsOrderedSetTy& called, CalledFunctionsOrderedSetTy& wrapped) {
 
-    if (!f->fun || !f->fun->size()) {
-      return;
-    }
-    CalledModuleTy *cm = f->module;
+  if (!f->fun || !f->fun->size()) {
+    return;
+  }
+  CalledModuleTy *cm = f->module;
     
-    VarBoolCacheTy intGuardVarsCache;
-    VarBoolCacheTy sexpGuardVarsCache;
+  VarBoolCacheTy intGuardVarsCache;
+  VarBoolCacheTy sexpGuardVarsCache;
 
-    BasicBlocksSetTy errorBasicBlocks;
-    findErrorBasicBlocks(f->fun, cm->getErrorFunctions(), errorBasicBlocks); // FIXME: this could be remembered in CalledFunction
+  BasicBlocksSetTy errorBasicBlocks;
+  findErrorBasicBlocks(f->fun, cm->getErrorFunctions(), errorBasicBlocks); // FIXME: this could be remembered in CalledFunction
     
-    VarsSetTy possiblyReturnedVars; 
-    findPossiblyReturnedVariables(f->fun, possiblyReturnedVars); // to restrict origin tracking
+  VarsSetTy possiblyReturnedVars; 
+  findPossiblyReturnedVariables(f->fun, possiblyReturnedVars); // to restrict origin tracking
     
-    bool trackOrigins = isSEXP(f->fun->getReturnType());
+  bool trackOrigins = isSEXP(f->fun->getReturnType());
     
-    if (DEBUG && ONLY_DEBUG_ONLY_FUNCTION) {
-      if (ONLY_FUNCTION_NAME == funName(f)) {
-        msg.debug(true);
-      } else {
-        msg.debug(false);
-      }
+  if (DEBUG && ONLY_DEBUG_ONLY_FUNCTION) {
+    if (ONLY_FUNCTION_NAME == funName(f)) {
+      msg.debug(true);
+    } else {
+      msg.debug(false);
     }
+  }
 
-    if (TRACE && ONLY_TRACE_ONLY_FUNCTION) {
-      if (ONLY_FUNCTION_NAME == funName(f)) {
-        msg.trace(true);
-      } else {
-        msg.trace(false);
-      }
+  if (TRACE && ONLY_TRACE_ONLY_FUNCTION) {
+    if (ONLY_FUNCTION_NAME == funName(f)) {
+      msg.trace(true);
+    } else {
+      msg.trace(false);
     }
+  }
     
-    msg.newFunction(f->fun, " - " + funName(f));
+  msg.newFunction(f->fun, " - " + funName(f));
 
-    clearStates();
-    {
-      CAllocStateTy* initState = new CAllocStateTy(&f->fun->getEntryBlock());
-      initState->add();
+  clearStates();
+  {
+    CAllocStateTy* initState = new CAllocStateTy(&f->fun->getEntryBlock());
+    initState->add();
+  }
+  while(!workList.empty()) {
+    CAllocStateTy s(*workList.top());
+    workList.pop();    
+
+    if (ONLY_CHECK_ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->getName()) {
+      continue;
+    }      
+    if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
+      msg.trace("going to work on this state:", s.bb->begin());
+      s.dump();
     }
-    while(!workList.empty()) {
-      CAllocStateTy s(*workList.top());
-      workList.pop();    
-
-      if (ONLY_CHECK_ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->getName()) {
-        continue;
-      }      
-      if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
-        msg.trace("going to work on this state:", s.bb->begin());
-        s.dump();
-      }
       
-      if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
-        msg.debug("ignoring basic block on error path", s.bb->begin());
-        continue;
-      }
+    if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
+      msg.debug("ignoring basic block on error path", s.bb->begin());
+      continue;
+    }
       
-      if (doneSet.size() > MAX_STATES) {
-        msg.error("too many states (abstraction error?) - returning path-insensitive allocation info", s.bb->begin());
+    if (doneSet.size() > MAX_STATES) {
+      msg.error("too many states (abstraction error?) - returning path-insensitive allocation info", s.bb->begin());
+      clearStates();
         
-        // NOTE: some callsites may have already been registered to more specific called functions
-        bool originAllocating = cm->isAllocating(f->fun);
-        bool originAllocator = cm->isPossibleAllocator(f->fun);
+      // NOTE: some callsites may have already been registered to more specific called functions
+      bool originAllocating = cm->isAllocating(f->fun);
+      bool originAllocator = cm->isPossibleAllocator(f->fun);
         
-        if (!originAllocating && !originAllocator) {
-          return;
-        }
-        for(inst_iterator ini = inst_begin(*f->fun), ine = inst_end(*f->fun); ini != ine; ++ini) {
-          Instruction *in = &*ini;
+      if (!originAllocating && !originAllocator) {
+        return;
+      }
+      for(inst_iterator ini = inst_begin(*f->fun), ine = inst_end(*f->fun); ini != ine; ++ini) {
+        Instruction *in = &*ini;
           
-          if (errorBasicBlocks.find(in->getParent()) != errorBasicBlocks.end()) {
-            continue;
-          }
-          CallSite cs(in);
-          CalledFunctionTy *ct = cm->getCalledFunction(in, true);
-          if (cs) {
-            assert(ct);
-            Function *t = cs.getCalledFunction();
+        if (errorBasicBlocks.find(in->getParent()) != errorBasicBlocks.end()) {
+          continue;
+        }
+        CallSite cs(in);
+        CalledFunctionTy *ct = cm->getCalledFunction(in, true);
+        if (cs) {
+          assert(ct);
+          Function *t = cs.getCalledFunction();
             // note that this is a heuristic, best-effort approach that is not equivalent to what allocators.cpp do
             //   this heuristic may treat a function as wrapped even when allocators.cpp will not
             //
             // on the other hand, we may discover that a call is in a context that makes it non-allocating/non-allocator
             // it would perhaps be cleaner to re-use the context-insensitive algorithm here
             // or just improve performance so that we don't run out of states in the first place
-            if (originAllocating && cm->isAllocating(t)) {
-              called.insert(ct);
-            }
-            if (originAllocator && cm->isPossibleAllocator(t)) {
-              wrapped.insert(ct);
-            }
+          if (originAllocating && cm->isAllocating(t)) {
+            called.insert(ct);
+          }
+          if (originAllocator && cm->isPossibleAllocator(t)) {
+            wrapped.insert(ct);
           }
         }
-        return;
       }
+      return;
+    }
       
-      // process a single basic block
-      // FIXME: phi nodes
+    // process a single basic block
+    // FIXME: phi nodes
       
-      for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
-        msg.trace("visiting", in);
+    for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
+      msg.trace("visiting", in);
    
-        handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, msg);
-        handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, cm->getGlobals(), f->argInfo, cm->getSymbolsMap(), msg, NULL);
+      handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, msg);
+      handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, cm->getGlobals(), f->argInfo, cm->getSymbolsMap(), msg, NULL);
         
-        // handle stores
-        if (trackOrigins && StoreInst::classof(in)) {
-          StoreInst *st = cast<StoreInst>(in);
+      // handle stores
+      if (trackOrigins && StoreInst::classof(in)) {
+        StoreInst *st = cast<StoreInst>(in);
           
-          if (AllocaInst::classof(st->getPointerOperand())) {
-            AllocaInst *dst = cast<AllocaInst>(st->getPointerOperand());
-            if (possiblyReturnedVars.find(dst) != possiblyReturnedVars.end()) {
+        if (AllocaInst::classof(st->getPointerOperand())) {
+          AllocaInst *dst = cast<AllocaInst>(st->getPointerOperand());
+          if (possiblyReturnedVars.find(dst) != possiblyReturnedVars.end()) {
             
-              // FIXME: should also handle phi nodes here, currently we may miss some allocators
-              if (msg.debug()) msg.debug("dropping origins of " + varName(dst) + " at variable overwrite", in);
-              s.varOrigins.erase(dst);
+            // FIXME: should also handle phi nodes here, currently we may miss some allocators
+            if (msg.debug()) msg.debug("dropping origins of " + varName(dst) + " at variable overwrite", in);
+            s.varOrigins.erase(dst);
             
-              // dst is a variable to be tracked
-              if (LoadInst::classof(st->getValueOperand())) {
-                Value *src = cast<LoadInst>(st->getValueOperand())->getPointerOperand();
-                if (AllocaInst::classof(src)) {
-                  // copy all var origins of src into dst
-                  if (msg.debug()) msg.debug("propagating origins on assignment of " + varName(cast<AllocaInst>(src)) + " to " + varName(dst), in); 
-                  auto sorig = s.varOrigins.find(cast<AllocaInst>(src));
-                  if (sorig != s.varOrigins.end()) {
-                    CalledFunctionsOrderedSetTy& srcOrigs = sorig->second;
-                    s.varOrigins.insert({dst, srcOrigs}); // set (copy) origins
-                  }
+            // dst is a variable to be tracked
+            if (LoadInst::classof(st->getValueOperand())) {
+              Value *src = cast<LoadInst>(st->getValueOperand())->getPointerOperand();
+              if (AllocaInst::classof(src)) {
+                // copy all var origins of src into dst
+                if (msg.debug()) msg.debug("propagating origins on assignment of " + varName(cast<AllocaInst>(src)) + " to " + varName(dst), in); 
+                auto sorig = s.varOrigins.find(cast<AllocaInst>(src));
+                if (sorig != s.varOrigins.end()) {
+                  CalledFunctionsOrderedSetTy& srcOrigs = sorig->second;
+                  s.varOrigins.insert({dst, srcOrigs}); // set (copy) origins
                 }
-                continue;
               }
-              CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
-              if (tgt && cm->isPossibleAllocator(tgt->fun)) {
-                // storing a value gotten from a (possibly allocator) function
-                if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
-                CalledFunctionsOrderedSetTy newOrigins;
-                newOrigins.insert(tgt);
-                s.varOrigins.insert({dst, newOrigins});
-                continue;
-              }
+              continue;
+            }
+            CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
+            if (tgt && cm->isPossibleAllocator(tgt->fun)) {
+              // storing a value gotten from a (possibly allocator) function
+              if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
+              CalledFunctionsOrderedSetTy newOrigins;
+              newOrigins.insert(tgt);
+              s.varOrigins.insert({dst, newOrigins});
+              continue;
             }
           }
         }
+      }
         
-        // handle calls
-        CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards, true);
-        if (tgt && cm->isAllocating(tgt->fun)) {
-          if (msg.debug()) msg.debug("recording call to " + funName(tgt), in); 
+      // handle calls
+      CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards, true);
+      if (tgt && cm->isAllocating(tgt->fun)) {
+        if (msg.debug()) msg.debug("recording call to " + funName(tgt), in);
+          
+        if (called.find(tgt) == called.end()) { // if we already know the function is called, don't add, save memory
           s.called.insert(tgt);
         }
       }
+    }
       
-      TerminatorInst *t = s.bb->getTerminator();
+    TerminatorInst *t = s.bb->getTerminator();
       
-      if (ReturnInst::classof(t)) { // handle return statement
+    if (ReturnInst::classof(t)) { // handle return statement
 
-        if (msg.debug()) msg.debug("collecting " + std::to_string(s.called.size()) + " calls at function return", t);
-        called.insert(s.called.begin(), s.called.end());      
+      if (msg.debug()) msg.debug("collecting " + std::to_string(s.called.size()) + " calls at function return", t);
+      called.insert(s.called.begin(), s.called.end());      
 
-        if (trackOrigins) {
-          if (s.called.find(cm->getCalledGCFunction()) != s.called.end()) {
-            // the GC function is an exception
-            //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it
-            //   (this is a heuristic)
-            wrapped.insert(cm->getCalledGCFunction());
-          }
-          Value *returnOperand = cast<ReturnInst>(t)->getReturnValue();
-          if (LoadInst::classof(returnOperand)) { // return(var)
-            Value *src = cast<LoadInst>(returnOperand)->getPointerOperand();
-            if (AllocaInst::classof(src)) {
-              
-              auto origins = s.varOrigins.find(cast<AllocaInst>(src));
-              size_t nOrigins = 0;
-              if (origins != s.varOrigins.end()) {
-                CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
-                wrapped.insert(knownOrigins.begin(), knownOrigins.end()); // copy origins as result
-                nOrigins = knownOrigins.size();
-              }
-              if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
-            }
-          }
-          CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards, true);
-          if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
-            if (msg.debug()) msg.debug("collecting immediate origin " + funName(tgt) + " at function return", t); 
-            wrapped.insert(tgt);
-          }   
+      if (trackOrigins) {
+        if (s.called.find(cm->getCalledGCFunction()) != s.called.end()) {
+          // the GC function is an exception
+          //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it
+          //   (this is a heuristic)
+          wrapped.insert(cm->getCalledGCFunction());
         }
-      }
-
-      if (handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, cm->getGlobals(), f->argInfo, cm->getSymbolsMap(), msg)) {
-        continue;
-      }
-
-      if (handleIntGuardsForTerminator(t, intGuardVarsCache, s, msg)) {
-        continue;
-      }
-      
-      // add conservatively all cfg successors
-      for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
-        BasicBlock *succ = t->getSuccessor(i);
-        {
-          CAllocStateTy* state = s.clone(succ);
-          if (state->add()) {
-          msg.trace("added successor of", t);
+        Value *returnOperand = cast<ReturnInst>(t)->getReturnValue();
+        if (LoadInst::classof(returnOperand)) { // return(var)
+          Value *src = cast<LoadInst>(returnOperand)->getPointerOperand();
+          if (AllocaInst::classof(src)) {
+              
+            auto origins = s.varOrigins.find(cast<AllocaInst>(src));
+            size_t nOrigins = 0;
+            if (origins != s.varOrigins.end()) {
+              CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
+              wrapped.insert(knownOrigins.begin(), knownOrigins.end()); // copy origins as result
+              nOrigins = knownOrigins.size();
+            }
+            if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
           }
+        }
+        CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards, true);
+        if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
+          if (msg.debug()) msg.debug("collecting immediate origin " + funName(tgt) + " at function return", t); 
+          wrapped.insert(tgt);
+        }   
+      }
+    }
+
+    if (handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, cm->getGlobals(), f->argInfo, cm->getSymbolsMap(), msg)) {
+      continue;
+    }
+
+    if (handleIntGuardsForTerminator(t, intGuardVarsCache, s, msg)) {
+      continue;
+    }
+      
+    // add conservatively all cfg successors
+    for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
+      BasicBlock *succ = t->getSuccessor(i);
+      {
+        CAllocStateTy* state = s.clone(succ);
+        if (state->add()) {
+          msg.trace("added successor of", t);
         }
       }
     }
+  }
+  clearStates();
 }
 
 typedef std::vector<std::vector<bool>> BoolMatrixTy;
