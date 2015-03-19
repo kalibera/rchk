@@ -82,7 +82,9 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
     errs() << "Linking module " << moduleFname << " with base " << baseFname << " resulted in error " << errorMessage << ".\n";
   }
   for(Module::iterator f = module->begin(), fe = module->end(); f != fe; ++f) {
-    functionsOfInterest.insert(base->getFunction(f->getName()));
+    if (!f->isDeclaration()) {
+      functionsOfInterest.insert(base->getFunction(f->getName()));
+    }
   }
   delete module;
 
