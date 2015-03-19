@@ -205,6 +205,7 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   }
   
   possibleAllocators.insert(gcFunction);
+  releaseMap(functionsMap);
 }
 
 bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
@@ -238,4 +239,5 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
   }
   
   allocatingFunctions.insert(getGCFunction(m));
+  releaseMap(functionsMap);
 }

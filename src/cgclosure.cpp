@@ -63,8 +63,8 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
 
       const CallGraphNode* const targetCGN = RI->second;
       if (!RI->first) continue; /* NULL call site */
-      CallSite* callSite = new CallSite(RI->first);
-      Instruction* callInst = dyn_cast<Instruction>(callSite->getInstruction());
+      CallSite callSite(RI->first);
+      Instruction* callInst = dyn_cast<Instruction>(callSite.getInstruction());
       Function* targetFun = targetCGN->getFunction();
       if (!targetFun) continue;
       if (onlyFunctions && onlyFunctions->find(targetFun) == onlyFunctions->end()) {
@@ -106,7 +106,7 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
       }
       
       // create callinfo for this instruction
-      CallInfo *cinfo = new CallInfo(callInst);
+      CallInfo *cinfo = new CallInfo(callInst); // FIXME: check this is deallocated
       cinfo->targets.insert(targetFunctionInfo);
       finfo->callInfos.push_back(cinfo);
       finfo->calledFunctionsList.push_back(targetFunctionInfo);
@@ -182,4 +182,18 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
     if (DEBUG) errs() << " added " << addedCalls << " calls out of " << visitedCalls << " visited calls.\n";
   }
   delete cg;
+}
+
+
+void releaseMap(FunctionsInfoMapTy& map) {
+  for(FunctionsInfoMapTy::iterator mi = map.begin(), me = map.end(); mi != me; ++mi) {
+    FunctionInfo *fi = mi->second;
+    for(auto ci = fi->callInfos.begin(), ce = fi->callInfos.end(); ci != ce; ++ci) {
+      CallInfo *c = *ci;
+      delete c;
+    }
+    delete fi->callsFunctionMap;
+    delete fi;
+  }
+  map.clear();
 }

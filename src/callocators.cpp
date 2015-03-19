@@ -553,7 +553,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     }
       
     if (doneSet.size() > MAX_STATES) {
-      msg.error("too many states (abstraction error?) - returning path-insensitive allocation info", s.bb->begin());
+      errs() << "ERROR: too many states (abstraction error?) in function " << funName(f) << "\n";
       clearStates();
         
       // NOTE: some callsites may have already been registered to more specific called functions

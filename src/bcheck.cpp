@@ -338,7 +338,10 @@ class FunctionChecker {
       initState->add();
     }
     while(!workList.empty()) {
-      if (restartable && refinableInfos > 0) return;
+      if (restartable && refinableInfos > 0) {
+        clearStates();
+        return;
+      }
       StateTy s(*workList.top());
       workList.pop();
       
@@ -356,7 +359,8 @@ class FunctionChecker {
       }
       
       if (doneSet.size() > MAX_STATES) {
-        m.msg.error("too many states (abstraction error?)", s.bb->begin());
+        errs() << "ERROR: too many states (abstraction error?) in function " << funName(fun) << "\n";
+        clearStates();
         return;
       }
       
@@ -373,24 +377,24 @@ class FunctionChecker {
    
         if (freshVarsCheckingEnabled) {
           handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos);
-          if (restartable && refinableInfos > 0) return;
+          if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
         if (balanceCheckingEnabled) {
           handleBalanceForNonTerminator(in, s.balance, m.gl, counterVarsCache, saveVarsCache, m.msg, refinableInfos);
-          if (restartable && refinableInfos > 0) return;
+          if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
  
         if (intGuardsEnabled) {
           handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, m.msg);
-          if (restartable && refinableInfos > 0) return;
+          if (restartable && refinableInfos > 0) { clearStates(); return; }
           if (balanceCheckingEnabled) {
             handleUnprotectWithIntGuard(in, s, m.gl, intGuardVarsCache, m.msg, refinableInfos);
-            if (restartable && refinableInfos > 0) return;
+            if (restartable && refinableInfos > 0) { clearStates(); return; }
           }
         }
         if (sexpGuardsEnabled) {
           handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, &m.gl, NULL, m.cm.getSymbolsMap(), m.msg, &m.possibleAllocators);
-          if (restartable && refinableInfos > 0) return;
+          if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
       }
       

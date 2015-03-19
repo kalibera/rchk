@@ -289,6 +289,7 @@ int main(int argc, char* argv[])
       }
     }
   }
-
+  
+  releaseMap(functionsMap);
   delete m;
 }
