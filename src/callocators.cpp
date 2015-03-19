@@ -31,8 +31,7 @@ const std::string ONLY_FUNCTION_NAME = "bcEval";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
-std::string CalledFunctionTy::getName() const {
-  std::string res = fun->getName();
+std::string CalledFunctionTy::getNameSuffix() const {
   std::string suff;
   unsigned nKnown = 0;
 
@@ -50,9 +49,14 @@ std::string CalledFunctionTy::getName() const {
   }
   
   if (nKnown > 0) {
-    res += "(" + suff + ")";
+    return "(" + suff + ")";
   }
-  return res;
+  return std::string();
+}
+
+
+std::string CalledFunctionTy::getName() const {
+  return fun->getName().str() + getNameSuffix();
 }
 
 size_t CalledFunctionPtrTy_hash::operator()(const CalledFunctionTy* t) const {
@@ -857,5 +861,5 @@ void CalledModuleTy::computeCalledAllocators() {
 }
 
 std::string funName(CalledFunctionTy *cf) {
-  return cf->getName();  
+  return funName(cf->fun) + cf->getNameSuffix();  
 }

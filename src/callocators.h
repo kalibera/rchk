@@ -45,6 +45,7 @@ struct CalledFunctionTy {
 
   CalledFunctionTy(Function *fun, ArgInfosTy *argInfo, CalledModuleTy *module): fun(fun), argInfo(argInfo), module(module), idx(UINT_MAX) {};
   std::string getName() const;
+  std::string getNameSuffix() const;
 };
 
 struct CalledFunctionPtrTy_hash {
