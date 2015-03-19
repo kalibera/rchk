@@ -34,13 +34,13 @@ int main(int argc, char* argv[])
   CalledFunctionsVectorTy* calledFunctions = cm->getCalledFunctions();
 
   if (0) {  
-    errs() << "Detected called functions: \n";
+    outs() << "Detected called functions: \n";
     for(CalledFunctionsVectorTy::iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
       CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
-      errs() << "  called function " << funName(f) << "\n";
+      outs() << "  called function " << funName(f) << "\n";
     }
   }
 
@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
-      errs() << "C-ALLOCATOR: " << funName(f) << "\n";
+      outs() << "C-ALLOCATOR: " << funName(f) << "\n";
     }
   }
 
@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
-      errs() << "C-ALLOCATING: " << funName(f) << "\n";
+      outs() << "C-ALLOCATING: " << funName(f) << "\n";
     }
   }
 
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
         continue;
       }
-      errs() << "ALLOCATOR: " << funName(f) << "\n";
+      outs() << "ALLOCATOR: " << funName(f) << "\n";
     }
   }
   
@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
       if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
         continue;
       }
-      errs() << "ALLOCATING: " << funName(f) << "\n";
+      outs() << "ALLOCATING: " << funName(f) << "\n";
     }
   }
   
@@ -101,22 +101,22 @@ int main(int argc, char* argv[])
       bool allocating = allocatingFunctions->find(f->fun) != allocatingFunctions->end();
       
       if (!callocator && allocator) {
-        errs() << "GOOD: NOT-CALLOCATOR but ALLOCATOR: " << funName(f) << "\n";
+        outs() << "GOOD: NOT-CALLOCATOR but ALLOCATOR: " << funName(f) << "\n";
       }
       if (!callocating && allocating) {
-        errs() << "GOOD: NOT-CALLOCATING but ALLOCATING: " << funName(f) << "\n";
+        outs() << "GOOD: NOT-CALLOCATING but ALLOCATING: " << funName(f) << "\n";
       }
       if (callocator && !callocating) {
-        errs() << "ERROR: NOT-CALLOCATING but CALLOCATOR: " << funName(f) << "\n";
+        outs() << "ERROR: NOT-CALLOCATING but CALLOCATOR: " << funName(f) << "\n";
       }
       if (allocator && !allocating) {
-        errs() << "ERROR: NOT-ALLOCATING but ALLOCATOR: " << funName(f) << "\n";
+        outs() << "ERROR: NOT-ALLOCATING but ALLOCATOR: " << funName(f) << "\n";
       }
       if (callocator && !allocator) {
-        errs() << "ERROR: C-ALLOCATOR but not ALLOCATOR: " << funName(f) << "\n";
+        outs() << "ERROR: C-ALLOCATOR but not ALLOCATOR: " << funName(f) << "\n";
       }
       if (callocating && !allocating) {
-        errs() << "ERROR: C-ALLOCATING but not ALLOCATING: " << funName(f) << "\n";
+        outs() << "ERROR: C-ALLOCATING but not ALLOCATING: " << funName(f) << "\n";
       }
     }
   }

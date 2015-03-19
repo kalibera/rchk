@@ -3,6 +3,7 @@
 
 #include <cxxabi.h>
 
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
@@ -103,6 +104,9 @@ std::string demangle(std::string name) {
 }
 
 bool sourceLocation(const Instruction *in, std::string& path, unsigned& line) {
+  if (!in) {
+    return false;
+  }
   const DebugLoc& debugLoc = in->getDebugLoc();
   
   if (debugLoc.isUnknown()) {
@@ -131,6 +135,18 @@ std::string sourceLocation(const Instruction *in) {
   } else {
     return path + ":" + std::to_string(line);
   }
+}
+
+std::string funLocation(const Function *f) {
+  const Instruction *instWithDI = NULL;
+  for(Function::const_iterator bb = f->begin(), bbe = f->end(); !instWithDI && bb != bbe; ++bb) {
+    for(BasicBlock::const_iterator in = bb->begin(), ine = bb->end(); !instWithDI && in != ine; ++in) {
+      if (!in->getDebugLoc().isUnknown()) {
+        instWithDI = in;
+      }
+    }
+  }
+  return sourceLocation(instWithDI);
 }
 
 std::string instructionAsString(const Instruction *in) {

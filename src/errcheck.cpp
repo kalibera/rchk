@@ -18,27 +18,6 @@
 
 using namespace llvm;
 
-void printFunctionInfo(Function* fun) {
-
-  Instruction *instWithDI = NULL;
-  for(Function::iterator bb = fun->begin(), bbe = fun->end(); !instWithDI && bb != bbe; ++bb) {
-    for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); !instWithDI && in != ine; ++in) {
-      if (!in->getDebugLoc().isUnknown()) {
-        instWithDI = in;
-      }
-    }
-  }
-  if (instWithDI) {
-    LLVMContext&context = instWithDI->getParent()->getContext();
-    DebugLoc debugLoc = instWithDI->getDebugLoc().getFnDebugLoc(context);
-    DILocation loc(debugLoc.getScopeNode(context));
-    errs() << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << debugLoc.getLine() << "\n";
-  } else {
-    errs() << " no debug info found for " << fun << "\n";
-  }
-
-}
-
 int main(int argc, char* argv[])
 {
   LLVMContext context;
@@ -59,18 +38,14 @@ int main(int argc, char* argv[])
       // FIXME: newer versions of llvm have getDISubprogram(Function*)
       
       if (fun->doesNotReturn()) {
-        errs() << "Marked (noreturn) ";
+        errs() << "Marked (noreturn) error function " << funName(fun) << " " << funLocation(fun) << "\n";
       } else {
-        errs() << "UNMARKED ";
+        outs() << "UNMARKED error function " << funName(fun) << " " << funLocation(fun) << "\n";
       }
-      
-      errs() << "error function " << funName(fun);
-      printFunctionInfo(fun);
 
     } else {
       if (fun->doesNotReturn()) {
-        errs() << "WARNING - returning function marked noerror ";
-        printFunctionInfo(fun);
+        outs() << "WARNING - returning function marked noerror - " << funName(fun) << " " << funLocation(fun) << "\n";
       }
     }
   }

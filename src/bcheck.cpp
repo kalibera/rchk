@@ -362,7 +362,7 @@ class FunctionChecker {
       
       if (PROGRESS_MARKS) {
         if (doneSet.size() % PROGRESS_STEP == 0) {
-          outs() << "current worklist:" << std::to_string(workList.size()) << " current function:" << funName(fun) <<
+          errs() << "current worklist:" << std::to_string(workList.size()) << " current function:" << funName(fun) <<
             " done:" << std::to_string(doneSet.size()) << " equal:" << nComparedEqual << " different:" << nComparedDifferent << "\n";
         }
       }      

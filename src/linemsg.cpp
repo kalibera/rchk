@@ -51,11 +51,11 @@ void BaseLineMessenger::emit(std::string kind, std::string message, Instruction 
 // -----------------------------
 
 void LineInfoTy::print() const {
-  errs() << "  ";
+  outs() << "  ";
   if (!kind.empty()) {
-    errs()  << kind << ": ";
+    outs()  << kind << ": ";
   }
-  errs() << message << " " << path << ":" << line << "\n";
+  outs() << message << " " << path << ":" << line << "\n";
 }
 
 bool LineInfoTyPtr_compare::operator() (const LineInfoTy* lhs, const LineInfoTy* rhs) const {
@@ -87,7 +87,7 @@ bool LineInfoTy_equal::operator() (const LineInfoTy& lhs, const LineInfoTy& rhs)
 
 void LineMessenger::flush() {
   if (lastFunction != NULL && !lineBuffer.empty()) {
-    errs() << "\nFunction " << funName(lastFunction) << lastChecksName << "\n";
+    outs() << "\nFunction " << funName(lastFunction) << lastChecksName << "\n";
     for(LineInfoPtrSetTy::iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
       LineInfoTy* li = *liBuf;
       li->print();
@@ -100,7 +100,7 @@ void LineMessenger::flush() {
 
 void LineMessenger::newFunction(Function *func, std::string checksName) {
   if (!UNIQUE_MSG) {
-    errs() << "\nFunction " << funName(func) << checksName << "\n";
+    outs() << "\nFunction " << funName(func) << checksName << "\n";
   } else {
     flush();
   }
@@ -128,7 +128,7 @@ LineInfoTy* LineMessenger::intern(const LineInfoTy& li) {
 
 void LineMessenger::clear() {
   if (!UNIQUE_MSG) {
-    errs() << " ---- restarting checking for function " << funName(lastFunction) << " (previous messages for it to be ignored) ----\n";
+    outs() << " ---- restarting checking for function " << funName(lastFunction) << " (previous messages for it to be ignored) ----\n";
   } else {
     lineBuffer.clear();
     // not clearing the intern table
@@ -151,7 +151,7 @@ void DelayedLineMessenger::flush() {
 void DelayedLineMessenger::print(std::string prefix) {
   for(LineInfoPtrSetTy::iterator bi = delayedLineBuffer.begin(), be = delayedLineBuffer.end(); bi != be; ++bi) {
     LineInfoTy *li = *bi;
-    errs() << prefix;
+    outs() << prefix;
     li->print();
   }
 }

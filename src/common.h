@@ -32,6 +32,7 @@ std::string demangle(std::string name);
 
 bool sourceLocation(const Instruction *in, std::string& path, unsigned& line);
 std::string sourceLocation(const Instruction *in);
+std::string funLocation(const Function *f);
 std::string instructionAsString(const Instruction *in);
 std::string funName(const Function *f);
 std::string varName(const AllocaInst *var);

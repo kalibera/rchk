@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
 
   for(LinesTy::iterator li = sfpLines.begin(), le = sfpLines.end(); li != le; ++li) {
     const LineTy& l = *li;
-    errs() << l.path << " " << std::to_string(l.line) << "\n";
+    outs() << l.path << " " << std::to_string(l.line) << "\n";
   }
   
   CalledModuleTy::release(cm);  

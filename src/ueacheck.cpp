@@ -188,7 +188,7 @@ bool isLoadOfUnprotectedObject(Value *arg, Instruction *callInst, FunctionsSetTy
   Instruction* protect = getProtect(cast<AllocaInst>(v), allocStore, cast<LoadInst>(arg), dominatorTree);
   if (!protect) {
     if (VERBOSE) {
-      errs() << "Variable " << *v << " may be unprotected in call " << sourceLocation(callInst) << " with allocation at  "
+      outs() << "Variable " << *v << " may be unprotected in call " << sourceLocation(callInst) << " with allocation at  "
         << sourceLocation(allocStore) << "\n";
     }
     return true;
@@ -275,7 +275,7 @@ int main(int argc, char* argv[])
 
           if (VERBOSE) {
             if (k != AK_NOALLOC) {
-              errs() << " Argument " << *o << " in call to " << funName(middleFinfo->function) << " is of kind " << k << 
+              outs() << " Argument " << *o << " in call to " << funName(middleFinfo->function) << " is of kind " << k << 
               " at " << sourceLocation(inst)  << "\n";
             }
           }
