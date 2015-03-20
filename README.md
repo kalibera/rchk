@@ -96,7 +96,8 @@ kill the object allocated by `ScalarLogical`.  In C, the order of execution
 of `install` and `ScalarLogical` is undefined, so this can happen.
 
 The tool looks for similar errors, not necessarily only those including
-`install`, even though such are most common. To check the `RGtk2` package, run
+`install`, even though such are most common. To check the `RGtk2` package
+from CRAN, run
 
 ```
 maacheck src/main/R.bin.bc RGtk2.Rcheck/00_pkg_src/RGtk2/src/RGtk2.so.bc
@@ -125,6 +126,153 @@ not detect if a function implicitlly protects an object before returning it
 (e.g.  `install` or `getPrimitive` are such functions).  The `install` calls
 are built-in exceptions in the tool.  Experience with the tool so far
 suggests that it has very few false alarms in practice (and much less than
-the following tools).  So far I've fixed the bugs found in R-devel, so the
-remaining error reports will be false alarms, but it would be worth fixing
-the packages as well.
+the following tools).  It should be said that running the tools on recent
+versions of the R core is not a good way to assess the rate of false alarms,
+because we're fixing the errors as we find them.
+
+`ueacheck` is a more general variant of `maacheck`. It looks also for
+errors where some of the allocating expressions is given as local variable:
+
+```
+SEXP pa = allocVector(INTSXP, 1);
+INTEGER(pa)[0] = ci->pid;
+setAttrib(rv, install("pid"), pa);
+```
+
+In the example, `install` may allocate and kill the object pointed to from
+`pa`, allocated earlier by `allocVector`.  The tool is internally based on a
+number of heuristics and has more false alarms than `maacheck` (but can also
+detect more errors).  A typical example of a false alarm with this tool is
+implicit protection, such as linking a newly allocated object to an object
+already protected: the tool does not detect this an may think the newly
+allocated object is still ``fresh''.
+
+## Detecting Error Functions
+
+Non-local returns (`setjmp`/`longjmp`) are used in R to handle errors. It is
+a good practice to annotate functions that never return normally (that is
+via the `return` statement or through reaching the end of a `void`
+function).  The annotation helps the compiler generate better (faster) code
+and more precise warnings.  In R, such functions are annotated using
+`NORETURN` macro, but this macro is sometimes forgotten.  The `errcheck`
+tool detects functions that should be marked `NORETURN` but are not, as well
+as functions that are marked but shouldn't (yet I didn't find such case). 
+E.g. checking CRAN package `mets`:
+
+```
+errcheck src/main/R.bin.bc mets.Rcheck/00_pkg_src/mets/src/mets.so.bc
+```
+
+reports also
+
+```
+UNMARKED error function void arma::arma_stop<std::string>(std::string const&) RcppArmadillo/include/armadillo:94
+```
+
+this is a correct report, this function should be marked `NORETURN`.
+
+This tool should be precise by design.  The tool is a byproduct of the
+detection of error functions that had to be implemented for the memory
+checking tools: error paths often include allocation (at least allocating
+the error message), and they can easily be the only allocation a function
+does.  So, by design, all error functions (and error paths within a
+function) have been excluded from the checking for memory errors.
+
+## Detecting Protection Stack Imbalance
+
+A function has pointer protection stack imbalance if the pointer protection
+stack depth at function exit is not the same as at function entry. This is
+sometimes the correct/intended behavior (e.g.  in generated parsers), but
+commonly it is an error. Pointer protection imbalance is sometimes checked
+and reported at runtime, but with the `bcheck` tool, one can detect it also
+in rarely executed branches (and without tests with a good coverage):
+
+```
+PROTECT(sa = coerceVector(CAR(args), CPLXSXP));
+PROTECT(sb = coerceVector(CADR(args), CPLXSXP));
+na = XLENGTH(sa); nb = XLENGTH(sb);
+if ((na == 0) || (nb == 0)) return(allocVector(CPLXSXP, 0));
+```
+
+In the example above, if the then-branch is taken, the the pointers added to
+the pointer protection stack just above will remain there after the function
+exits.  It is a common pattern of such errors - one forgets that an
+(exceptional) function return also has to release pointers from the
+protection stack, or releases the wrong number of such pointers.  The tool
+can handle different versions of the protect calls, a single protection
+counter per function (commonly named ``nprotect''), certain kinds of loops,
+saving and restoring the pointer protection stack explicitly, and also some
+forms of conditionals (e.g.  ``if (nprotect) UNPROTECT(nprotect)'').  There
+are still some false alarms and bailouts for code that is still too
+complicated, and indeed there are not-useful reports for functions that have
+protection stack imbalance by design.
+
+To check the CRAN BMN package, run
+
+```
+bcheck ./src/main/R.bin.bc BMN.Rcheck/00_pkg_src/BMN/src/BMN.so.bc
+```
+
+the report also includes
+
+```
+Function runJTAlgSecMomVec
+  has negative depth BMN.Rcheck/00_pkg_src/BMN/src/JTAlgWrapper.cc:152
+  has possible protection stack imbalance BMN.Rcheck/00_pkg_src/BMN/src/JTAlgWrapper.cc:153
+
+```
+
+The reported function is shown below
+
+```
+SEXP runJTAlgSecMomVec(SEXP adjMat, SEXP thetaMat, SEXP varR, SEXP maxRuntime)
+{
+    // protect the items
+    PROTECT(adjMat);
+    PROTECT(thetaMat);
+    PROTECT(varR);
+     
+    int size = INTEGER(GET_DIM(adjMat))[0];
+    int var = INTEGER(varR)[0];
+    time_t quittingTime = time(NULL) + INTEGER(maxRuntime)[0];
+
+     
+    // get space for the expectation and covariance matrix
+    SEXP covVec, expec;
+    PROTECT(covVec = allocVector(REALSXP, size));
+    PROTECT(expec = allocVector(REALSXP, size));
+
+    double *covVecPtr = REAL(covVec);
+    double *expecPtr = REAL(expec);
+
+    // get the probgraph object
+    try
+    {
+        ProbGraph graph(size, INTEGER(adjMat), REAL(thetaMat), quittingTime);
+        graph.getExpectSecMomSingleVar(var,expecPtr, covVecPtr);
+    }
+    catch(char const* errorMsg)
+    {
+        error(errorMsg);
+    }
+     
+    // generate a list for the return values
+    SEXP retList, dimnames;
+    PROTECT(retList = allocVector(VECSXP,2));
+    SET_VECTOR_ELT(retList,0,expec);
+    SET_VECTOR_ELT(retList,1,covVec);
+    PROTECT(dimnames = allocVector(STRSXP,2));
+    SET_STRING_ELT(dimnames, 0, mkChar("Expectation"));
+    SET_STRING_ELT(dimnames, 1, mkChar("SecondMomentVector"));
+    setAttrib(retList,R_NamesSymbol, dimnames); 
+
+    // unprotect them again
+    UNPROTECT(8);    // <========================= line 152
+    return(retList); // <========================= line 153
+}
+
+It is easy to see that the tool is right, only 7 pointers have been
+protected, but 8 are being unprotected.  Currently the `bcheck` tool also
+checks for unprotected pointers at calls (described below). Even though
+these two kinds of bugs are unrelated, the underlying working of the tool is
+the same (interpreting the guards, conditions, etc).
