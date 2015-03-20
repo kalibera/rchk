@@ -1,8 +1,6 @@
 
 # ---------------------
 
-# Set the root directory for LLVM here
-
 HOST := $(shell hostname -s)
 
 ifeq ($(HOST), prg)
@@ -13,6 +11,14 @@ else ifeq ($(HOST), r-lnx400)
   LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.5.0-x86_64-fedora20
   BCHECK_MAX_STATES := 6000000
   CALLOCATORS_MAX_STATES := 1000000
+else
+  # ------  CUSTOMIZE HERE --------- 
+  $(error Please customize your Makefile here. Please set the home directory for LLVM 3.5.0)
+  #LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
+  
+  # please update the "MAX_STATES", these defaults seem to work fine for 8G RAM laptop
+  BCHECK_MAX_STATES := 3000000
+  CALLOCATORS_MAX_STATES := 1000000  
 endif
 
 # ---------------------
