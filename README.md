@@ -88,8 +88,8 @@ PROTECT( expr = lang5(install("gsub"), ScalarLogical(1), pattern, replacement, x
 I've learned about these bugs from Radford Neal who fixed a number of them
 manually in [pqR](http://www.pqr-project.org/) and I've ported those fixes
 to R-devel.  In the example above, `ScalarLogical` indeed allocates and
-returns the allocated object.  `install` may also allocate and return that
-object, but it will protect it implicitly by putting it into the symbol
+returns the allocated object.  `install` may also allocate and return the
+allocated object, but it would also protect it implicitly by putting it into the symbol
 table.  The `lang5` function is callee-protect, it protects its arguments. 
 If `ScalarLogical` is executed before `install`, `install` may allocate and
 kill the object allocated by `ScalarLogical`.  In C, the order of execution
@@ -116,14 +116,15 @@ _result = retByVal(_result, "width", asRInteger(width), "height", asRInteger(hei
 
 `asRInteger` is just an alias for `ScalarInteger`, so if the call to
 `asRInteger` that executes second allocates, it will kill the object
-allocated by previous call to `asRInteger`.
+allocated by the previous call to `asRInteger`.
 
 The `maacheck` by design can have false alarms. It looks for multiple
-allocating expressions passed to a function, where at least one for the
+allocating expressions passed to a function, where at least one of the
 expressions may return a newly allocated object.  The tool, however, does
 not detect if a function implicitlly protects an object before returning it
 (e.g.  `install` or `getPrimitive` are such functions).  The `install` calls
 are built-in exceptions in the tool.  Experience with the tool so far
-suggests that it has very few false alarms in practice.  So far I've fixed
-the bugs found in R-devel, so the remaining error reports will be false
-alarms, but it would be worth doing this for packages as well.
+suggests that it has very few false alarms in practice (and much less than
+the following tools).  So far I've fixed the bugs found in R-devel, so the
+remaining error reports will be false alarms, but it would be worth fixing
+the packages as well.
