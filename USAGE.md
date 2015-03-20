@@ -248,9 +248,69 @@ SEXP runJTAlgSecMomVec(SEXP adjMat, SEXP thetaMat, SEXP varR, SEXP maxRuntime)
     UNPROTECT(8);    // <========================= line 152
     return(retList); // <========================= line 153
 }
+```
 
 It is easy to see that the tool is right, only 7 pointers have been
 protected, but 8 are being unprotected.  Currently the `bcheck` tool also
 checks for unprotected pointers at calls (described below). Even though
 these two kinds of bugs are unrelated, the underlying working of the tool is
 the same (interpreting the guards, conditions, etc).
+
+## Detecting Unprotected Objects At Allocating Calls
+
+The ultimate goal is to have a tool that could detect unprotect (live)
+objects at allocating calls in general.  Live objects means objects that
+will still be used after the call.  This is a hard problem in the general
+case, but the `bcheck` code can do this for objects that have not been
+touched in any way in between their allocation and the erroneous use, such as
+
+```
+SEXP attribute_hidden do_gctorture2(SEXP call, SEXP op, SEXP args, SEXP rho)
+{
+    int gap, wait;
+    Rboolean inhibit;
+    SEXP old = ScalarInteger(gc_force_gap); /* GC */
+
+    checkArity(op, args);
+    gap = asInteger(CAR(args)); /* GC */
+    wait = asInteger(CADR(args)); /* GC */
+    inhibit = asLogical(CADDR(args));
+    R_gc_torture(gap, wait, inhibit);
+
+    return old;
+}
+```
+
+the example has ''GC'' annotations created using `csfpcheck`. The `old`
+variable is the only pointer to a live, unprotected object.  At calls to
+`asInteger`, this object can be erroneously collected.  The tool also
+detects when an allocating function is called with an allocating argument,
+which is often an error (by convention, most R functions should be called
+with arguments protected by callers), but there are many exceptions -
+functions that protect their arguments.  The tool cannot yet detect this. 
+Another source of false alarms is when the tool thinks that some function
+returns a newly allocated object, but in fact it does not in the particular
+context.  The experience is that the tool finds many errors, but the false
+alarms rate is still rather high.  A common source of true errors is a
+failure to protect the result of `getAttrib` when retrieving an attribute
+that may be automatically generated/converted (e.g. `names`, `dimnames`).
+
+Sometimes, the errors are very unsophisticated. Checking the CRAN ccgarch
+package also generates this report.
+
+```
+Function uni_vola_sim
+  unprotected variable el2 while calling allocating function Rf_allocVector ccgarch.Rcheck/00_pkg_src/ccgarch/src/R_uni_vola_sim.c:16
+```
+
+```
+PROTECT(z = allocVector(REALSXP, nobs));
+PROTECT(output = allocVector(VECSXP, 2));
+el2 = allocVector(REALSXP, 1);
+hl = allocVector(REALSXP,1); <===================== line 16
+rh = REAL(h);
+```
+
+This report is indeed a true error, the call to `allocVector` may trigger GC
+and kill the object pointed to by `el2`.
+
