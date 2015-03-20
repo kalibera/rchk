@@ -84,7 +84,8 @@ maacheck src/main/R.bin.bc RGtk2.Rcheck/00_pkg_src/RGtk2/src/RGtk2.so.bc
 This will produce a number of suspected errors, including
 
 ```
-WARNING Suspicious call (two or more unprotected arguments) to retByVal at S_pango_layout_get_size RGtk2.Rcheck/00_pkg_src/RGtk2/src/pangoFuncs.c:3596
+WARNING Suspicious call (two or more unprotected arguments) to retByVal
+  at S_pango_layout_get_size RGtk2.Rcheck/00_pkg_src/RGtk2/src/pangoFuncs.c:3596
 ```
 
 This is a real error:
@@ -300,7 +301,8 @@ package also generates this report.
 
 ```
 Function uni_vola_sim
-  unprotected variable el2 while calling allocating function Rf_allocVector ccgarch.Rcheck/00_pkg_src/ccgarch/src/R_uni_vola_sim.c:16
+  unprotected variable el2 while calling allocating function 
+    Rf_allocVector ccgarch.Rcheck/00_pkg_src/ccgarch/src/R_uni_vola_sim.c:16
 ```
 
 ```
