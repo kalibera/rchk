@@ -28,7 +28,7 @@ obvious cases this is hard to find out.
 
 The `csfpcheck` tool does the job automatically:
 
-`csfpcheck ./src/main/R.bin.bc >lines`
+`csfpcheck src/main/R.bin.bc >lines`
 
 produces a list of source files with line numbers where allocation may
 happen. This script puts a comment at the end of each such line:
@@ -37,8 +37,8 @@ happen. This script puts a comment at the end of each such line:
 
 The tool errs on the safe side, which is saying that a function may
 allocate.  It may be that in fact the function won't allocate for the given
-inputs.  The tool, however, does take some function arguments into account:
-e.g.  it can detect that `getAttrib(,R_ClassSymbol)` will not allocate, but
+inputs.  The tool, however, takes some function arguments into account: e.g. 
+it can detect that `getAttrib(,R_ClassSymbol)` will not allocate, but
 `getAttrib(,R_NamesSymbol)` might.  In the following snippet from `eval.c`,
 
 ```
@@ -54,11 +54,11 @@ SEXP attribute_hidden do_enablejit(SEXP call, SEXP op, SEXP args, SEXP rho)
 }
 ```
 
-the allocation in `ScalarInteger` is correct and obvious to any developer,
-the allocation in `loadCompilerNamespace` is correct but perhaps less obvious,
-and the allocation in `asInteger` is surprising.  But it is correct!  The
-function will allocate when displaying a warning, e.g.  when the conversion
-loses accuracy or produces NAs.
+`ScalarInteger` indeed allocates and it would be obvious to any developer,
+`loadCompilerNamespace` really allocates but perhaps it is less obvious, and
+the detected allocation in `asInteger` is surprising.  But it is correct! 
+The function will allocate when displaying a warning, e.g.  when the
+conversion loses accuracy or produces NAs.
 
 A patch for the R-devel version 67741 with the generated "GC" comments by
 the tool is available in the `examples` directory for convenience. To get
@@ -70,3 +70,60 @@ svn checkout -r 67741 http://svn.r-project.org/R/trunk
 cd trunk
 zcat ../csfpcheck.67741.patch.gz | patch -p0
 ```
+
+Having such annotated sources may be useful when manually looking for
+protection bugs or when checking the reports of other bug finding tools, and
+perhaps also when diagnosing erros found by [runtime
+checking](http://cran.r-project.org/doc/manuals/r-release/R-exts.html#Checking-memory-access)
+(valgrind, gctorture, the barrier, etc).
+
+## Detecting Multiple-Allocating-Arguments Bugs
+
+The `maacheck` tools for a very special but common bug pattern, like here:
+
+```
+PROTECT( expr = lang5(install("gsub"), ScalarLogical(1), pattern, replacement, x) );
+```
+
+I've learned about these bugs from Radford Neal who fixed a number of them
+manually in [pqR](http://www.pqr-project.org/) and I've ported those fixes
+to R-devel.  In the example above, `ScalarLogical` indeed allocates and
+returns the allocated object.  `install` may also allocate and return that
+object, but it will protect it implicitly by putting it into the symbol
+table.  The `lang5` function is callee-protect, it protects its arguments. 
+If `ScalarLogical` is executed before `install`, `install` may allocate and
+kill the object allocated by `ScalarLogical`.  In C, the order of execution
+of `install` and `ScalarLogical` is undefined, so this can happen.
+
+The tool looks for similar errors, not necessarily only those including
+`install`, even though such are most common. To check the `RGtk2` package, run
+
+```
+maacheck src/main/R.bin.bc RGtk2.Rcheck/00_pkg_src/RGtk2/src/RGtk2.so.bc
+```
+
+This will produce a number of suspected errors, including
+
+```
+WARNING Suspicious call (two or more unprotected arguments) to retByVal at S_pango_layout_get_size RGtk2.Rcheck/00_pkg_src/RGtk2/src/pangoFuncs.c:3596
+```
+
+This is a real error:
+
+```
+_result = retByVal(_result, "width", asRInteger(width), "height", asRInteger(height), NULL);
+```
+
+`asRInteger` is just an alias for `ScalarInteger`, so if the call to
+`asRInteger` that executes second allocates, it will kill the object
+allocated by previous call to `asRInteger`.
+
+The `maacheck` by design can have false alarms. It looks for multiple
+allocating expressions passed to a function, where at least one for the
+expressions may return a newly allocated object.  The tool, however, does
+not detect if a function implicitlly protects an object before returning it
+(e.g.  `install` or `getPrimitive` are such functions).  The `install` calls
+are built-in exceptions in the tool.  Experience with the tool so far
+suggests that it has very few false alarms in practice.  So far I've fixed
+the bugs found in R-devel, so the remaining error reports will be false
+alarms, but it would be worth doing this for packages as well.
