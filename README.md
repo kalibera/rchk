@@ -22,4 +22,8 @@ We have not been fixing the CRAN/BIOC packages, where a number of errors can
 be found as well.  We are happy to give advice to interested package
 maintainers on how to use the tool.
 
-A high-level description of the tools is available [here](USAGE.md).
+Further information:
+
+*[User documentation](doc/USAGE.md) - how to use the tools and what they check.
+*[Internals](doc/INTERNALS) - how the tools work internally.
+
