@@ -11,7 +11,7 @@ is not reachable).  The core of the error path detection is finding
 statement is reachable.  All other basic blocks are error basic blocks. 
 An *error function* is a function with error basic block as as the entry
 basic block. This is a simple reachability problem (one for basic blocks
-within a function, one for the callgraph).
+within a function, one for the call graph).
 
 ```
 errorBBs =
@@ -47,9 +47,9 @@ The goal of allocator detection is to identify all *allocating functions*
 *allocators* (allocating functions that may return a newly allocated
 and unprotected object (SEXP)).
 
-Detecting allocating functions is a reachability problem on the callgraph: a
+Detecting allocating functions is a reachability problem on the call graph: a
 function may allocate if it may reach `R_gc_internal`.  We build the
-transitive closure of the full callgraph using a trivial fixed-point
+transitive closure of the full call graph using a trivial fixed-point
 algorithm working on the adjacency matrix and adjacency list.  This has been
 fast enough so far.  We exclude error basic blocks - allocations on error
 paths are ignored.
@@ -67,11 +67,11 @@ repeat
 ```
 
 Allocator detection is also a reachability problem, but on the subset of the
-callgraph.  Only functions that return `SEXP` can be allocators.  We treat
+call graph.  Only functions that return `SEXP` can be allocators.  We treat
 all functions that return `SEXP` and call directly into `R_gc_internal` as
 allocators.  For each function that returns `SEXP`, we check whether that
 `SEXP` returned may come from a call to another function, and if so, we take
-such call edge into account for callgraph closure calculation.  So far we
+such call edge into account for call graph closure calculation.  So far we
 assume functions do not protect or implicitly protect objects prior to
 returning them - we only treat specially the `install` functions
 (`Rf_install`, `Rf_installTrChar`, `Rf_installChar`,
@@ -143,8 +143,8 @@ be uninitialized).
 
 ## Data-Flow and State Checking
 
-The context-sensitive allocator detection, balance checking, and unallocated
-pointers checking (all described later) are all based on the same core
+The context-sensitive allocator detection, balance checking, and unprotected
+objects checking (all described later) are all based on the same core
 checking algorithm.  This algorithm is (based on) a work-list algorithm for
 forward data flow analysis.  It ''simulates'' execution of the checked
 function, maintaining a *state*.  The state includes the current instruction
@@ -236,7 +236,7 @@ variables - we call these variables SEXP guards. Again we only keep track of
 selected SEXP variables, based on a heuristic of when it may benefit. The
 support for SEXP guards is more sophisticated than that for integer guards,
 as we found SEXP guards to be more important for allocation-related
-checking. About an SEXP guard variable, we rememeber whether it is known to
+checking. About an SEXP guard variable, we remember whether it is known to
 be nil (`R_NilValue`), known to be a symbol of a known name, known to be
 non-nil (not `R_NilValue`), or whether if it is of unknown value. Note that
 a symbol is always non-nil.
@@ -302,7 +302,7 @@ We find for each called function:
   allocators)
 
 Similarly to the context-insensitive allocator detection, we then compute
-the transitive closure of the two ''callgraphs'' to find functions that may
+the transitive closure of the two ''call graphs'' to find functions that may
 call into `R_gc_internal`. Again we use a simple fixed-point algorithm using
 the adjacency matrix and the adjacency list.
 
@@ -396,8 +396,92 @@ to a variable (`saveddepth = R_PPStackTop`), so that it can simulate the
 reverse operation of restoring it later (`R_PPStackTop = saveddepth`). This
 is only supported in the exact state (when exact depth is known).
 
-### Unallocated Pointers Checking
+### Unprotected Objects Checking
 
-## Heuristical Checks
+The objective is to detect when a newly allocated object may be killed by a
+call to an allocating function, but used afterwards. Currently the tool,
+however, can only check a small subset of this scenario.
+
+A *fresh* pointer is a pointer to a newly allocated object that has not been
+yet used in any way (has not been read or written). If a fresh pointer exists
+in a local variable during an allocating call, an error is reported, but,
+only if that pointer may be used later (is live). Note, if a pointer is
+passed to an allocating call, it is considered used before that call, and
+this tool does not report an error. Note also that a fresh pointer is
+necessarily unprotected, because protecting it would count as a use, and
+thus the pointer would be no longer fresh.
+
+The tool uses the data flow and state checking algorithm described above,
+including the adaptive enabling of guards (currently the tool is integrated
+with the balance checking, but it could easily be made standalone). In the
+state, it remembers a set of fresh variables. A new fresh variable is
+introduced by a call to a (called) allocator. A variable ceases to be fresh
+when used in any way, so it is removed from the set in such a case. If there
+is a call to a (called) allocating function, conditional error messages are
+reported for all fresh variables.
+
+*Conditional* messages are conditional on that a given variable will be ever
+used.  This is a form of live variable analysis implemented in a
+forward-flow checking tool.  Normally it would be natural to implement live
+variable analysis using backward flow, but it would be very complicated to
+do with the context sensitivity implemented now.  So, the current
+implementation remembers the conditional messages in the checking state.  It
+maintains a map of variables to messages.  If a variable is being used
+(read), it is looked up in this map, and if there are any conditional
+messages for it, they are printed and deleted from the state. If a variable
+is rewritten (killed), it is also looked up in this map, and any messages
+conditional on it are removed.
 
 ### Multiple-Allocating Arguments
+
+The tools to detect multiple allocating arguments at calls are simple
+heuristics and do not use the data flow algorithms described above directly,
+but they take advantage of the (simple) allocator detection.
+
+`maacheck`, the simpler one, for each call to a function counts the number
+of arguments that are
+
+1. allocated (result of a call to allocator)
+2. allocating (result of an expression that allocates, so it includes
+previous group)
+3. non-allocating
+
+The tool reports a warning whenever `nAllocating >= 2 AND nAllocated >= 1`,
+because in that case the allocated argument may be killed by another
+allocating argument. The tool perform these checks linearly for all calls in
+all functions. 
+
+`ueacheck` is a more complicated variant of this tool. It tries to also
+support the case when the allocated argument is being read from a variable.
+The tool attempts to detect when such variable is protected, as to reduce
+false alarms. The tool uses a heuristics based on dominator trees and
+capture analysis (both provided by LLVM).
+
+```
+hasUnprotectedObject var
+
+  if var may be capture before the call
+    return false [LLVM capture analysis]
+
+  find dominating allocation var = alloc()
+    check all stores to var
+      check if it takes value from an allocator
+        check if it dominates the use of var of interest
+
+  look for PROTECT(var) between the allocation and use
+    check all loads of var
+      check if it is passed to PROTECT or PROTECT_WITH_INDEX
+        check if it is dominated by the allocation 
+          check if it dominates the use
+
+            if found, return false
+
+  return true
+```
+
+There are many approximations.  There may not be a single dominating
+PROTECT, but different PROTECTs on different paths.  There may not be a
+single dominating allocation, but different allocations on different paths.
+The pointer may also be passed to other protecting function than
+`Rf_protect` or `Rf_ProtectWithIndex`. It is almost embarrassing that this
+hack has been quite effective in finding errors in the core R.
