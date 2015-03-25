@@ -143,9 +143,135 @@ be uninitialized).
 
 ## Data-Flow and State Checking
 
+The context-sensitive allocator detection, balance checking, and unallocated
+pointers checking (all described later) are all based on the same core
+checking algorithm.  This algorithm is (based on) a work-list algorithm for
+forward data flow analysis.  It ''simulates'' execution of the checked
+function, maintaining a *state*.  The state includes the current instruction
+pointer and more, depending on the precision of checking and the tool.  The
+checker remembers states that were already explored, at basic block
+granularity, to avoid checking states multiple times (e.g.  due to loops). 
+When reaching the terminator of a basic block, the tool discovers possibly
+new states to explore (conservatively allowing all successor basic blocks,
+but with more precise tools only a subset of them).  The simulation
+terminates when there are no new states to explore.  To ensure termination,
+the additional information in the states must not be too precise compared to
+the precision of adding successors - e.g.  remembering in the state the
+exact value of the loop control variable, but not being able to tell when
+the loop should finish, would lead to infinite simulation.
+
+```
+workList =
+  entry basic block
+
+visitedSet =
+  entry basic block
+
+while workList nonempty
+  take state from worklist
+
+  for each non-terminator instruction of the state's basic block in execution order
+    simulate execution as needed to maintain state of guards
+    simulate execution as needed to maintain state of checking tool
+      and report suspected errors if found
+
+  for the terminator instruction
+    simulate execution as needed to maintain state of checking tool
+      and report suspected errors if found
+
+    if it is a branch on a (supported form of) a guard
+      treat addition of new states specially
+
+    otherwise if it is a branch (goto, loop back-branch, switch, etc)
+      for each possible successor basic block
+        if that block with the current state information is not in visitedSet
+          add new state to visitedSet
+          add the new state also to workList
+
+```
+
+The `workList` is implemented as a stack, so we do depth-first traversal.
+The `visitedSet` is implemented as a hashset and the quality of the hashing
+function in practice turned out very important for the performance of the
+checking.
+
 ### Integer Guards
 
+We treat specially conditional expressions that check whether an integer
+variable (which includes a boolean in C) is zero, e.g.
+
+```
+if (intVar) {
+  <trueBranch>
+} else {
+  <falseBranch>
+}
+```
+When a function has expressions like this, we remember in the checking state
+some information about `intVar` (an integer guard variable): whether it is
+known to be zero, known to be non-zero, or has unknown value.  In the above
+example, if `intVar` had unknown value at the condition, we would include
+two successor states, one for the true branch (in which we will set `intVar`
+to be known non-zero) and one for the false branch (in which we will set
+`intVar` to be known zero).  If we knew that `intVar` was zero (or
+non-zero), we would only consider the false branch (true branch) as the
+successor.
+
+When an integer guard variable is written, we set its state to unknown,
+unless it is set to a compile-time constant.  More cases could be supported,
+such as copying a value from another integer guard. As elsewhere in the
+tool, we only supported cases that we saw happening in the code.
+
+For performance reasons, we only remember information about integer
+variables that are used in conditional expressions and for which we may
+benefit: currently if the variable is used in two or more conditions, or
+just in one condition and is assigned a constant once. Also, guards can be
+enabled only adaptively when some errors have been found when checking
+without guards (a form of refinement) as described later.
+
 ### SEXP Guards
+
+We treat specially conditional expressions that check the state of SEXP
+variables - we call these variables SEXP guards. Again we only keep track of
+selected SEXP variables, based on a heuristic of when it may benefit. The
+support for SEXP guards is more sophisticated than that for integer guards,
+as we found SEXP guards to be more important for allocation-related
+checking. About an SEXP guard variable, we rememeber whether it is known to
+be nil (`R_NilValue`), known to be a symbol of a known name, known to be
+non-nil (not `R_NilValue`), or whether if it is of unknown value. Note that
+a symbol is always non-nil.
+
+Knowledge about values of SEXP guards is propagated from
+
+* arguments of a function (with context-sensitive checking)
+* assignment of R_NilValue: `sexpVar = R_NilValue`
+* from another guard `sexpVar1 = sexpVar2`
+* assignment of a symbol, e.g. `sexpVar = R_ClassSymbol`
+* optionally assignment of allocated value: `sexpVar = allocVector(...`
+
+The propagation from assignment from an allocator is optional, because the
+allocator detection is only approximate, it may specifically report as
+allocators functions that do not always return a freshly allocated object
+(so we cannot really be sure the returned object is non-nil).  It might be
+worth for this purpose having one more alternative allocator detection that
+would err on the negative side.
+
+Like for the integer guards, the knowledge about SEXP guards is propagated
+through conditional expressions. The following forms of conditions are
+handled
+
+* comparison against `R_NilValue`
+* comparison using `isNull(sexpVar)`
+* comparison against a symbol, e.g. against `R_ClassSymbol`
+* type tests, e.g. `isSymbol(sexpVar)`, `isString(sexpVar)`, etc
+
+The type tests are handled both when inlined (macros used in the R core) and
+when calling a function (e.g. from a package). We currently do not track
+information whether a guard is of a type other than symbol (or nil), but it
+might be useful to do so. We do not track information about possible
+reference count values of a guard, this might again be useful (e.g. when
+there is duplication only if the object is shared, but we would know it was
+private).
 
 ## Context-Sensitive Allocator Detection
 
@@ -155,7 +281,120 @@ about the function arguments.  Currently only symbols are supported: some
 arguments of a call may be known to be concrete symbols (with concrete known
 symbol names).
 
+A *called function* is a function with some knowledge about how it is
+called, such as `Rf_getAttrib(?,S:row.names)` (the second argument is known
+to be symbol ''row.names) or `do_subset2_dflt(?,S:[[,?,?)`. A *called
+allocating function* is a called function that may allocate, a *called
+allocator* is a called allocating function that may also return a newly
+allocated (unprotected) object. By definition, if for a called allocating
+function  we remove the argument information, the resulting function will be
+an allocating function (detected in context-insensitive way). The same
+applies to *called allocators*. This is used also to improve performance of
+called allocator detection -- we only check allocating functions and
+allocators.
+
+We find for each called function:
+
+* the set of possibly called called functions (edges for detection of allocating
+  functions)
+
+* the set of possibly wrapped called function (edges for detection of
+  allocators)
+
+Similarly to the context-insensitive allocator detection, we then compute
+the transitive closure of the two ''callgraphs'' to find functions that may
+call into `R_gc_internal`. Again we use a simple fixed-point algorithm using
+the adjacency matrix and the adjacency list.
+
+The sets of called and wrapped functions are computed using the data-flow
+and state checking algorithm described above, with both integer guards and
+SEXP guards always enabled.  In addition to the basic block and guards
+information, it remembers in the state:
+
+* set of (called) functions called since function entry on this path
+* SEXP variable origins - for each SEXP variable 
+    set of (called) functions result of which may have been assigned to the variable
+
+Maintaining the set of functions called is easy, whenever a call instruction
+is visited, a called function is added to the set of remembered in the
+checking state.  When the return instruction is reached, the set is copied
+from the state into the per-function result.  For performance, we restrict to
+functions known to be allocating by the context-insensitive algorithm.
+
+The variable origins are tracked at store instructions and the return. At
+store, assignment to a variable replaces its origins (by origins from
+another variable or by one origin, if it is a call). At return instruction,
+depending on which variable is being returned, the respective origins are
+copied into the per-function results.
+
+The detection is only approximate. E.g., the algorithm may even miss some
+allocators when a function does not allocate, but returns one of its
+arguments allocated by the caller.
+
 ## Balance Checking
+
+The purpose of balance checking is finding functions that cause pointer
+protection stack imbalance. This tool uses the data flow and state checking
+algorithm described above. Integer and SEXP guards are only turned on if
+needed. The given function is first checked with the guards enabled and if
+no errors are found, they couldn't be found even with the guards enabled, so
+the tool is done with that function. Only in case of errors, it adaptively
+enables integer guards and does the checking again. Only if there are still
+errors found, it re-runs with SEXP guards enabled as well.
+
+The tool supports constructs like
+
+* `PROTECT(var)`, `PROTECT_WITH_INDEX(var, %idx)`, 
+* `UNPROTECT(3)`, `UNPROTECT_PTR(var)`
+* `UNPROTECT(nprotect)`, `nprotect = 1`, `nprotect += 3`,`if (nprotect) UNPROTECT(nprotect)`
+* `UNPROTECT(intGuard ? 3 : 4)`
+* `savestack = R_PPStackTop`, `R_PPStackTop = savestack`
+
+with certain restrictions. Only one *protection counter variable* per
+function is allowed (like `nprotect` above). Only one *top save variable*
+per function is allowed (like `savestack` above).
+
+The tool initially attempts to track the exact relative depth of the pointer
+protection stack and remember it in the checking state.  Likewise, if there
+is a pointer protection variable, the tool initially attempts to track the
+exact value of that variable. For some functions this approach works fine
+and allows the tool to find most balance errors. However, it would fail on
+examples such as
+
+```
+for( non-constant loop bound ) {
+  ...
+  PROTECT(x);
+  nprotect++;
+  ...
+}
+...
+UNPROTECT(nprotect);
+```
+
+that is, whenever the stack depth increases in each iteration of a loop. In
+the example above (which is e.g.  present in `do_sprintf` in R), one can
+however see that the `nprotect` counter correctly increases with the stack
+depth -- this is the intended behavior, correct code could look like this. 
+To verify this correct behavior, the tool does not need to know the exact
+depth and the exact value of `nprotect`, but only *by how much they differ*. 
+Hence, when the tool detects a too high exact stack depth in a state (*exact
+state*), it switches to a *differential state*, where it only tracks the
+*difference* between the stack depth and the counter value.
+
+In the differential state, it is still possible to handle
+`UNPROTECT(nprotect)`, and more than that, after executing it we again know
+the true (absolute) depth. `if (nprotect) UNPROTECT(nprotect)` is
+interestingly used in the code, even though it is equivalent to simply
+`UNPROTECT(nprotect)` and is treated by the tool even in the differential
+state when we do not know whether `nprotect` is zero or not. In the exact
+state, a conditional on an exact value of `nprotect` is handled similarly to
+integer guards.
+
+The tool also remembers in the state the depth at the time when it was saved
+to a variable (`saveddepth = R_PPStackTop`), so that it can simulate the
+reverse operation of restoring it later (`R_PPStackTop = saveddepth`). This
+is only supported in the exact state (when exact depth is known).
 
 ### Unallocated Pointers Checking
 

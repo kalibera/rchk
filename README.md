@@ -25,5 +25,5 @@ maintainers on how to use the tool.
 Further information:
 
 * [User documentation](doc/USAGE.md) - how to use the tools and what they check.
-* [Internals](doc/INTERNALS) - how the tools work internally.
+* [Internals](doc/INTERNALS.md) - how the tools work internally.
 
