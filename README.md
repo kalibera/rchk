@@ -27,3 +27,6 @@ Further information:
 * [User documentation](doc/USAGE.md) - how to use the tools and what they check.
 * [Internals](doc/INTERNALS.md) - how the tools work internally.
 
+Versions:
+  v0.1 (git tag) - Initial version with documentation.
+
