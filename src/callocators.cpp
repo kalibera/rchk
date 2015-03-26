@@ -321,7 +321,9 @@ void CalledModuleTy::release(CalledModuleTy *cm) {
   delete cm;
 }
 
-typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy*> VarOriginsTy;
+typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy*> InternedVarOriginsTy;
+typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy> VarOriginsTy; // uninterned
+
   // for a local variable, a list of functions whose return values may have
   // been assigned, possibly indirectly, to that variable
 
@@ -338,57 +340,77 @@ struct CalledFunctionsOSTableTy_hash {
   }
 };
 
+struct CAllocStateTy;
+
+struct CAllocPackedStateTy : public PackedStateWithGuardsTy {
+  const size_t hashcode;
+  const InternedVarOriginsTy varOrigins;
+  
+  CAllocPackedStateTy(size_t hashcode, BasicBlock* bb, const PackedIntGuardsTy& intGuards, const PackedSEXPGuardsTy& sexpGuards, const InternedVarOriginsTy& varOrigins):
+    hashcode(hashcode), PackedStateBaseTy(bb), PackedStateWithGuardsTy(bb, intGuards, sexpGuards), varOrigins(varOrigins) {};
+    
+  static CAllocPackedStateTy create(CAllocStateTy& us, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker);
+};
+
 typedef std::unordered_set<CalledFunctionsOrderedSetTy, CalledFunctionsOSTableTy_hash> CalledFunctionsOSTableTy;
 
-struct CAllocStateTy : public StateWithGuardsTy {
-  size_t hashcode;
-  CalledFunctionsOrderedSetTy *called;
+static VarOriginsTy unpackVarOrigins(const InternedVarOriginsTy& internedOrigins) {
+
   VarOriginsTy varOrigins;
 
-  CAllocStateTy(BasicBlock *bb): StateBaseTy(bb), StateWithGuardsTy(bb), hashcode(0), called(NULL), varOrigins() {};
+  for(InternedVarOriginsTy::const_iterator oi = internedOrigins.begin(), oe = internedOrigins.end(); oi != oe; ++oi) {
+    AllocaInst* var = oi->first;
+    CalledFunctionsOrderedSetTy* srcs = oi->second;
+    varOrigins.insert({var, *srcs});
+  }
+  
+  return varOrigins;
+}
 
-  CAllocStateTy(BasicBlock *bb, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, CalledFunctionsOrderedSetTy* called, VarOriginsTy& varOrigins):
-      StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), hashcode(0), called(called), varOrigins(varOrigins) {};
+static CalledFunctionsOSTableTy osTable; // interned ordered sets
+
+static CalledFunctionsOrderedSetTy* intern(const CalledFunctionsOrderedSetTy *set) {
+  if (!set) {
+    return NULL;
+  }
+  auto ssearch = osTable.find(*set);
+  if (ssearch != osTable.end()) {
+    const CalledFunctionsOrderedSetTy *s = &*ssearch;
+    return const_cast<CalledFunctionsOrderedSetTy*>(s);
+  }
+  const CalledFunctionsOrderedSetTy *s = &*osTable.insert(*set).first;
+  return const_cast<CalledFunctionsOrderedSetTy*>(s);
+}
+
+static InternedVarOriginsTy packVarOrigins(const VarOriginsTy& varOrigins) {
+
+  InternedVarOriginsTy internedOrigins;
+
+  for(VarOriginsTy::const_iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
+    AllocaInst* var = oi->first;
+    const CalledFunctionsOrderedSetTy& srcs = oi->second;
+    internedOrigins.insert({var, intern(&srcs)});
+  }
+  
+  return internedOrigins;
+}
+
+struct CAllocStateTy : public StateWithGuardsTy {
+  CalledFunctionsOrderedSetTy *called;
+  VarOriginsTy varOrigins;
+  
+  CAllocStateTy(const CAllocPackedStateTy& ps, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker):
+    CAllocStateTy(ps.bb, intGuardsChecker.unpack(ps.intGuards), sexpGuardsChecker.unpack(ps.sexpGuards), NULL, unpackVarOrigins(ps.varOrigins)) {};
+
+  CAllocStateTy(BasicBlock *bb): StateBaseTy(bb), StateWithGuardsTy(bb), called(NULL), varOrigins() {};
+
+  CAllocStateTy(BasicBlock *bb, const IntGuardsTy& intGuards, const SEXPGuardsTy& sexpGuards, CalledFunctionsOrderedSetTy* called, const VarOriginsTy& varOrigins):
+    StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), called(called), varOrigins(varOrigins) {};
       
   virtual CAllocStateTy* clone(BasicBlock *newBB) {
     return new CAllocStateTy(newBB, intGuards, sexpGuards, called, varOrigins);
   }
     
-  void hash() {
-    size_t res = 0;
-    hash_combine(res, bb);
-    hash_combine(res, intGuards.size()); // FIXME: avoid copy-paste
-    for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
-      AllocaInst* var = gi->first;
-      IntGuardState s = gi->second;
-      hash_combine(res, (void *)var);
-      hash_combine(res, (size_t) s);
-    } // ordered map
-
-    hash_combine(res, sexpGuards.size()); // FIXME: avoid copy-paste
-    for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
-      AllocaInst* var = gi->first;
-      const SEXPGuardTy& g = gi->second;
-      hash_combine(res, (void *) var);
-      hash_combine(res, (size_t) g.state);
-      hash_combine(res, g.symbolName);
-    } // ordered map
-
-    if (KEEP_CALLED_IN_STATE) {
-      hash_combine(res, (void *)called); // interned
-    }
-
-    hash_combine(res, varOrigins.size());
-    for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
-      AllocaInst* var = oi->first;
-      CalledFunctionsOrderedSetTy* srcs = oi->second;
-        
-      hash_combine(res, (void *)srcs); // interned
-    } // ordered map
-    
-    hashcode = res;
-  }
-
   void dump(std::string dumpMsg) {
     StateBaseTy::dump(VERBOSE_DUMP);
     StateWithGuardsTy::dump(VERBOSE_DUMP);
@@ -403,76 +425,75 @@ struct CAllocStateTy : public StateWithGuardsTy {
     errs() << "=== origins (allocators):\n";
     for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
       AllocaInst* var = oi->first;
-      CalledFunctionsOrderedSetTy* srcs = oi->second;
+      CalledFunctionsOrderedSetTy& srcs = oi->second;
 
       errs() << "   " << varName(var) << ":";
         
-      for(CalledFunctionsOrderedSetTy::iterator fi = srcs->begin(), fe = srcs->end(); fi != fe; ++fi) {
+      for(CalledFunctionsOrderedSetTy::iterator fi = srcs.begin(), fe = srcs.end(); fi != fe; ++fi) {
         CalledFunctionTy *f = *fi;
         errs() << " " << funName(f);
       }
       errs() << "\n";
     }
-    errs() << "=== hash: " << std::to_string(hashcode) << "\n";
     errs() << " ######################" << dumpMsg << "######################\n";
   }
     
   virtual bool add();
 };
 
+
+CAllocPackedStateTy CAllocPackedStateTy::create(CAllocStateTy& us, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker) {
+
+  InternedVarOriginsTy internedOrigins = packVarOrigins(us.varOrigins);
+   
+  size_t res = 0;
+  hash_combine(res, us.bb);
+  intGuardsChecker.hash(res, us.intGuards);
+  sexpGuardsChecker.hash(res, us.sexpGuards);
+    
+  hash_combine(res, internedOrigins.size());
+  for(InternedVarOriginsTy::const_iterator oi = internedOrigins.begin(), oe = internedOrigins.end(); oi != oe; ++oi) {
+    AllocaInst* var = oi->first;
+    CalledFunctionsOrderedSetTy* srcs = oi->second;
+    hash_combine(res, (void *)srcs); // interned
+  } // ordered map
+    
+  return CAllocPackedStateTy(res, us.bb, intGuardsChecker.pack(us.intGuards), sexpGuardsChecker.pack(us.sexpGuards), internedOrigins);
+}
+  
 // the hashcode is cached at the time of first hashing
 //   (and indeed is not copied)
 
-struct CAllocStatePtrTy_hash {
-  size_t operator()(const CAllocStateTy* t) const {
-    return t->hashcode;
+struct CAllocPackedStateTy_hash {
+  size_t operator()(const CAllocPackedStateTy& t) const {
+    return t.hashcode;
   }
 };
 
-struct CAllocStatePtrTy_equal {
-  bool operator() (const CAllocStateTy* lhs, const CAllocStateTy* rhs) const {
-
-    bool res;
-    if (lhs == rhs) {
-      res = true;
-    } else {
-      res = lhs->bb == rhs->bb && 
-        lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
-        (!KEEP_CALLED_IN_STATE || lhs->called == rhs->called) && lhs->varOrigins == rhs->varOrigins;
-    }
-    
-    return res;
+struct CAllocPackedStateTy_equal {
+  bool operator() (const CAllocPackedStateTy& lhs, const CAllocPackedStateTy& rhs) const {
+    return lhs.bb == rhs.bb && lhs.intGuards == rhs.intGuards && lhs.sexpGuards == rhs.sexpGuards && 
+      lhs.varOrigins == rhs.varOrigins;
   }
 };
 
-typedef std::stack<CAllocStateTy*> WorkListTy;
-typedef std::unordered_set<CAllocStateTy*, CAllocStatePtrTy_hash, CAllocStatePtrTy_equal> DoneSetTy;
+typedef std::stack<CAllocStateTy> WorkListTy;
+typedef std::unordered_set<CAllocPackedStateTy, CAllocPackedStateTy_hash, CAllocPackedStateTy_equal> DoneSetTy;
 
 static WorkListTy workList; // FIXME: avoid these "globals"
 static DoneSetTy doneSet;   // FIXME: avoid these "globals"
-static CalledFunctionsOSTableTy osTable; // interned ordered sets
 
-static CalledFunctionsOrderedSetTy* intern(CalledFunctionsOrderedSetTy *set) {
-  if (!set) {
-    return NULL;
-  }
-  auto ssearch = osTable.find(*set);
-  if (ssearch != osTable.end()) {
-    const CalledFunctionsOrderedSetTy *s = &*ssearch;
-    return const_cast<CalledFunctionsOrderedSetTy*>(s);
-  }
-  const CalledFunctionsOrderedSetTy *s = &*osTable.insert(*set).first;
-  return const_cast<CalledFunctionsOrderedSetTy*>(s);
-}
+static IntGuardsCheckerTy intGuardsChecker; // FIXME: avoid these "globals"
+static SEXPGuardsCheckerTy sexpGuardsChecker; // FIXME: avoid these "globals"
 
-bool CAllocStateTy::add() { // FIXME: avoid copy paste (vs. bcheck)
 
-  // s.called and elements of s.varOrigins are kept interned by the checker
-  
-  hash(); // precompute hashcode
-  auto sinsert = doneSet.insert(this);
+bool CAllocStateTy::add() {
+
+  CAllocPackedStateTy ps = CAllocPackedStateTy::create(*this, intGuardsChecker, sexpGuardsChecker);
+  auto sinsert = doneSet.insert(ps);
   if (sinsert.second) {
-    workList.push(this);
+    workList.push(*this);
+    delete this; // NOTE: state suicide    
     return true;
   } else {
     delete this; // NOTE: state suicide
@@ -482,14 +503,9 @@ bool CAllocStateTy::add() { // FIXME: avoid copy paste (vs. bcheck)
 
 static void clearStates() { // FIXME: avoid copy paste (vs. bcheck)
   // clear the worklist and the doneset
-  for(DoneSetTy::iterator ds = doneSet.begin(), de = doneSet.end(); ds != de; ++ds) {
-    CAllocStateTy *old = *ds;
-    delete old;
-  }
   doneSet.clear();
   WorkListTy empty;
   std::swap(workList, empty);
-  // all elements in worklist are also in doneset, so no need to call destructors
   osTable.clear();
 }
 
@@ -536,12 +552,13 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     initState->add();
   }
   while(!workList.empty()) {
-    CAllocStateTy s(*workList.top());
+    CAllocStateTy s(workList.top());
+    workList.pop();    
+
     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
       msg.trace("going to work on this state:", s.bb->begin());
-      workList.top()->dump("worklist top");
+      s.dump("worklist top");
     }    
-    workList.pop();    
 
     if (ONLY_CHECK_ONLY_FUNCTION && ONLY_FUNCTION_NAME != f->getName()) {
       continue;
@@ -620,8 +637,8 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
                 if (msg.debug()) msg.debug("propagating origins on assignment of " + varName(cast<AllocaInst>(src)) + " to " + varName(dst), in); 
                 auto sorig = s.varOrigins.find(cast<AllocaInst>(src));
                 if (sorig != s.varOrigins.end()) {
-                  CalledFunctionsOrderedSetTy* srcOrigs = sorig->second;
-                  s.varOrigins.insert({dst, srcOrigs}); // set (shallow copy) origins
+                  CalledFunctionsOrderedSetTy& srcOrigs = sorig->second;
+                  s.varOrigins.insert({dst, srcOrigs}); // set (copy) origins
                 }
               }
               continue;
@@ -632,7 +649,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
               CalledFunctionsOrderedSetTy newOrigins;
               newOrigins.insert(tgt);
-              s.varOrigins.insert({dst, intern(&newOrigins)});
+              s.varOrigins.insert({dst, newOrigins});
               continue;
             }
           }
@@ -683,9 +700,9 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
             auto origins = s.varOrigins.find(cast<AllocaInst>(src));
             size_t nOrigins = 0;
             if (origins != s.varOrigins.end()) {
-              CalledFunctionsOrderedSetTy* knownOrigins = origins->second;
-              wrapped.insert(knownOrigins->begin(), knownOrigins->end()); // copy origins as result
-              nOrigins = knownOrigins->size();
+              CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
+              wrapped.insert(knownOrigins.begin(), knownOrigins.end()); // copy origins as result
+              nOrigins = knownOrigins.size();
             }
             if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
           }

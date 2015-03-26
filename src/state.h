@@ -14,4 +14,10 @@ struct StateBaseTy {
   void dump(bool verbose);
 };
 
+struct PackedStateBaseTy {
+  BasicBlock *bb;
+
+  PackedStateBaseTy(BasicBlock *bb): bb(bb) {}  
+};
+
 #endif

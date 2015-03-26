@@ -22,6 +22,22 @@ enum IntGuardState {
 };
 
 typedef std::map<AllocaInst*,IntGuardState> IntGuardsTy;
+
+struct PackedIntGuardsTy {
+  const IntGuardsTy intGuards;
+  
+  PackedIntGuardsTy(const IntGuardsTy& intGuards): intGuards(intGuards) {};
+  bool operator==(const PackedIntGuardsTy& other) const { return intGuards == other.intGuards; };
+};
+
+// per-function state for checking SEXP guards
+struct IntGuardsCheckerTy {
+
+  PackedIntGuardsTy pack(const IntGuardsTy& intGuards);
+  IntGuardsTy unpack(const PackedIntGuardsTy& intGuards);
+  void hash(size_t& res, const IntGuardsTy& intGuards);
+};
+
 struct StateWithGuardsTy;
 
 std::string igs_name(IntGuardState igs);
@@ -54,6 +70,21 @@ struct SEXPGuardTy {
 
 typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
+struct PackedSEXPGuardsTy {
+  const SEXPGuardsTy sexpGuards;
+  
+  PackedSEXPGuardsTy(const SEXPGuardsTy& sexpGuards): sexpGuards(sexpGuards) {};
+  bool operator==(const PackedSEXPGuardsTy& other) const { return sexpGuards == other.sexpGuards; };
+};
+
+// per-function state for checking SEXP guards
+struct SEXPGuardsCheckerTy {
+
+  PackedSEXPGuardsTy pack(const SEXPGuardsTy& sexpGuards);
+  SEXPGuardsTy unpack(const PackedSEXPGuardsTy& sexpGuards);
+  void hash(size_t& res, const SEXPGuardsTy& sexpGuards);
+};
+
   // yikes, need forward type-def
 struct ArgInfoTy;
 typedef std::vector<ArgInfoTy*> ArgInfosTy;
@@ -73,12 +104,20 @@ struct StateWithGuardsTy : virtual public StateBaseTy {
   IntGuardsTy intGuards;
   SEXPGuardsTy sexpGuards;
   
-  StateWithGuardsTy(BasicBlock *bb, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards): StateBaseTy(bb), intGuards(intGuards), sexpGuards(sexpGuards) {};
+  StateWithGuardsTy(BasicBlock *bb, const IntGuardsTy& intGuards, const SEXPGuardsTy& sexpGuards): StateBaseTy(bb), intGuards(intGuards), sexpGuards(sexpGuards) {};
   StateWithGuardsTy(BasicBlock *bb): StateBaseTy(bb), intGuards(), sexpGuards() {};
   
   virtual StateWithGuardsTy* clone(BasicBlock *newBB) = 0;
   
   void dump(bool verbose);
+};
+
+struct PackedStateWithGuardsTy : virtual public PackedStateBaseTy {
+  const PackedIntGuardsTy intGuards;
+  const PackedSEXPGuardsTy sexpGuards;
+  
+  PackedStateWithGuardsTy(BasicBlock *bb, const PackedIntGuardsTy& intGuards, const PackedSEXPGuardsTy& sexpGuards):
+    PackedStateBaseTy(bb), intGuards(intGuards), sexpGuards(sexpGuards) {};
 };
 
 #endif

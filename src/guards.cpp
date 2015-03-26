@@ -223,6 +223,27 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
   return true;
 }
 
+PackedIntGuardsTy IntGuardsCheckerTy::pack(const IntGuardsTy& intGuards) {
+  return PackedIntGuardsTy(intGuards); // dummy implementation
+}
+
+IntGuardsTy IntGuardsCheckerTy::unpack(const PackedIntGuardsTy& intGuards) {
+  return IntGuardsTy(intGuards.intGuards); // dummy implementation
+}
+  
+void IntGuardsCheckerTy::hash(size_t& res, const IntGuardsTy& intGuards) {
+
+  hash_combine(res, intGuards.size());
+  for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
+    AllocaInst* var = gi->first;
+    IntGuardState s = gi->second;
+    hash_combine(res, (void *)var);
+    hash_combine(res, (size_t) s);
+  } // ordered map
+}
+
+
+
 // SEXP guard is a local variable of type SEXP
 //   that follows the heuristics included below
 //   these heuristics are important because the keep the state space small(er)
@@ -750,6 +771,25 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     }
   }
   return true;  
+}
+  
+PackedSEXPGuardsTy SEXPGuardsCheckerTy::pack(const SEXPGuardsTy& sexpGuards) {
+  return PackedSEXPGuardsTy(sexpGuards); // dummy implementation
+}
+
+SEXPGuardsTy SEXPGuardsCheckerTy::unpack(const PackedSEXPGuardsTy& sexpGuards) {
+  return SEXPGuardsTy(sexpGuards.sexpGuards); // dummy implementation
+}
+  
+void SEXPGuardsCheckerTy::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
+  hash_combine(res, sexpGuards.size());
+  for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
+    AllocaInst* var = gi->first;
+    const SEXPGuardTy& g = gi->second;
+    hash_combine(res, (void *) var);
+    hash_combine(res, (size_t) g.state);
+    hash_combine(res, g.symbolName);
+  } // ordered map  
 }
 
 // common
