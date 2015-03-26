@@ -374,7 +374,9 @@ struct CAllocStateTy : public StateWithGuardsTy {
       hash_combine(res, g.symbolName);
     } // ordered map
 
-    hash_combine(res, (void *)called); // interned
+    if (KEEP_CALLED_IN_STATE) {
+      hash_combine(res, (void *)called); // interned
+    }
 
     hash_combine(res, varOrigins.size());
     for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
@@ -391,10 +393,12 @@ struct CAllocStateTy : public StateWithGuardsTy {
     StateBaseTy::dump(VERBOSE_DUMP);
     StateWithGuardsTy::dump(VERBOSE_DUMP);
 
-    errs() << "=== called (allocating):\n";
-    for(CalledFunctionsOrderedSetTy::iterator fi = called->begin(), fe = called->end(); fi != fe; *fi++) {
-      CalledFunctionTy* f = *fi;
-      errs() << "   " << funName(f) << "\n";
+    if (KEEP_CALLED_IN_STATE) {
+      errs() << "=== called (allocating):\n";
+      for(CalledFunctionsOrderedSetTy::iterator fi = called->begin(), fe = called->end(); fi != fe; *fi++) {
+        CalledFunctionTy* f = *fi;
+        errs() << "   " << funName(f) << "\n";
+      }
     }
     errs() << "=== origins (allocators):\n";
     for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
@@ -434,7 +438,7 @@ struct CAllocStatePtrTy_equal {
     } else {
       res = lhs->bb == rhs->bb && 
         lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
-        lhs->called == rhs->called && lhs->varOrigins == rhs->varOrigins;
+        (!KEEP_CALLED_IN_STATE || lhs->called == rhs->called) && lhs->varOrigins == rhs->varOrigins;
     }
     
     return res;
