@@ -477,7 +477,7 @@ struct CAllocPackedStateTy_equal {
   }
 };
 
-typedef std::stack<CAllocStateTy> WorkListTy;
+typedef std::stack<const CAllocPackedStateTy*> WorkListTy;
 typedef std::unordered_set<CAllocPackedStateTy, CAllocPackedStateTy_hash, CAllocPackedStateTy_equal> DoneSetTy;
 
 static WorkListTy workList; // FIXME: avoid these "globals"
@@ -492,8 +492,9 @@ bool CAllocStateTy::add() {
   CAllocPackedStateTy ps = CAllocPackedStateTy::create(*this, intGuardsChecker, sexpGuardsChecker);
   auto sinsert = doneSet.insert(ps);
   if (sinsert.second) {
-    workList.push(*this);
-    delete this; // NOTE: state suicide    
+    const CAllocPackedStateTy* insertedState = &*sinsert.first;
+    workList.push(insertedState); // make the worklist point to the doneset
+    delete this; // NOTE: state suicide
     return true;
   } else {
     delete this; // NOTE: state suicide
@@ -552,7 +553,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     initState->add();
   }
   while(!workList.empty()) {
-    CAllocStateTy s(workList.top());
+    CAllocStateTy s(*workList.top(), intGuardsChecker, sexpGuardsChecker); // unpacks the state
     workList.pop();    
 
     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
