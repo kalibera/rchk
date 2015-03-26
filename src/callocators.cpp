@@ -467,13 +467,7 @@ static CalledFunctionsOrderedSetTy* intern(CalledFunctionsOrderedSetTy *set) {
 
 bool CAllocStateTy::add() { // FIXME: avoid copy paste (vs. bcheck)
 
-    // intern sets of functions
-  called = intern(called);
-  for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
-    AllocaInst* var = oi->first;
-    CalledFunctionsOrderedSetTy* srcs = oi->second;
-    srcs = intern(srcs);
-  }
+  // s.called and elements of s.varOrigins are kept interned by the checker
   
   hash(); // precompute hashcode
   auto sinsert = doneSet.insert(this);
