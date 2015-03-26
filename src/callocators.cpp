@@ -31,6 +31,8 @@ const std::string ONLY_FUNCTION_NAME = "bcEval";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
+const bool KEEP_CALLED_IN_STATE = false;
+
 std::string CalledFunctionTy::getNameSuffix() const {
   std::string suff;
   unsigned nKnown = 0;
@@ -644,17 +646,21 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       if (tgt && cm->isAllocating(tgt->fun)) {
         if (msg.debug()) msg.debug("recording call to " + funName(tgt), in);
           
-        if (called.find(tgt) == called.end()) { // if we already know the function is called, don't add, save memory
+        if (KEEP_CALLED_IN_STATE) {  
+          if (called.find(tgt) == called.end()) { // if we already know the function is called, don't add, save memory
       
-          if (s.called) {
-            CalledFunctionsOrderedSetTy newCalls(*s.called);
-            newCalls.insert(tgt);
-            s.called = intern(&newCalls); // FIXME: may be interning too many times
-          } else {
-            CalledFunctionsOrderedSetTy newCalls;
-            newCalls.insert(tgt);
-            s.called = intern(&newCalls); // FIXME: may be interning too many times
+            if (s.called) {
+              CalledFunctionsOrderedSetTy newCalls(*s.called);
+              newCalls.insert(tgt);
+              s.called = intern(&newCalls); // FIXME: may be interning too many times
+            } else {
+              CalledFunctionsOrderedSetTy newCalls;
+              newCalls.insert(tgt);
+              s.called = intern(&newCalls); // FIXME: may be interning too many times
+            }
           }
+        } else {
+          called.insert(tgt);
         }
       }
     }
@@ -663,18 +669,14 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       
     if (ReturnInst::classof(t)) { // handle return statement
 
-      if (msg.debug()) msg.debug("collecting " + std::to_string(s.called->size()) + " calls at function return", t);
-      if (s.called) {
-        called.insert(s.called->begin(), s.called->end());
+      if (KEEP_CALLED_IN_STATE) {
+        if (s.called) {
+          if (msg.debug()) msg.debug("collecting " + std::to_string(s.called->size()) + " calls at function return", t);
+          called.insert(s.called->begin(), s.called->end());
+        }
       }
 
       if (trackOrigins) {
-        if (s.called && s.called->find(cm->getCalledGCFunction()) != s.called->end()) {
-          // the GC function is an exception
-          //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it
-          //   (this is a heuristic)
-          wrapped.insert(cm->getCalledGCFunction());
-        }
         Value *returnOperand = cast<ReturnInst>(t)->getReturnValue();
         if (LoadInst::classof(returnOperand)) { // return(var)
           Value *src = cast<LoadInst>(returnOperand)->getPointerOperand();
@@ -718,6 +720,12 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     }
   }
   clearStates();
+  if (trackOrigins && called.find(cm->getCalledGCFunction()) != called.end()) {
+    // the GC function is an exception
+    //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it
+    //   (this is a heuristic)
+    wrapped.insert(cm->getCalledGCFunction());
+  }
 }
 
 typedef std::vector<std::vector<bool>> BoolMatrixTy;
