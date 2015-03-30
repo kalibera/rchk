@@ -224,11 +224,12 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
 }
 
 PackedIntGuardsTy IntGuardsCheckerTy::pack(const IntGuardsTy& intGuards) {
-  return PackedIntGuardsTy(intGuards); // dummy implementation
+  auto iinsert = igTable.insert(intGuards);
+  return PackedIntGuardsTy(&*iinsert.first); // FIXME: the envelope is not interned
 }
 
 IntGuardsTy IntGuardsCheckerTy::unpack(const PackedIntGuardsTy& intGuards) {
-  return IntGuardsTy(intGuards.intGuards); // dummy implementation
+  return IntGuardsTy(*intGuards.intGuards);
 }
   
 void IntGuardsCheckerTy::hash(size_t& res, const IntGuardsTy& intGuards) {
@@ -242,6 +243,17 @@ void IntGuardsCheckerTy::hash(size_t& res, const IntGuardsTy& intGuards) {
   } // ordered map
 }
 
+size_t IntGuardsCheckerTy::IntGuardsTy_hash::operator()(const IntGuardsTy& t) const { // FIXME: cannot call SEXPGuardsCheckerTy::hash
+  size_t res = 0;
+  hash_combine(res, t.size());
+  for(IntGuardsTy::const_iterator gi = t.begin(), ge = t.end(); gi != ge; *gi++) {
+    AllocaInst* var = gi->first;
+    IntGuardState s = gi->second;
+    hash_combine(res, (void *)var);
+    hash_combine(res, (size_t) s);
+  } // ordered map
+  return res;
+}
 
 
 // SEXP guard is a local variable of type SEXP
@@ -774,11 +786,13 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
 }
   
 PackedSEXPGuardsTy SEXPGuardsCheckerTy::pack(const SEXPGuardsTy& sexpGuards) {
-  return PackedSEXPGuardsTy(sexpGuards); // dummy implementation
+
+  auto sinsert = sgTable.insert(sexpGuards);
+  return PackedSEXPGuardsTy(&*sinsert.first); // FIXME: the envelope is not interned
 }
 
 SEXPGuardsTy SEXPGuardsCheckerTy::unpack(const PackedSEXPGuardsTy& sexpGuards) {
-  return SEXPGuardsTy(sexpGuards.sexpGuards); // dummy implementation
+  return SEXPGuardsTy(*sexpGuards.sexpGuards);
 }
   
 void SEXPGuardsCheckerTy::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
@@ -789,7 +803,20 @@ void SEXPGuardsCheckerTy::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
     hash_combine(res, (void *) var);
     hash_combine(res, (size_t) g.state);
     hash_combine(res, g.symbolName);
-  } // ordered map  
+  } // ordered map
+}
+
+size_t SEXPGuardsCheckerTy::SEXPGuardsTy_hash::operator()(const SEXPGuardsTy& t) const { // FIXME: cannot call SEXPGuardsCheckerTy::hash
+  size_t res = 0;
+  hash_combine(res, t.size());
+  for(SEXPGuardsTy::const_iterator gi = t.begin(), ge = t.end(); gi != ge; *gi++) {
+    AllocaInst* var = gi->first;
+    const SEXPGuardTy& g = gi->second;
+    hash_combine(res, (void *) var);
+    hash_combine(res, (size_t) g.state);
+    hash_combine(res, g.symbolName);
+  } // ordered map
+  return res;
 }
 
 // common

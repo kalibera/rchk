@@ -508,6 +508,8 @@ static void clearStates() { // FIXME: avoid copy paste (vs. bcheck)
   WorkListTy empty;
   std::swap(workList, empty);
   osTable.clear();
+  sexpGuardsChecker.clear();
+  intGuardsChecker.clear();
 }
 
 static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg, 
@@ -546,6 +548,8 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
   }
     
   msg.newFunction(f->fun, " - " + funName(f));
+  sexpGuardsChecker.reset(f->fun);
+  intGuardsChecker.reset(f->fun);
 
   clearStates();
   {

@@ -8,6 +8,7 @@
 #include "symbols.h"
 
 #include <map>
+#include <unordered_set>
 
 #include <llvm/IR/Instruction.h>
 
@@ -24,18 +25,30 @@ enum IntGuardState {
 typedef std::map<AllocaInst*,IntGuardState> IntGuardsTy;
 
 struct PackedIntGuardsTy {
-  const IntGuardsTy intGuards;
+  const IntGuardsTy *intGuards; // pointer to intern table
   
-  PackedIntGuardsTy(const IntGuardsTy& intGuards): intGuards(intGuards) {};
+  PackedIntGuardsTy(const IntGuardsTy* intGuards): intGuards(intGuards) {};
   bool operator==(const PackedIntGuardsTy& other) const { return intGuards == other.intGuards; };
 };
 
 // per-function state for checking SEXP guards
 struct IntGuardsCheckerTy {
 
+  struct IntGuardsTy_hash {
+    size_t operator()(const IntGuardsTy& t) const;
+  };
+
+  typedef std::unordered_set<IntGuardsTy, IntGuardsTy_hash> IntGuardsTableTy; // for interning table
+  IntGuardsTableTy igTable; // intern table
+
+  IntGuardsCheckerTy() : igTable() {};
+
   PackedIntGuardsTy pack(const IntGuardsTy& intGuards);
   IntGuardsTy unpack(const PackedIntGuardsTy& intGuards);
   void hash(size_t& res, const IntGuardsTy& intGuards);
+
+  void reset(Function *f) {};
+  void clear() { igTable.clear(); };  
 };
 
 struct StateWithGuardsTy;
@@ -71,18 +84,31 @@ struct SEXPGuardTy {
 typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
 struct PackedSEXPGuardsTy {
-  const SEXPGuardsTy sexpGuards;
+  const SEXPGuardsTy* sexpGuards; // pointer to intern table
   
-  PackedSEXPGuardsTy(const SEXPGuardsTy& sexpGuards): sexpGuards(sexpGuards) {};
+  PackedSEXPGuardsTy(const SEXPGuardsTy* sexpGuards): sexpGuards(sexpGuards) {};
   bool operator==(const PackedSEXPGuardsTy& other) const { return sexpGuards == other.sexpGuards; };
 };
 
 // per-function state for checking SEXP guards
 struct SEXPGuardsCheckerTy {
 
+  struct SEXPGuardsTy_hash {
+    size_t operator()(const SEXPGuardsTy& t) const;
+  };
+
+  typedef std::unordered_set<SEXPGuardsTy, SEXPGuardsTy_hash> SEXPGuardsTableTy; // for interning table
+  SEXPGuardsTableTy sgTable; // intern table
+
+  SEXPGuardsCheckerTy() : sgTable() {};
+
   PackedSEXPGuardsTy pack(const SEXPGuardsTy& sexpGuards);
   SEXPGuardsTy unpack(const PackedSEXPGuardsTy& sexpGuards);
   void hash(size_t& res, const SEXPGuardsTy& sexpGuards);
+  
+  void reset(Function *f) {};
+  void clear() { sgTable.clear(); };
+  
 };
 
   // yikes, need forward type-def
