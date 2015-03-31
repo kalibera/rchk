@@ -228,7 +228,8 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *s
     }
     std::string symbolName;  // install("X")
     if (isInstallConstantCall(arg, symbolName)) {
-      argInfo[i] = new SymbolArgInfoTy(symbolName);
+      SymbolArgInfoTy ai(symbolName);
+      argInfo[i] = intern(ai);
       continue;
     }
     // not a symbol, leave argInfo as NULL
@@ -490,14 +491,13 @@ static SEXPGuardsCheckerTy sexpGuardsChecker; // FIXME: avoid these "globals"
 bool CAllocStateTy::add() {
 
   CAllocPackedStateTy ps = CAllocPackedStateTy::create(*this, intGuardsChecker, sexpGuardsChecker);
+  delete this; // NOTE: state suicide
   auto sinsert = doneSet.insert(ps);
   if (sinsert.second) {
     const CAllocPackedStateTy* insertedState = &*sinsert.first;
     workList.push(insertedState); // make the worklist point to the doneset
-    delete this; // NOTE: state suicide
     return true;
   } else {
-    delete this; // NOTE: state suicide
     return false;
   }
 }
