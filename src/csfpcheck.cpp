@@ -50,21 +50,21 @@ int main(int argc, char* argv[])
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
   CalledModuleTy *cm = CalledModuleTy::create(m);
 
-  CallSiteTargetsTy *callSiteTargets = cm->getCallSiteTargets();
-  CalledFunctionsSetTy *allocatingCFunctions = cm->getAllocatingCFunctions();
+  const CallSiteTargetsTy *callSiteTargets = cm->getCallSiteTargets();
+  const CalledFunctionsSetTy *allocatingCFunctions = cm->getAllocatingCFunctions();
   
   LinesTy sfpLines;
   
-  for(CallSiteTargetsTy::iterator ci = callSiteTargets->begin(), ce = callSiteTargets->end(); ci != ce; ++ci) {
+  for(CallSiteTargetsTy::const_iterator ci = callSiteTargets->begin(), ce = callSiteTargets->end(); ci != ce; ++ci) {
     Value *inst = ci->first;
     Function *csFun = cast<Instruction>(inst)->getParent()->getParent();
     if (functionsOfInterest.find(csFun) == functionsOfInterest.end()) {
         continue;
     }
-    CalledFunctionsSetTy& funcs = ci->second;
+    const CalledFunctionsSetTy& funcs = ci->second;
     
-    for(CalledFunctionsSetTy::iterator fi = funcs.begin(), fe = funcs.end(); fi != fe; ++fi) {
-      CalledFunctionTy *f = *fi;
+    for(CalledFunctionsSetTy::const_iterator fi = funcs.begin(), fe = funcs.end(); fi != fe; ++fi) {
+      const CalledFunctionTy *f = *fi;
       
       if (allocatingCFunctions->find(f) != allocatingCFunctions->end()) {
         std::string path;
@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
     }
   }
 
-  for(LinesTy::iterator li = sfpLines.begin(), le = sfpLines.end(); li != le; ++li) {
+  for(LinesTy::const_iterator li = sfpLines.begin(), le = sfpLines.end(); li != le; ++li) {
     const LineTy& l = *li;
     outs() << l.path << " " << std::to_string(l.line) << "\n";
   }

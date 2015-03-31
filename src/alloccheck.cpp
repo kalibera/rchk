@@ -31,12 +31,12 @@ int main(int argc, char* argv[])
 
   FunctionsSetTy *possibleAllocators = cm->getPossibleAllocators();
   FunctionsSetTy *allocatingFunctions = cm->getAllocatingFunctions();
-  CalledFunctionsVectorTy* calledFunctions = cm->getCalledFunctions();
+  const CalledFunctionsIndexTy* calledFunctions = cm->getCalledFunctions();
 
   if (0) {  
     outs() << "Detected called functions: \n";
-    for(CalledFunctionsVectorTy::iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
-      CalledFunctionTy *f = *fi;
+    for(CalledFunctionsIndexTy::const_iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
+      const CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
@@ -44,12 +44,12 @@ int main(int argc, char* argv[])
     }
   }
 
-  CalledFunctionsSetTy *possibleCAllocators = cm->getPossibleCAllocators();
-  CalledFunctionsSetTy *allocatingCFunctions = cm->getAllocatingCFunctions();
+  const CalledFunctionsSetTy *possibleCAllocators = cm->getPossibleCAllocators();
+  const CalledFunctionsSetTy *allocatingCFunctions = cm->getAllocatingCFunctions();
   
   if(1) {
-    for(CalledFunctionsSetTy::iterator fi = possibleCAllocators->begin(), fe = possibleCAllocators->end(); fi != fe; ++fi) {
-      CalledFunctionTy *f = *fi;
+    for(CalledFunctionsSetTy::const_iterator fi = possibleCAllocators->begin(), fe = possibleCAllocators->end(); fi != fe; ++fi) {
+      const CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
@@ -58,8 +58,8 @@ int main(int argc, char* argv[])
   }
 
   if(1) {
-    for(CalledFunctionsSetTy::iterator fi = allocatingCFunctions->begin(), fe = allocatingCFunctions->end(); fi != fe; ++fi) {
-      CalledFunctionTy *f = *fi;
+    for(CalledFunctionsSetTy::const_iterator fi = allocatingCFunctions->begin(), fe = allocatingCFunctions->end(); fi != fe; ++fi) {
+      const CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }
@@ -90,8 +90,8 @@ int main(int argc, char* argv[])
   
   // check for which functions the context gave more precise result
   if (1) {  
-    for(CalledFunctionsVectorTy::iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
-      CalledFunctionTy *f = *fi;
+    for(CalledFunctionsIndexTy::const_iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
+      const CalledFunctionTy *f = *fi;
       if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
         continue;
       }

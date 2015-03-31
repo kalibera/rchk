@@ -11,7 +11,7 @@ using namespace llvm;
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos) {
   
-  CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuards);
+  const CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuards);
   if (!tgt || !cm->isCAllocating(tgt)) {
     return;
   }
@@ -22,7 +22,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
 
   for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
     Value *arg = *ai;
-    CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
+    const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
     if (!src || !cm->isPossibleCAllocator(src)) {
       continue;
     }
@@ -80,7 +80,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   if (!li->hasOneUse()) { // too restrictive? should look at other uses too?
     return;
   }
-  CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
+  const CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
   if (!tgt || !cm->isCAllocating(tgt)) {
     return;
   }
@@ -120,7 +120,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
     if (msg.debug()) msg.debug("removed conditional messages as variable " + varName(var) + " is rewritten.", in);
   }
   
-  CalledFunctionTy *srcFun = cm->getCalledFunction(storeValueOp, sexpGuards);
+  const CalledFunctionTy *srcFun = cm->getCalledFunction(storeValueOp, sexpGuards);
   if (srcFun) {
     if (cm->isPossibleCAllocator(srcFun)) { // FIXME: this is very approximative -- we would rather need to know guaranteed allocators
       // the store (re-)creates a fresh variable

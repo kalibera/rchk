@@ -6,6 +6,7 @@
 #include "allocators.h"
 #include "guards.h"
 #include "symbols.h"
+#include "table.h"
 
 #include <unordered_set>
 #include <vector>
@@ -23,64 +24,75 @@ struct ArgInfoTy {
   virtual bool isSymbol() const { return false; };
 };
 
+
 struct SymbolArgInfoTy : public ArgInfoTy {
 
-  std::string symbolName;
-
-  SymbolArgInfoTy(std::string& symbolName) : symbolName(symbolName) {};
+  const std::string symbolName;
+  SymbolArgInfoTy(const std::string& symbolName) : symbolName(symbolName) {};
   
   virtual bool isSymbol() const { return true; }
+  
+  struct SymbolArgInfoTy_hash {
+    size_t operator()(const SymbolArgInfoTy& t) const {
+      return std::hash<std::string>()(t.symbolName);
+    }
+  };
+
+  struct SymbolArgInfoTy_equal {
+    bool operator() (const SymbolArgInfoTy& lhs, const SymbolArgInfoTy& rhs) const {
+      return lhs.symbolName == rhs.symbolName;
+    }
+  };
+
+  typedef InterningTable<SymbolArgInfoTy, SymbolArgInfoTy_hash, SymbolArgInfoTy_equal> SymbolArgInfoTableTy;
+  static SymbolArgInfoTableTy table;
+  
+  static const SymbolArgInfoTy* create(const std::string& symbolName) {
+    return table.intern(SymbolArgInfoTy(symbolName)); // FIXME: leaks memory  
+  }
 };
 
-typedef std::vector<ArgInfoTy*> ArgInfosTy;
+typedef std::vector<const ArgInfoTy*> ArgInfosVectorTy; // for interned elements
 
 class CalledModuleTy;
 
 struct CalledFunctionTy {
 
-  Function *fun;
-  ArgInfosTy *argInfo; // NULL element means nothing known about that argument
-  CalledModuleTy *module;
+  Function* const fun;
+  const ArgInfosVectorTy *argInfo; // NULL element means nothing known about that argument, interned
+  CalledModuleTy* const module;
+  
   unsigned idx; // filled in during interning
 
-  CalledFunctionTy(Function *fun, ArgInfosTy *argInfo, CalledModuleTy *module): fun(fun), argInfo(argInfo), module(module), idx(UINT_MAX) {};
+  CalledFunctionTy(Function *fun, const ArgInfosVectorTy *argInfo, CalledModuleTy *module): fun(fun), argInfo(argInfo), module(module), idx(UINT_MAX) {};
   std::string getName() const;
   std::string getNameSuffix() const;
 };
 
-struct CalledFunctionPtrTy_hash {
-  size_t operator()(const CalledFunctionTy* t) const;
+struct CalledFunctionTy_hash {
+  size_t operator()(const CalledFunctionTy& t) const;
 };
 
-struct CalledFunctionPtrTy_equal {
-  bool operator() (const CalledFunctionTy* lhs, const CalledFunctionTy* rhs) const;
+struct CalledFunctionTy_equal {
+  bool operator() (const CalledFunctionTy& lhs, const CalledFunctionTy& rhs) const;
 };    
 
-typedef std::unordered_set<CalledFunctionTy*, CalledFunctionPtrTy_hash, CalledFunctionPtrTy_equal> CalledFunctionsTableTy; // can be used for interning
-typedef std::set<CalledFunctionTy*> CalledFunctionsOrderedSetTy; // for interned functions
-typedef std::unordered_set<CalledFunctionTy*> CalledFunctionsSetTy; // for interned functions
+typedef IndexedInterningTable<CalledFunctionTy, CalledFunctionTy_hash, CalledFunctionTy_equal> CalledFunctionsTableTy;
+typedef std::vector<const CalledFunctionTy*> CalledFunctionsIndexTy;
 
-struct ArgInfosPtrTy_hash {
-  size_t operator()(const ArgInfosTy* t) const;
+typedef std::set<const CalledFunctionTy*> CalledFunctionsOrderedSetTy; // for interned functions
+typedef std::unordered_set<const CalledFunctionTy*> CalledFunctionsSetTy; // for interned functions
+
+struct ArgInfosVectorTy_hash {
+  size_t operator()(const ArgInfosVectorTy& t) const;
 };
 
-struct ArgInfosPtrTy_equal {
-  bool operator() (const ArgInfosTy* lhs, const ArgInfosTy* rhs) const;
+struct ArgInfosVectorTy_equal {
+  bool operator() (const ArgInfosVectorTy& lhs, const ArgInfosVectorTy& rhs) const;
 };    
 
-typedef std::unordered_set<ArgInfosTy*, ArgInfosPtrTy_hash, ArgInfosPtrTy_equal> ArgInfosSetTy;
+typedef InterningTable<ArgInfosVectorTy, ArgInfosVectorTy_hash> ArgInfoVectorsTableTy;
 
-struct ArgInfoPtrTy_hash {
-  size_t operator()(const ArgInfoTy* t) const;
-};
-
-struct ArgInfoPtrTy_equal {
-  bool operator() (const ArgInfoTy* lhs, const ArgInfoTy* rhs) const;
-};    
-
-
-typedef std::unordered_set<ArgInfoTy*, ArgInfoPtrTy_hash, ArgInfoPtrTy_equal> ArgInfoSetTy; // can be used for interning
-typedef std::vector<CalledFunctionTy*> CalledFunctionsVectorTy;
 
   // yikes, need forward type def
 struct SEXPGuardTy;
@@ -90,9 +102,7 @@ typedef std::map<Value*, CalledFunctionsSetTy> CallSiteTargetsTy;
 
 class CalledModuleTy {
   CalledFunctionsTableTy calledFunctionsTable; // intern table
-  CalledFunctionsVectorTy calledFunctionsVector; // for mapping idx -> function
-  ArgInfosSetTy argInfosTable; // intern table
-  ArgInfoSetTy argInfoTable; // intern table
+  ArgInfoVectorsTableTy argInfoVectorsTable; // intern table
   
   SymbolsMapTy* symbolsMap;
   Module *m;
@@ -104,12 +114,11 @@ class CalledModuleTy {
   CalledFunctionsSetTy* allocatingCFunctions;
   CallSiteTargetsTy callSiteTargets; // maps  call instruction -> set of target functions
   
-  CalledFunctionTy *gcFunction;
+  const CalledFunctionTy* const gcFunction;
 
   private:
-    ArgInfosTy* intern(ArgInfosTy& argInfos);
-    SymbolArgInfoTy* intern(SymbolArgInfoTy& argInfo);
-    CalledFunctionTy* intern(CalledFunctionTy& calledFunction);
+    const ArgInfosVectorTy* intern(const ArgInfosVectorTy& argInfos) { return argInfoVectorsTable.intern(argInfos); }
+    const CalledFunctionTy* intern(const CalledFunctionTy& calledFunction) { return calledFunctionsTable.intern(calledFunction); }
     void computeCalledAllocators();
 
   public:
@@ -119,31 +128,32 @@ class CalledModuleTy {
     static CalledModuleTy* create(Module *m);
     static void release(CalledModuleTy *cm);
       
-    CalledFunctionTy* getCalledFunction(Value *inst, bool registerCallSite = false);
-    CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards, bool registerCallSite); // takes context from guards
-    CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
-    CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsVector.at(idx); };
-    CalledFunctionsVectorTy* getCalledFunctions() { return &calledFunctionsVector; }
-    CalledFunctionsSetTy* getPossibleCAllocators() { computeCalledAllocators(); return possibleCAllocators; }
-    CalledFunctionsSetTy* getAllocatingCFunctions() { computeCalledAllocators(); return allocatingCFunctions; }
-    CallSiteTargetsTy* getCallSiteTargets() { computeCalledAllocators(); return &callSiteTargets; }
+    const CalledFunctionTy* getCalledFunction(Value *inst, bool registerCallSite = false);
+    const CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards, bool registerCallSite); // takes context from guards
+    const CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
+    const CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsTable.at(idx); };
+    const CalledFunctionsIndexTy* getCalledFunctions() { return calledFunctionsTable.getIndex(); }
+    size_t getNumberOfCalledFunctions() { return calledFunctionsTable.getIndex()->size(); }
+    const CalledFunctionsSetTy* getPossibleCAllocators() { computeCalledAllocators(); return possibleCAllocators; }
+    const CalledFunctionsSetTy* getAllocatingCFunctions() { computeCalledAllocators(); return allocatingCFunctions; }
+    const CallSiteTargetsTy* getCallSiteTargets() { computeCalledAllocators(); return &callSiteTargets; }
     
     virtual ~CalledModuleTy();
     
     bool isAllocating(Function *f) { return allocatingFunctions->find(f) != allocatingFunctions->end(); }
     bool isPossibleAllocator(Function *f) { return possibleAllocators->find(f) != possibleAllocators->end(); }
-    bool isCAllocating(CalledFunctionTy *cf) { computeCalledAllocators(); return allocatingCFunctions->find(cf) != allocatingCFunctions->end(); }
-    bool isPossibleCAllocator(CalledFunctionTy *cf) { computeCalledAllocators(); return possibleCAllocators->find(cf) != possibleCAllocators->end(); }
+    bool isCAllocating(const CalledFunctionTy *cf) { computeCalledAllocators(); return allocatingCFunctions->find(cf) != allocatingCFunctions->end(); }
+    bool isPossibleCAllocator(const CalledFunctionTy *cf) { computeCalledAllocators(); return possibleCAllocators->find(cf) != possibleCAllocators->end(); }
     
     FunctionsSetTy* getErrorFunctions() { return errorFunctions; }
     FunctionsSetTy* getPossibleAllocators() { return possibleAllocators; }
     FunctionsSetTy* getAllocatingFunctions() { return allocatingFunctions; }
     GlobalsTy* getGlobals() { return globals; }
     Module* getModule() { return m; }
-    CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
+    const CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
     SymbolsMapTy* getSymbolsMap() { return symbolsMap; }
 };
 
-std::string funName(CalledFunctionTy *cf);
+std::string funName(const CalledFunctionTy *cf);
 
 #endif

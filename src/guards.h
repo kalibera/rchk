@@ -73,7 +73,7 @@ struct SEXPGuardTy {
   SEXPGuardState state;
   std::string symbolName;
   
-  SEXPGuardTy(SEXPGuardState state, std::string& symbolName): state(state), symbolName(symbolName) {}
+  SEXPGuardTy(SEXPGuardState state, const std::string& symbolName): state(state), symbolName(symbolName) {}
   SEXPGuardTy(SEXPGuardState state): state(state), symbolName() { assert(state != SGS_SYMBOL); }
   SEXPGuardTy() : SEXPGuardTy(SGS_UNKNOWN) {};
   
@@ -113,16 +113,16 @@ struct SEXPGuardsCheckerTy {
 
   // yikes, need forward type-def
 struct ArgInfoTy;
-typedef std::vector<ArgInfoTy*> ArgInfosTy;
+typedef std::vector<const ArgInfoTy*> ArgInfosVectorTy;
 
 std::string sgs_name(SEXPGuardState sgs);
 SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, Function* isNullFunction);
 bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, Function* isNullFunction, VarBoolCacheTy& cache);
 void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalsTy *g, ArgInfosTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators);
+  GlobalsTy *g, const ArgInfosVectorTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators);
 bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, 
-  GlobalsTy *g, ArgInfosTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg);
+  GlobalsTy *g, const ArgInfosVectorTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg);
 
 // checking state with guards
 

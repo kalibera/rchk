@@ -5,6 +5,7 @@
 #include "symbols.h"
 #include "linemsg.h"
 #include "state.h"
+#include "table.h"
 
 #include <map>
 #include <stack>
@@ -37,7 +38,7 @@ std::string CalledFunctionTy::getNameSuffix() const {
   std::string suff;
   unsigned nKnown = 0;
 
-  for(ArgInfosTy::const_iterator ai = argInfo->begin(), ae = argInfo->end(); ai != ae; ++ai) {
+  for(ArgInfosVectorTy::const_iterator ai = argInfo->begin(), ae = argInfo->end(); ai != ae; ++ai) {
     const ArgInfoTy *a = *ai;
     if (ai != argInfo->begin()) {
       suff += ",";
@@ -61,21 +62,25 @@ std::string CalledFunctionTy::getName() const {
   return fun->getName().str() + getNameSuffix();
 }
 
-size_t CalledFunctionPtrTy_hash::operator()(const CalledFunctionTy* t) const {
+size_t CalledFunctionTy_hash::operator()(const CalledFunctionTy& t) const {
   size_t res = 0;
-  hash_combine(res, t->fun);
-  hash_combine(res, t->argInfo); // argInfos are interned
+  hash_combine(res, t.fun);
+  hash_combine(res, t.argInfo); // argInfos are interned
   return res;
 }
 
-bool CalledFunctionPtrTy_equal::operator() (const CalledFunctionTy* lhs, const CalledFunctionTy* rhs) const {
-  return lhs->fun == rhs->fun && lhs->argInfo == rhs->argInfo && lhs->module == rhs->module;  // argInfos are interned
+bool CalledFunctionTy_equal::operator() (const CalledFunctionTy& lhs, const CalledFunctionTy& rhs) const {
+  return lhs.fun == rhs.fun && lhs.argInfo == rhs.argInfo && lhs.module == rhs.module;  // argInfos are interned
 }
 
-size_t ArgInfosPtrTy_hash::operator()(const ArgInfosTy* t) const {
+SymbolArgInfoTy::SymbolArgInfoTableTy SymbolArgInfoTy::table;
+
+size_t ArgInfosVectorTy_hash::operator()(const ArgInfosVectorTy& t) const {
   size_t res = 0;
+  hash_combine(res, t.size());
+  
   size_t cnt = 0;
-  for(ArgInfosTy::const_iterator ai = t->begin(), ae = t->end(); ai != ae; ++ai) {
+  for(ArgInfosVectorTy::const_iterator ai = t.begin(), ae = t.end(); ai != ae; ++ai) {
     const ArgInfoTy *a = *ai;
     if (a && a->isSymbol()) {
       hash_combine(res, cast<SymbolArgInfoTy>(a)->symbolName);
@@ -86,104 +91,18 @@ size_t ArgInfosPtrTy_hash::operator()(const ArgInfosTy* t) const {
   return res;
 }
 
-bool ArgInfosPtrTy_equal::operator() (const ArgInfosTy* lhs, const ArgInfosTy* rhs) const {
-  
-  size_t nelems = lhs->size();
-  if (nelems != rhs->size()) {
-    return false;
-  }
-  for (size_t i = 0; i < nelems; i++) {
-    ArgInfoTy* la = (*lhs)[i];
-    ArgInfoTy* ra = (*rhs)[i];
-    
-    if (la == ra) {
-      continue;
-    }
-    if (!la || !ra) {
-      return false;
-    }
-    if (cast<SymbolArgInfoTy>(la)->symbolName != cast<SymbolArgInfoTy>(ra)->symbolName) {
-      return false;
-    }
-  }
-  return true;
-}
-
-size_t ArgInfoPtrTy_hash::operator()(const ArgInfoTy* t) const {
-  size_t res = 0;
-  if (!t || !t->isSymbol()) {
-    return res;
-  }
-  const SymbolArgInfoTy *ai = cast<SymbolArgInfoTy>(t);
-  hash_combine(res, ai->symbolName);
-  return res;
-}
-
-bool ArgInfoPtrTy_equal::operator() (const ArgInfoTy* lhs, const ArgInfoTy* rhs) const {
-  
-  if (!lhs || !rhs || !lhs->isSymbol() || !rhs->isSymbol()) {
-    return lhs == rhs;
-  }
-  const SymbolArgInfoTy *li = cast<SymbolArgInfoTy>(lhs);
-  const SymbolArgInfoTy *ri = cast<SymbolArgInfoTy>(rhs);
-  return li->symbolName == ri->symbolName;
-}
-
-// FIXME: template-based interning
-
-ArgInfosTy* CalledModuleTy::intern(ArgInfosTy& argInfos) { // arg may be stack allocated
-
-  ArgInfosTy *ai;
-  auto asearch = argInfosTable.find(&argInfos);
-  if (asearch != argInfosTable.end()) {
-    ai = *asearch; // found in intern table
-  } else {
-    ai = new ArgInfosTy(argInfos); // copy to heap
-    argInfosTable.insert(ai);
-  }
-  return ai;
-}
-
-SymbolArgInfoTy* CalledModuleTy::intern(SymbolArgInfoTy& argInfo) { // arg may be stack allocated
-
-  SymbolArgInfoTy *ai;
-
-  auto asearch = argInfoTable.find(&argInfo);
-  if (asearch != argInfoTable.end()) {
-    ai = cast<SymbolArgInfoTy>(*asearch); // found in intern table
-  } else {
-    ai = new SymbolArgInfoTy(argInfo); // copy to heap
-    argInfoTable.insert(ai);
-  }
-  return ai;  
-}
-
-CalledFunctionTy* CalledModuleTy::intern(CalledFunctionTy& calledFunction) { // arg may be stack allocated
-  CalledFunctionTy *cfun;
-  auto fsearch = calledFunctionsTable.find(&calledFunction);
-  if (fsearch != calledFunctionsTable.end()) {
-    cfun = *fsearch;  // found in intern table
-  } else {
-    cfun = new CalledFunctionTy(calledFunction); // copy to heap
-    calledFunctionsTable.insert(cfun);
-    cfun->idx = calledFunctionsVector.size();
-    calledFunctionsVector.push_back(cfun);
-  }
-  return cfun;
-}
-
-CalledFunctionTy* CalledModuleTy::getCalledFunction(Function *f) {
+const CalledFunctionTy* CalledModuleTy::getCalledFunction(Function *f) {
   size_t nargs = f->arg_size();
-  ArgInfosTy argInfos(nargs, NULL);
+  ArgInfosVectorTy argInfos(nargs, NULL);
   CalledFunctionTy calledFunction(f, intern(argInfos), this);
   return intern(calledFunction);
 }
 
-CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, bool registerCallSite) {
+const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, bool registerCallSite) {
   return getCalledFunction(inst, NULL, registerCallSite);
 }
 
-CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards, bool registerCallSite) {
+const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards, bool registerCallSite) {
   // FIXME: this is quite inefficient, does a lot of allocation
   
   CallSite cs (inst);
@@ -198,7 +117,7 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *s
   // build arginfo
       
   unsigned nargs = cs.arg_size();
-  ArgInfosTy argInfo(nargs, NULL);
+  ArgInfosVectorTy argInfo(nargs, NULL);
 
   for(unsigned i = 0; i < nargs; i++) {
     Value *arg = cs.getArgument(i);
@@ -207,8 +126,7 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *s
       if (GlobalVariable::classof(src)) {
         auto ssearch = symbolsMap->find(cast<GlobalVariable>(src));
         if (ssearch != symbolsMap->end()) {
-          SymbolArgInfoTy ai(ssearch->second);
-          argInfo[i] = intern(ai);
+          argInfo[i] = SymbolArgInfoTy::create(ssearch->second);
           continue;
         }
       }
@@ -219,8 +137,7 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *s
           std::string symbolName;
           SEXPGuardState gs = getSEXPGuardState(*sexpGuards, var, symbolName);
           if (gs == SGS_SYMBOL) {
-            SymbolArgInfoTy ai(symbolName);
-            argInfo[i] = intern(ai);
+            argInfo[i] = SymbolArgInfoTy::create(symbolName);
             continue;
           }
         }
@@ -228,15 +145,14 @@ CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsTy *s
     }
     std::string symbolName;  // install("X")
     if (isInstallConstantCall(arg, symbolName)) {
-      SymbolArgInfoTy ai(symbolName);
-      argInfo[i] = intern(ai);
+      argInfo[i] = SymbolArgInfoTy::create(symbolName);
       continue;
     }
     // not a symbol, leave argInfo as NULL
   }
       
   CalledFunctionTy calledFunction(fun, intern(argInfo), this);
-  CalledFunctionTy* cf = intern(calledFunction);
+  const CalledFunctionTy* cf = intern(calledFunction);
   
   if (registerCallSite) {
     auto csearch = callSiteTargets.find(inst);
@@ -257,20 +173,18 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
   FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions):
   
   m(m), symbolsMap(symbolsMap), errorFunctions(errorFunctions), globals(globals), possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions),
-  callSiteTargets() {
+  callSiteTargets(), gcFunction(getCalledFunction(getGCFunction(m))) {
 
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = fi;
 
     assert(fun);
-    getCalledFunction(fun); // make sure each function has a context-function counterpart
+    getCalledFunction(fun); // make sure each function has a called function counterpart
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
       User *u = *ui;
       getCalledFunction(cast<Value>(u)); // NOTE: this only gets contexts that are constant, more are gotten during allocators computation
     }
   }  
-  gcFunction = getCalledFunction(getGCFunction(m));
-  
     // only compute on demand - it takes a bit of time
   possibleCAllocators = NULL;
   allocatingCFunctions = NULL;
@@ -278,15 +192,6 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
 
 CalledModuleTy::~CalledModuleTy() {
 
-  // delete dynamically allocated elements in intern tables
-  for(CalledFunctionsTableTy::iterator cfi = calledFunctionsTable.begin(), cfe = calledFunctionsTable.end(); cfi != cfe; ++cfi) {
-    CalledFunctionTy *cfun = *cfi;
-    delete cfun;
-  }
-  for(ArgInfosSetTy::iterator ai = argInfosTable.begin(), ae = argInfosTable.end(); ai != ae; ++ai) {
-    ArgInfosTy *a = *ai;
-    delete a;
-  }
   if (possibleCAllocators) {
     delete possibleCAllocators;
   }
@@ -322,7 +227,7 @@ void CalledModuleTy::release(CalledModuleTy *cm) {
   delete cm;
 }
 
-typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy*> InternedVarOriginsTy;
+typedef std::map<AllocaInst*,const CalledFunctionsOrderedSetTy*> InternedVarOriginsTy;
 typedef std::map<AllocaInst*,CalledFunctionsOrderedSetTy> VarOriginsTy; // uninterned
 
   // for a local variable, a list of functions whose return values may have
@@ -333,27 +238,31 @@ struct CalledFunctionsOSTableTy_hash {
     size_t res = 0;
     hash_combine(res, t.size());
         
-    for(CalledFunctionsOrderedSetTy::iterator fi = t.begin(), fe = t.end(); fi != fe; ++fi) {
-      CalledFunctionTy *f = *fi;
+    for(CalledFunctionsOrderedSetTy::const_iterator fi = t.begin(), fe = t.end(); fi != fe; ++fi) {
+      const CalledFunctionTy *f = *fi;
       hash_combine(res, (void *) f);
     } // ordered set
     return res;
   }
 };
 
+typedef InterningTable<CalledFunctionsOrderedSetTy, CalledFunctionsOSTableTy_hash> CalledFunctionsOSTableTy;
+
 struct CAllocStateTy;
 
 struct CAllocPackedStateTy : public PackedStateWithGuardsTy {
   const size_t hashcode;
+  const CalledFunctionsOrderedSetTy *called;
   const InternedVarOriginsTy varOrigins;
   
-  CAllocPackedStateTy(size_t hashcode, BasicBlock* bb, const PackedIntGuardsTy& intGuards, const PackedSEXPGuardsTy& sexpGuards, const InternedVarOriginsTy& varOrigins):
-    hashcode(hashcode), PackedStateBaseTy(bb), PackedStateWithGuardsTy(bb, intGuards, sexpGuards), varOrigins(varOrigins) {};
+  
+  CAllocPackedStateTy(size_t hashcode, BasicBlock* bb, const PackedIntGuardsTy& intGuards, const PackedSEXPGuardsTy& sexpGuards,
+    const InternedVarOriginsTy& varOrigins, const CalledFunctionsOrderedSetTy *called):
+    
+    hashcode(hashcode), PackedStateBaseTy(bb), PackedStateWithGuardsTy(bb, intGuards, sexpGuards), varOrigins(varOrigins), called(called) {};
     
   static CAllocPackedStateTy create(CAllocStateTy& us, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker);
 };
-
-typedef std::unordered_set<CalledFunctionsOrderedSetTy, CalledFunctionsOSTableTy_hash> CalledFunctionsOSTableTy;
 
 static VarOriginsTy unpackVarOrigins(const InternedVarOriginsTy& internedOrigins) {
 
@@ -361,7 +270,7 @@ static VarOriginsTy unpackVarOrigins(const InternedVarOriginsTy& internedOrigins
 
   for(InternedVarOriginsTy::const_iterator oi = internedOrigins.begin(), oe = internedOrigins.end(); oi != oe; ++oi) {
     AllocaInst* var = oi->first;
-    CalledFunctionsOrderedSetTy* srcs = oi->second;
+    const CalledFunctionsOrderedSetTy* srcs = oi->second;
     varOrigins.insert({var, *srcs});
   }
   
@@ -370,19 +279,6 @@ static VarOriginsTy unpackVarOrigins(const InternedVarOriginsTy& internedOrigins
 
 static CalledFunctionsOSTableTy osTable; // interned ordered sets
 
-static CalledFunctionsOrderedSetTy* intern(const CalledFunctionsOrderedSetTy *set) {
-  if (!set) {
-    return NULL;
-  }
-  auto ssearch = osTable.find(*set);
-  if (ssearch != osTable.end()) {
-    const CalledFunctionsOrderedSetTy *s = &*ssearch;
-    return const_cast<CalledFunctionsOrderedSetTy*>(s);
-  }
-  const CalledFunctionsOrderedSetTy *s = &*osTable.insert(*set).first;
-  return const_cast<CalledFunctionsOrderedSetTy*>(s);
-}
-
 static InternedVarOriginsTy packVarOrigins(const VarOriginsTy& varOrigins) {
 
   InternedVarOriginsTy internedOrigins;
@@ -390,22 +286,22 @@ static InternedVarOriginsTy packVarOrigins(const VarOriginsTy& varOrigins) {
   for(VarOriginsTy::const_iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
     AllocaInst* var = oi->first;
     const CalledFunctionsOrderedSetTy& srcs = oi->second;
-    internedOrigins.insert({var, intern(&srcs)});
+    internedOrigins.insert({var, osTable.intern(srcs)});
   }
   
   return internedOrigins;
 }
 
 struct CAllocStateTy : public StateWithGuardsTy {
-  CalledFunctionsOrderedSetTy *called;
+  CalledFunctionsOrderedSetTy called;
   VarOriginsTy varOrigins;
   
   CAllocStateTy(const CAllocPackedStateTy& ps, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker):
-    CAllocStateTy(ps.bb, intGuardsChecker.unpack(ps.intGuards), sexpGuardsChecker.unpack(ps.sexpGuards), NULL, unpackVarOrigins(ps.varOrigins)) {};
+    CAllocStateTy(ps.bb, intGuardsChecker.unpack(ps.intGuards), sexpGuardsChecker.unpack(ps.sexpGuards), *ps.called, unpackVarOrigins(ps.varOrigins)) {};
 
-  CAllocStateTy(BasicBlock *bb): StateBaseTy(bb), StateWithGuardsTy(bb), called(NULL), varOrigins() {};
+  CAllocStateTy(BasicBlock *bb): StateBaseTy(bb), StateWithGuardsTy(bb), called(), varOrigins() {};
 
-  CAllocStateTy(BasicBlock *bb, const IntGuardsTy& intGuards, const SEXPGuardsTy& sexpGuards, CalledFunctionsOrderedSetTy* called, const VarOriginsTy& varOrigins):
+  CAllocStateTy(BasicBlock *bb, const IntGuardsTy& intGuards, const SEXPGuardsTy& sexpGuards, const CalledFunctionsOrderedSetTy& called, const VarOriginsTy& varOrigins):
     StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), called(called), varOrigins(varOrigins) {};
       
   virtual CAllocStateTy* clone(BasicBlock *newBB) {
@@ -418,20 +314,20 @@ struct CAllocStateTy : public StateWithGuardsTy {
 
     if (KEEP_CALLED_IN_STATE) {
       errs() << "=== called (allocating):\n";
-      for(CalledFunctionsOrderedSetTy::iterator fi = called->begin(), fe = called->end(); fi != fe; *fi++) {
-        CalledFunctionTy* f = *fi;
+      for(CalledFunctionsOrderedSetTy::iterator fi = called.begin(), fe = called.end(); fi != fe; *fi++) {
+        const CalledFunctionTy* f = *fi;
         errs() << "   " << funName(f) << "\n";
       }
     }
     errs() << "=== origins (allocators):\n";
-    for(VarOriginsTy::iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
+    for(VarOriginsTy::const_iterator oi = varOrigins.begin(), oe = varOrigins.end(); oi != oe; ++oi) {
       AllocaInst* var = oi->first;
-      CalledFunctionsOrderedSetTy& srcs = oi->second;
+      const CalledFunctionsOrderedSetTy& srcs = oi->second;
 
       errs() << "   " << varName(var) << ":";
         
-      for(CalledFunctionsOrderedSetTy::iterator fi = srcs.begin(), fe = srcs.end(); fi != fe; ++fi) {
-        CalledFunctionTy *f = *fi;
+      for(CalledFunctionsOrderedSetTy::const_iterator fi = srcs.begin(), fe = srcs.end(); fi != fe; ++fi) {
+        const CalledFunctionTy *f = *fi;
         errs() << " " << funName(f);
       }
       errs() << "\n";
@@ -455,11 +351,11 @@ CAllocPackedStateTy CAllocPackedStateTy::create(CAllocStateTy& us, IntGuardsChec
   hash_combine(res, internedOrigins.size());
   for(InternedVarOriginsTy::const_iterator oi = internedOrigins.begin(), oe = internedOrigins.end(); oi != oe; ++oi) {
     AllocaInst* var = oi->first;
-    CalledFunctionsOrderedSetTy* srcs = oi->second;
+    const CalledFunctionsOrderedSetTy* srcs = oi->second;
     hash_combine(res, (void *)srcs); // interned
   } // ordered map
     
-  return CAllocPackedStateTy(res, us.bb, intGuardsChecker.pack(us.intGuards), sexpGuardsChecker.pack(us.sexpGuards), internedOrigins);
+  return CAllocPackedStateTy(res, us.bb, intGuardsChecker.pack(us.intGuards), sexpGuardsChecker.pack(us.sexpGuards), internedOrigins, osTable.intern(us.called));
 }
   
 // the hashcode is cached at the time of first hashing
@@ -512,7 +408,7 @@ static void clearStates() { // FIXME: avoid copy paste (vs. bcheck)
   intGuardsChecker.clear();
 }
 
-static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg, 
+static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenger& msg, 
   CalledFunctionsOrderedSetTy& called, CalledFunctionsOrderedSetTy& wrapped) {
 
   if (!f->fun || !f->fun->size()) {
@@ -592,7 +488,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
           continue;
         }
         CallSite cs(in);
-        CalledFunctionTy *ct = cm->getCalledFunction(in, true);
+        const CalledFunctionTy *ct = cm->getCalledFunction(in, true);
         if (cs) {
           assert(ct);
           Function *t = cs.getCalledFunction();
@@ -648,7 +544,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
               }
               continue;
             }
-            CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
+            const CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), &s.sexpGuards, true);
             if (tgt && cm->isPossibleAllocator(tgt->fun)) {
               // storing a value gotten from a (possibly allocator) function
               if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
@@ -662,22 +558,13 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
       }
         
       // handle calls
-      CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards, true);
+      const CalledFunctionTy *tgt = cm->getCalledFunction(in, &s.sexpGuards, true);
       if (tgt && cm->isAllocating(tgt->fun)) {
         if (msg.debug()) msg.debug("recording call to " + funName(tgt), in);
           
         if (KEEP_CALLED_IN_STATE) {  
           if (called.find(tgt) == called.end()) { // if we already know the function is called, don't add, save memory
-      
-            if (s.called) {
-              CalledFunctionsOrderedSetTy newCalls(*s.called);
-              newCalls.insert(tgt);
-              s.called = intern(&newCalls); // FIXME: may be interning too many times
-            } else {
-              CalledFunctionsOrderedSetTy newCalls;
-              newCalls.insert(tgt);
-              s.called = intern(&newCalls); // FIXME: may be interning too many times
-            }
+            s.called.insert(tgt);
           }
         } else {
           called.insert(tgt);
@@ -690,10 +577,8 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
     if (ReturnInst::classof(t)) { // handle return statement
 
       if (KEEP_CALLED_IN_STATE) {
-        if (s.called) {
-          if (msg.debug()) msg.debug("collecting " + std::to_string(s.called->size()) + " calls at function return", t);
-          called.insert(s.called->begin(), s.called->end());
-        }
+        if (msg.debug()) msg.debug("collecting " + std::to_string(s.called.size()) + " calls at function return", t);
+        called.insert(s.called.begin(), s.called.end());
       }
 
       if (trackOrigins) {
@@ -712,7 +597,7 @@ static void getCalledAndWrappedFunctions(CalledFunctionTy *f, LineMessenger& msg
             if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
           }
         }
-        CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards, true);
+        const CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, &s.sexpGuards, true);
         if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
           if (msg.debug()) msg.debug("collecting immediate origin " + funName(tgt) + " at function return", t); 
           wrapped.insert(tgt);
@@ -813,16 +698,16 @@ void CalledModuleTy::computeCalledAllocators() {
   
   LineMessenger msg(m->getContext(), DEBUG, TRACE, UNIQUE_MSG);
   
-  unsigned nfuncs = calledFunctionsVector.size(); // NOTE: nfuncs can increase during the checking
+  unsigned nfuncs = getNumberOfCalledFunctions(); // NOTE: nfuncs can increase during the checking
 
   BoolMatrixTy callsMat(nfuncs, std::vector<bool>(nfuncs));  // calls[i][j] - function i calls function j
   AdjacencyListTy callsList(nfuncs, AdjacencyListRow()); // calls[i] - list of functions called by i
   BoolMatrixTy wrapsMat(nfuncs, std::vector<bool>(nfuncs));  // wraps[i][j] - function i wraps function j
   AdjacencyListTy wrapsList(nfuncs, AdjacencyListRow()); // wraps[i] - list of functions wrapped by i
   
-  for(unsigned i = 0; i < calledFunctionsVector.size(); i++) {
+  for(unsigned i = 0; i < getNumberOfCalledFunctions(); i++) {
 
-    CalledFunctionTy *f = calledFunctionsVector[i];
+    const CalledFunctionTy *f = getCalledFunction(i);
     if (!f->fun || !f->fun->size() || !isAllocating(f->fun)) {
       continue;
     }
@@ -833,33 +718,33 @@ void CalledModuleTy::computeCalledAllocators() {
     
     if (DEBUG && called.size()) {
       errs() << "\nDetected (possible allocators) called by function " << funName(f) << ":\n";
-      for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
-        CalledFunctionTy *cf = *cfi;
+      for(CalledFunctionsOrderedSetTy::const_iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
+        const CalledFunctionTy *cf = *cfi;
         errs() << "   " << funName(cf) << "\n";
       }
     }
     if (DEBUG && wrapped.size()) {
       errs() << "\nDetected (possible allocators) wrapped by function " << funName(f) << ":\n";
-      for(CalledFunctionsOrderedSetTy::iterator cfi = wrapped.begin(), cfe = wrapped.end(); cfi != cfe; ++cfi) {
-        CalledFunctionTy *cf = *cfi;
+      for(CalledFunctionsOrderedSetTy::const_iterator cfi = wrapped.begin(), cfe = wrapped.end(); cfi != cfe; ++cfi) {
+        const CalledFunctionTy *cf = *cfi;
         errs() << "   " << funName(cf) << "\n";
       }
     }
     
-    nfuncs = calledFunctionsVector.size(); // get the current size
+    nfuncs = getNumberOfCalledFunctions(); // get the current size
     resize(callsList, nfuncs);
     resize(wrapsList, nfuncs);
     resize(callsMat, nfuncs);
     resize(wrapsMat, nfuncs);
     
-    for(CalledFunctionsOrderedSetTy::iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
-      CalledFunctionTy *cf = *cfi;
+    for(CalledFunctionsOrderedSetTy::const_iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
+      const CalledFunctionTy *cf = *cfi;
       callsMat[f->idx][cf->idx] = true;
       callsList[f->idx].push_back(cf->idx);
     }
 
-    for(CalledFunctionsOrderedSetTy::iterator wfi = wrapped.begin(), wfe = wrapped.end(); wfi != wfe; ++wfi) {
-      CalledFunctionTy *wf = *wfi;
+    for(CalledFunctionsOrderedSetTy::const_iterator wfi = wrapped.begin(), wfe = wrapped.end(); wfi != wfe; ++wfi) {
+      const CalledFunctionTy *wf = *wfi;
       wrapsMat[f->idx][wf->idx] = true;
       wrapsList[f->idx].push_back(wf->idx);
     }    
@@ -878,7 +763,7 @@ void CalledModuleTy::computeCalledAllocators() {
       allocatingCFunctions->insert(getCalledFunction(i));
     }
     if (wrapsMat[i][gcidx]) {
-      CalledFunctionTy *tgt = getCalledFunction(i);
+      const CalledFunctionTy *tgt = getCalledFunction(i);
       if (!isKnownNonAllocator(tgt->fun)) {
         possibleCAllocators->insert(tgt);
       }
@@ -888,6 +773,6 @@ void CalledModuleTy::computeCalledAllocators() {
   possibleCAllocators->insert(gcFunction);
 }
 
-std::string funName(CalledFunctionTy *cf) {
+std::string funName(const CalledFunctionTy *cf) {
   return funName(cf->fun) + cf->getNameSuffix();  
 }

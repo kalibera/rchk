@@ -389,7 +389,7 @@ SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var) {
 }
 
 void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalsTy* g, ArgInfosTy *argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators) {
+  GlobalsTy* g, const ArgInfosVectorTy *argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators) {
 
   if (!StoreInst::classof(in)) {
     return;
@@ -409,7 +409,7 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
 
   if (argInfos && Argument::classof(storeValueOp))  { // sexpguard = symbol_argument
     Argument *arg = cast<Argument>(storeValueOp);
-    ArgInfoTy *ai = (*argInfos)[arg->getArgNo()];
+    const ArgInfoTy *ai = (*argInfos)[arg->getArgNo()];
     if (ai && ai->isSymbol()) {
       SEXPGuardTy newGS(SGS_SYMBOL, cast<SymbolArgInfoTy>(ai)->symbolName);
       sexpGuards[storePointerVar] = newGS;
@@ -612,7 +612,7 @@ bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, Allo
   
 }
 
-bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy *g, ArgInfosTy* argInfos, 
+bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy *g, const ArgInfosVectorTy* argInfos, 
   SymbolsMapTy* symbolsMap, LineMessenger& msg) {
   
   if (!BranchInst::classof(t)) {
