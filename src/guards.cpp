@@ -224,11 +224,46 @@ bool IntGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy&
 }
 
 PackedIntGuardsTy IntGuardsChecker::pack(const IntGuardsTy& intGuards) {
-  return PackedIntGuardsTy(igTable.intern(intGuards)); // FIXME: the envelope is not interned
+  PackedIntGuardsTy packed(intGuards.size());
+  
+  for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; ++gi) {
+    AllocaInst* var = gi->first;
+    IntGuardState gs = gi->second;
+    
+    unsigned varIdx = varIndex.indexOf(var);
+    unsigned base = varIdx * IGS_BITS;
+    
+    switch(gs) {
+      case IGS_NONZERO: packed.bits[base] = true; break;     // 1 0
+      case IGS_ZERO:    packed.bits[base + 1] = true; break; // 0 1
+      case IGS_UNKNOWN: break;                               // implied 0 0
+    }
+    // 0 0 means UNKNOWN (or not included)
+  }
+
+  return packed;
 }
 
 IntGuardsTy IntGuardsChecker::unpack(const PackedIntGuardsTy& intGuards) {
-  return IntGuardsTy(*intGuards.intGuards);
+
+  IntGuardsTy unpacked;
+  unsigned nvars = intGuards.bits.size() / 2;
+  
+  for(unsigned varIdx = 0; varIdx < nvars; varIdx++) {
+    unsigned base = varIdx * IGS_BITS;
+    IntGuardState gs = IGS_UNKNOWN;
+    
+    if (intGuards.bits[base]) {
+      gs = IGS_NONZERO;  
+    } else if (intGuards.bits[base + 1]) {
+      gs = IGS_ZERO;
+    }
+    
+    if (gs != IGS_UNKNOWN) {
+      unpacked.insert({varIndex.at(varIdx), gs});
+    }
+  }
+  return unpacked;
 }
   
 void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {

@@ -22,14 +22,17 @@ enum IntGuardState {
   IGS_NONZERO,
   IGS_UNKNOWN
 };
+const unsigned IGS_BITS = 2;
 
 typedef std::map<AllocaInst*,IntGuardState> IntGuardsTy;
 
 struct PackedIntGuardsTy {
-  const IntGuardsTy *intGuards; // pointer to intern table
+
+  typedef std::vector<bool> BitsTy;
+  BitsTy bits;
   
-  PackedIntGuardsTy(const IntGuardsTy* intGuards): intGuards(intGuards) {};
-  bool operator==(const PackedIntGuardsTy& other) const { return intGuards == other.intGuards; };
+  PackedIntGuardsTy(unsigned nvars) : bits(nvars * IGS_BITS) {};
+  bool operator==(const PackedIntGuardsTy& other) const { return bits == other.bits; };
 };
 
 struct StateWithGuardsTy;
@@ -44,14 +47,16 @@ class IntGuardsChecker {
     size_t operator()(const IntGuardsTy& t) const;
   };
 
-  typedef InterningTable<IntGuardsTy, IntGuardsTy_hash> IntGuardsTableTy;
+  typedef std::unordered_map<IntGuardsTy, PackedIntGuardsTy, IntGuardsTy_hash> IntGuardsTableTy;
+  typedef IndexedTable<AllocaInst> VarIndexTy;
 
   IntGuardsTableTy igTable;
-  VarBoolCacheTy varsCache;
+  VarIndexTy varIndex;
+  VarBoolCacheTy varsCache; // FIXME: could eagerly search all variables and merge var cache with index
   LineMessenger* msg;
 
   public:
-    IntGuardsChecker(LineMessenger* msg): igTable(), varsCache(), msg(msg) {};
+    IntGuardsChecker(LineMessenger* msg): igTable(), varIndex(), varsCache(), msg(msg) {};
 
     PackedIntGuardsTy pack(const IntGuardsTy& intGuards);
     IntGuardsTy unpack(const PackedIntGuardsTy& intGuards);
