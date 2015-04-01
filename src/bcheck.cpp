@@ -140,8 +140,8 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
         DelayedLineMessenger& msg = mi->second;
         hash_combine(res, msg.size());
         
-        for(LineInfoPtrSetTy::iterator li = msg.delayedLineBuffer.begin(), le = msg.delayedLineBuffer.end(); li != le; ++li) {
-          LineInfoTy* l = *li;
+        for(LineInfoPtrSetTy::const_iterator li = msg.delayedLineBuffer.begin(), le = msg.delayedLineBuffer.end(); li != le; ++li) {
+          const LineInfoTy* l = *li;
           hash_combine(res, (void *) l);
         }
       } // condMsgs is unordered

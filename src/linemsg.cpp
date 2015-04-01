@@ -3,36 +3,34 @@
 
 using namespace llvm;
 
-void BaseLineMessenger::trace(std::string msg, Instruction *in) {
+std::string BaseLineMessenger::withTrace(const std::string& msg, Instruction *in) const {
   if (TRACE) {
-    emit("TRACE", msg + instructionAsString(in), in);
+    return msg + instructionAsString(in);
+  } 
+  return msg;
+}
+
+void BaseLineMessenger::trace(const std::string& msg, Instruction *in) {
+  if (TRACE) {
+    emit("TRACE", withTrace(msg, in), in);
   }
 }
 
-void BaseLineMessenger::debug(std::string msg, Instruction *in) {
-  if (TRACE) {
-    msg = msg + instructionAsString(in);
-  }
+void BaseLineMessenger::debug(const std::string& msg, Instruction *in) {
   if (DEBUG) {
-    emit("DEBUG", msg, in);
+    emit("DEBUG", withTrace(msg, in), in);
   }
 }
 
-void BaseLineMessenger::info(std::string msg, Instruction *in) {
-  if (TRACE) {
-    msg = msg + instructionAsString(in);
-  }
-  emit(DEBUG ? "INFO" : "", msg, in);
+void BaseLineMessenger::info(const std::string& msg, Instruction *in) {
+  emit(DEBUG ? "INFO" : "", withTrace(msg, in), in);
 }
 
-void BaseLineMessenger::error(std::string msg, Instruction *in) {
-  if (TRACE) {
-    msg = msg + instructionAsString(in);
-  }
-  emit("ERROR", msg, in);
+void BaseLineMessenger::error(const std::string& msg, Instruction *in) {
+  emit("ERROR", withTrace(msg, in), in);
 }
 
-void BaseLineMessenger::emit(std::string kind, std::string message, Instruction *in) {
+void BaseLineMessenger::emit(const std::string& kind, const std::string& message, Instruction *in) {
   if (kind == "DEBUG" && !DEBUG) {
     return;
   }
@@ -88,8 +86,8 @@ bool LineInfoTy_equal::operator() (const LineInfoTy& lhs, const LineInfoTy& rhs)
 void LineMessenger::flush() {
   if (lastFunction != NULL && !lineBuffer.empty()) {
     outs() << "\nFunction " << funName(lastFunction) << lastChecksName << "\n";
-    for(LineInfoPtrSetTy::iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
-      LineInfoTy* li = *liBuf;
+    for(LineInfoPtrSetTy::const_iterator liBuf = lineBuffer.begin(), liEbuf = lineBuffer.end(); liBuf != liEbuf; ++liBuf) {
+      const LineInfoTy* li = *liBuf;
       li->print();
     }
     lineBuffer.clear();
@@ -98,7 +96,7 @@ void LineMessenger::flush() {
   lastFunction = NULL;
 }
 
-void LineMessenger::newFunction(Function *func, std::string checksName) {
+void LineMessenger::newFunction(Function *func, const std::string& checksName) {
   if (!UNIQUE_MSG) {
     outs() << "\nFunction " << funName(func) << checksName << "\n";
   } else {
@@ -108,7 +106,7 @@ void LineMessenger::newFunction(Function *func, std::string checksName) {
   lastFunction = func;
 }
 
-void LineMessenger::emitInterned(LineInfoTy* li) {
+void LineMessenger::emitInterned(const LineInfoTy* li) {
   if (!UNIQUE_MSG) {
     li->print();
   } else {
@@ -116,14 +114,12 @@ void LineMessenger::emitInterned(LineInfoTy* li) {
   }
 }
 
-void LineMessenger::emit(LineInfoTy* li) {
+void LineMessenger::emit(const LineInfoTy* li) {
   emitInterned(intern(*li));
 }
 
-LineInfoTy* LineMessenger::intern(const LineInfoTy& li) {
-  auto linsert = internTable.insert(li);
-  const LineInfoTy *ili = &*linsert.first;
-  return const_cast<LineInfoTy*>(ili);
+const LineInfoTy* LineMessenger::intern(const LineInfoTy& li) {
+  return internTable.intern(li);
 }
 
 void LineMessenger::clear() {
@@ -137,20 +133,20 @@ void LineMessenger::clear() {
 
 // ----------------------------- 
 
-void DelayedLineMessenger::emit(LineInfoTy *li) {
+void DelayedLineMessenger::emit(const LineInfoTy *li) {
   delayedLineBuffer.insert(msg->intern(*li));
 }
 
 void DelayedLineMessenger::flush() {
-  for(LineInfoPtrSetTy::iterator bi = delayedLineBuffer.begin(), be = delayedLineBuffer.end(); bi != be; ++bi) {
+  for(LineInfoPtrSetTy::const_iterator bi = delayedLineBuffer.begin(), be = delayedLineBuffer.end(); bi != be; ++bi) {
     msg->emitInterned(*bi);
   }
   delayedLineBuffer.clear();
 }
 
-void DelayedLineMessenger::print(std::string prefix) {
-  for(LineInfoPtrSetTy::iterator bi = delayedLineBuffer.begin(), be = delayedLineBuffer.end(); bi != be; ++bi) {
-    LineInfoTy *li = *bi;
+void DelayedLineMessenger::print(const std::string& prefix) {
+  for(LineInfoPtrSetTy::const_iterator bi = delayedLineBuffer.begin(), be = delayedLineBuffer.end(); bi != be; ++bi) {
+    const LineInfoTy *li = *bi;
     outs() << prefix;
     li->print();
   }

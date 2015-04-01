@@ -224,8 +224,7 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
 }
 
 PackedIntGuardsTy IntGuardsCheckerTy::pack(const IntGuardsTy& intGuards) {
-  auto iinsert = igTable.insert(intGuards);
-  return PackedIntGuardsTy(&*iinsert.first); // FIXME: the envelope is not interned
+  return PackedIntGuardsTy(igTable.intern(intGuards)); // FIXME: the envelope is not interned
 }
 
 IntGuardsTy IntGuardsCheckerTy::unpack(const PackedIntGuardsTy& intGuards) {
@@ -787,8 +786,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
   
 PackedSEXPGuardsTy SEXPGuardsCheckerTy::pack(const SEXPGuardsTy& sexpGuards) {
 
-  auto sinsert = sgTable.insert(sexpGuards);
-  return PackedSEXPGuardsTy(&*sinsert.first); // FIXME: the envelope is not interned
+  return PackedSEXPGuardsTy(sgTable.intern(sexpGuards)); // FIXME: the envelope is not interned
 }
 
 SEXPGuardsTy SEXPGuardsCheckerTy::unpack(const PackedSEXPGuardsTy& sexpGuards) {

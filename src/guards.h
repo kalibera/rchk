@@ -6,6 +6,7 @@
 #include "linemsg.h"
 #include "state.h"
 #include "symbols.h"
+#include "table.h"
 
 #include <map>
 #include <unordered_set>
@@ -38,7 +39,7 @@ struct IntGuardsCheckerTy {
     size_t operator()(const IntGuardsTy& t) const;
   };
 
-  typedef std::unordered_set<IntGuardsTy, IntGuardsTy_hash> IntGuardsTableTy; // for interning table
+  typedef InterningTable<IntGuardsTy, IntGuardsTy_hash> IntGuardsTableTy;
   IntGuardsTableTy igTable; // intern table
 
   IntGuardsCheckerTy() : igTable() {};
@@ -97,8 +98,8 @@ struct SEXPGuardsCheckerTy {
     size_t operator()(const SEXPGuardsTy& t) const;
   };
 
-  typedef std::unordered_set<SEXPGuardsTy, SEXPGuardsTy_hash> SEXPGuardsTableTy; // for interning table
-  SEXPGuardsTableTy sgTable; // intern table
+  typedef InterningTable<SEXPGuardsTy, SEXPGuardsTy_hash> SEXPGuardsTableTy;
+  SEXPGuardsTableTy sgTable;
 
   SEXPGuardsCheckerTy() : sgTable() {};
 
