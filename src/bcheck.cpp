@@ -142,7 +142,7 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
         
         for(LineInfoPtrSetTy::const_iterator li = msg.delayedLineBuffer.begin(), le = msg.delayedLineBuffer.end(); li != le; ++li) {
           const LineInfoTy* l = *li;
-          hash_combine(res, (void *) l);
+          hash_combine(res, (const void *) l);
         }
       } // condMsgs is unordered
     

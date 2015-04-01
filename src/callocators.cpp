@@ -240,7 +240,7 @@ struct CalledFunctionsOSTableTy_hash {
         
     for(CalledFunctionsOrderedSetTy::const_iterator fi = t.begin(), fe = t.end(); fi != fe; ++fi) {
       const CalledFunctionTy *f = *fi;
-      hash_combine(res, (void *) f);
+      hash_combine(res, (const void *) f);
     } // ordered set
     return res;
   }
@@ -352,7 +352,7 @@ CAllocPackedStateTy CAllocPackedStateTy::create(CAllocStateTy& us, IntGuardsChec
   for(InternedVarOriginsTy::const_iterator oi = internedOrigins.begin(), oe = internedOrigins.end(); oi != oe; ++oi) {
     AllocaInst* var = oi->first;
     const CalledFunctionsOrderedSetTy* srcs = oi->second;
-    hash_combine(res, (void *)srcs); // interned
+    hash_combine(res, (const void *)srcs); // interned
   } // ordered map
     
   return CAllocPackedStateTy(res, us.bb, intGuardsChecker.pack(us.intGuards), sexpGuardsChecker.pack(us.sexpGuards), internedOrigins, osTable.intern(us.called));

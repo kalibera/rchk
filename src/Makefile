@@ -33,10 +33,12 @@ CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
-# note: --system-libs is supported by LLVM 3.5
-#-lz -lpthread -ledit -ltinfo -ldl -lm
 
 CXX := $(LLVM)/bin/clang++
+
+# switch to GCC (it still seems to generate a tiny bit faster code)
+#CXX := g++
+
 LINK.o = $(LINK.cc) # link with C++ compiler by default
 
 SOURCES := $(wildcard *.cpp)
