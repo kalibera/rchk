@@ -20,7 +20,7 @@ using namespace llvm;
 //   [in other cases, we would gain nothing by tracking the guard]
 //
 // these heuristics are important because the keep the state space small(er)
-bool isIntegerGuardVariable(AllocaInst* var) {
+static bool isIntegerGuardVariable(AllocaInst* var) {
 
   if (!IntegerType::classof(var->getAllocatedType()) || var->isArrayAllocation()) {
     return false;
@@ -70,15 +70,15 @@ bool isIntegerGuardVariable(AllocaInst* var) {
   return nComparisons >= 2 || (nComparisons == 1 && nConstantAssignments > 0);
 }
 
-bool isIntegerGuardVariable(AllocaInst* var, VarBoolCacheTy& cache) {
-  auto csearch = cache.find(var);
-  if (csearch != cache.end()) {
+bool IntGuardsChecker::isGuard(AllocaInst* var) {
+  auto csearch = varsCache.find(var);
+  if (csearch != varsCache.end()) {
     return csearch->second;
   }
 
   bool res = isIntegerGuardVariable(var);
   
-  cache.insert({var, res});
+  varsCache.insert({var, res});
   return res;
 }
 
@@ -99,7 +99,7 @@ IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var) {
   }
 }
 
-void handleIntGuardsForNonTerminator(Instruction *in, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg) {
+void IntGuardsChecker::handleForNonTerminator(Instruction *in, IntGuardsTy& intGuards) {
 
   if (!StoreInst::classof(in)) {
     return;
@@ -113,7 +113,7 @@ void handleIntGuardsForNonTerminator(Instruction *in, VarBoolCacheTy& intGuardVa
     return;
   }
   AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-  if (!isIntegerGuardVariable(storePointerVar, intGuardVarsCache)) { 
+  if (!isGuard(storePointerVar)) { 
     return;
   }
   IntGuardState newState;
@@ -121,20 +121,20 @@ void handleIntGuardsForNonTerminator(Instruction *in, VarBoolCacheTy& intGuardVa
     ConstantInt* constOp = cast<ConstantInt>(storeValueOp);
     if (constOp->isZero()) {
       newState = IGS_ZERO;
-      if (msg.debug()) msg.debug("integer guard variable " + varName(storePointerVar) + " set to zero", store);
+      if (msg->debug()) msg->debug("integer guard variable " + varName(storePointerVar) + " set to zero", store);
     } else {
       newState = IGS_NONZERO;
-      if (msg.debug()) msg.debug("integer guard variable " + varName(storePointerVar) + " set to nonzero", store);
+      if (msg->debug()) msg->debug("integer guard variable " + varName(storePointerVar) + " set to nonzero", store);
     }
   } else {
     // FIXME: could add support for intguarda = intguardb, if needed
     newState = IGS_UNKNOWN;
-    if (msg.debug()) msg.debug("integer guard variable " + varName(storePointerVar) + " set to unknown", store);
+    if (msg->debug()) msg->debug("integer guard variable " + varName(storePointerVar) + " set to unknown", store);
   }
   intGuards[storePointerVar] = newState;
 }
 
-bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg) {
+bool IntGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s) {
 
   if (!BranchInst::classof(t)) {
     return false;
@@ -170,7 +170,7 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
     return false;
   }
   AllocaInst *var = cast<AllocaInst>(loadOp);
-  if (!isIntegerGuardVariable(var, intGuardVarsCache)) {
+  if (!isGuard(var)) {
     return false;
   } 
   // if (intguard) ...
@@ -187,16 +187,16 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
     }
   } 
 
-  if (msg.debug()) {
+  if (msg->debug()) {
     switch(succIndex) {
       case -1:
-        msg.debug("undecided branch on integer guard variable " + varName(var), branch);
+        msg->debug("undecided branch on integer guard variable " + varName(var), branch);
         break;
       case 0:
-        msg.debug("taking true branch on integer guard variable " + varName(var), branch);
+        msg->debug("taking true branch on integer guard variable " + varName(var), branch);
         break;
       case 1:
-        msg.debug("taking false branch on integer guard variable " + varName(var), branch);
+        msg->debug("taking false branch on integer guard variable " + varName(var), branch);
         break;
     }
   }
@@ -206,7 +206,7 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
       StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
       state->intGuards[var] = ci->isTrueWhenEqual() ? IGS_ZERO : IGS_NONZERO;
       if (state->add()) {
-        msg.trace("added true branch on integer guard of branch at", branch);
+        msg->trace("added true branch on integer guard of branch at", branch);
       }
     }
   }
@@ -216,22 +216,22 @@ bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVar
       StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
       state->intGuards[var] = ci->isTrueWhenEqual() ? IGS_NONZERO : IGS_ZERO;
       if (state->add()) {
-        msg.trace("added false branch on integer guard of branch at", branch);
+        msg->trace("added false branch on integer guard of branch at", branch);
       }
     }
   }
   return true;
 }
 
-PackedIntGuardsTy IntGuardsCheckerTy::pack(const IntGuardsTy& intGuards) {
+PackedIntGuardsTy IntGuardsChecker::pack(const IntGuardsTy& intGuards) {
   return PackedIntGuardsTy(igTable.intern(intGuards)); // FIXME: the envelope is not interned
 }
 
-IntGuardsTy IntGuardsCheckerTy::unpack(const PackedIntGuardsTy& intGuards) {
+IntGuardsTy IntGuardsChecker::unpack(const PackedIntGuardsTy& intGuards) {
   return IntGuardsTy(*intGuards.intGuards);
 }
   
-void IntGuardsCheckerTy::hash(size_t& res, const IntGuardsTy& intGuards) {
+void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
 
   hash_combine(res, intGuards.size());
   for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
@@ -242,7 +242,7 @@ void IntGuardsCheckerTy::hash(size_t& res, const IntGuardsTy& intGuards) {
   } // ordered map
 }
 
-size_t IntGuardsCheckerTy::IntGuardsTy_hash::operator()(const IntGuardsTy& t) const { // FIXME: cannot call SEXPGuardsCheckerTy::hash
+size_t IntGuardsChecker::IntGuardsTy_hash::operator()(const IntGuardsTy& t) const { // FIXME: cannot call SEXPGuardsCheckerTy::hash
   size_t res = 0;
   hash_combine(res, t.size());
   for(IntGuardsTy::const_iterator gi = t.begin(), ge = t.end(); gi != ge; *gi++) {

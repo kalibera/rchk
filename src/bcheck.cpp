@@ -238,7 +238,7 @@ void clearStates() {
   // all elements in worklist are also in doneset, so no need to call destructors
 }
 
-void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, VarBoolCacheTy& intGuardVarsCache, LineMessenger& msg, unsigned& refinableInfos) { 
+void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, IntGuardsChecker& intGuardsChecker, LineMessenger& msg, unsigned& refinableInfos) { 
   // UNPROTECT(intguard ? 3 : 4)
   
   CallSite cs(cast<Value>(in));
@@ -282,7 +282,7 @@ void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, VarB
   }
   
   Value *guardValue = guardOp->getPointerOperand();
-  if (!AllocaInst::classof(guardValue) || !isIntegerGuardVariable(cast<AllocaInst>(guardValue), intGuardVarsCache)) {
+  if (!AllocaInst::classof(guardValue) || !intGuardsChecker.isGuard(cast<AllocaInst>(guardValue))) {
     return;
   }
                   
@@ -322,7 +322,7 @@ class FunctionChecker {
   Function *fun;
   VarBoolCacheTy saveVarsCache;
   VarBoolCacheTy counterVarsCache;
-  VarBoolCacheTy intGuardVarsCache;
+  IntGuardsChecker intGuardsChecker;
   VarBoolCacheTy sexpGuardVarsCache;
   BasicBlocksSetTy errorBasicBlocks;
 
@@ -385,10 +385,10 @@ class FunctionChecker {
         }
  
         if (intGuardsEnabled) {
-          handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, m.msg);
+          intGuardsChecker.handleForNonTerminator(in, s.intGuards);
           if (restartable && refinableInfos > 0) { clearStates(); return; }
           if (balanceCheckingEnabled) {
-            handleUnprotectWithIntGuard(in, s, m.gl, intGuardVarsCache, m.msg, refinableInfos);
+            handleUnprotectWithIntGuard(in, s, m.gl, intGuardsChecker, m.msg, refinableInfos);
             if (restartable && refinableInfos > 0) { clearStates(); return; }
           }
         }
@@ -412,7 +412,7 @@ class FunctionChecker {
 
         // int guards have to be after balance, so that "if (nprotect) UNPROTECT(nprotect)"
         // is handled in preference of int guard
-      if (intGuardsEnabled && handleIntGuardsForTerminator(t, intGuardVarsCache, s, m.msg)) {
+      if (intGuardsEnabled && intGuardsChecker.handleForTerminator(t, s)) {
         continue;
       }
       
@@ -431,7 +431,7 @@ class FunctionChecker {
   
   public:
     FunctionChecker(Function *fun, ModuleCheckingStateTy& moduleState): 
-        fun(fun), saveVarsCache(), counterVarsCache(), intGuardVarsCache(), sexpGuardVarsCache(), errorBasicBlocks(), m(moduleState) {
+        fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), sexpGuardVarsCache(), errorBasicBlocks(), m(moduleState) {
         
       findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
     }  

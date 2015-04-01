@@ -261,7 +261,7 @@ struct CAllocPackedStateTy : public PackedStateWithGuardsTy {
     
     hashcode(hashcode), PackedStateBaseTy(bb), PackedStateWithGuardsTy(bb, intGuards, sexpGuards), varOrigins(varOrigins), called(called) {};
     
-  static CAllocPackedStateTy create(CAllocStateTy& us, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker);
+  static CAllocPackedStateTy create(CAllocStateTy& us, IntGuardsChecker& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker);
 };
 
 static VarOriginsTy unpackVarOrigins(const InternedVarOriginsTy& internedOrigins) {
@@ -296,7 +296,7 @@ struct CAllocStateTy : public StateWithGuardsTy {
   CalledFunctionsOrderedSetTy called;
   VarOriginsTy varOrigins;
   
-  CAllocStateTy(const CAllocPackedStateTy& ps, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker):
+  CAllocStateTy(const CAllocPackedStateTy& ps, IntGuardsChecker& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker):
     CAllocStateTy(ps.bb, intGuardsChecker.unpack(ps.intGuards), sexpGuardsChecker.unpack(ps.sexpGuards), *ps.called, unpackVarOrigins(ps.varOrigins)) {};
 
   CAllocStateTy(BasicBlock *bb): StateBaseTy(bb), StateWithGuardsTy(bb), called(), varOrigins() {};
@@ -339,7 +339,7 @@ struct CAllocStateTy : public StateWithGuardsTy {
 };
 
 
-CAllocPackedStateTy CAllocPackedStateTy::create(CAllocStateTy& us, IntGuardsCheckerTy& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker) {
+CAllocPackedStateTy CAllocPackedStateTy::create(CAllocStateTy& us, IntGuardsChecker& intGuardsChecker, SEXPGuardsCheckerTy& sexpGuardsChecker) {
 
   InternedVarOriginsTy internedOrigins = packVarOrigins(us.varOrigins);
    
@@ -380,13 +380,13 @@ typedef std::unordered_set<CAllocPackedStateTy, CAllocPackedStateTy_hash, CAlloc
 static WorkListTy workList; // FIXME: avoid these "globals"
 static DoneSetTy doneSet;   // FIXME: avoid these "globals"
 
-static IntGuardsCheckerTy intGuardsChecker; // FIXME: avoid these "globals"
+static IntGuardsChecker* intGuardsChecker; // FIXME: avoid these "globals"
 static SEXPGuardsCheckerTy sexpGuardsChecker; // FIXME: avoid these "globals"
 
 
 bool CAllocStateTy::add() {
 
-  CAllocPackedStateTy ps = CAllocPackedStateTy::create(*this, intGuardsChecker, sexpGuardsChecker);
+  CAllocPackedStateTy ps = CAllocPackedStateTy::create(*this, *intGuardsChecker, sexpGuardsChecker);
   delete this; // NOTE: state suicide
   auto sinsert = doneSet.insert(ps);
   if (sinsert.second) {
@@ -405,7 +405,6 @@ static void clearStates() { // FIXME: avoid copy paste (vs. bcheck)
   std::swap(workList, empty);
   osTable.clear();
   sexpGuardsChecker.clear();
-  intGuardsChecker.clear();
 }
 
 static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenger& msg, 
@@ -416,7 +415,6 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
   }
   CalledModuleTy *cm = f->module;
     
-  VarBoolCacheTy intGuardVarsCache;
   VarBoolCacheTy sexpGuardVarsCache;
 
   BasicBlocksSetTy errorBasicBlocks;
@@ -443,17 +441,19 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     }
   }
     
+  clearStates();
+  
   msg.newFunction(f->fun, " - " + funName(f));
   sexpGuardsChecker.reset(f->fun);
-  intGuardsChecker.reset(f->fun);
-
-  clearStates();
+  intGuardsChecker = new IntGuardsChecker(&msg);
+  
   {
     CAllocStateTy* initState = new CAllocStateTy(&f->fun->getEntryBlock());
     initState->add();
   }
+  
   while(!workList.empty()) {
-    CAllocStateTy s(*workList.top(), intGuardsChecker, sexpGuardsChecker); // unpacks the state
+    CAllocStateTy s(*workList.top(), *intGuardsChecker, sexpGuardsChecker); // unpacks the state
     workList.pop();    
 
     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
@@ -473,6 +473,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     if (doneSet.size() > MAX_STATES) {
       errs() << "ERROR: too many states (abstraction error?) in function " << funName(f) << "\n";
       clearStates();
+      delete intGuardsChecker;
         
       // NOTE: some callsites may have already been registered to more specific called functions
       bool originAllocating = cm->isAllocating(f->fun);
@@ -515,7 +516,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
       msg.trace("visiting", in);
    
-      handleIntGuardsForNonTerminator(in, intGuardVarsCache, s.intGuards, msg);
+      intGuardsChecker->handleForNonTerminator(in, s.intGuards);
       handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, cm->getGlobals(), f->argInfo, cm->getSymbolsMap(), msg, NULL);
         
       // handle stores
@@ -609,7 +610,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
       continue;
     }
 
-    if (handleIntGuardsForTerminator(t, intGuardVarsCache, s, msg)) {
+    if (intGuardsChecker->handleForTerminator(t, s)) {
       continue;
     }
       
@@ -625,6 +626,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     }
   }
   clearStates();
+  delete intGuardsChecker;
   if (trackOrigins && called.find(cm->getCalledGCFunction()) != called.end()) {
     // the GC function is an exception
     //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it

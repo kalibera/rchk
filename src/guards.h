@@ -32,34 +32,39 @@ struct PackedIntGuardsTy {
   bool operator==(const PackedIntGuardsTy& other) const { return intGuards == other.intGuards; };
 };
 
+struct StateWithGuardsTy;
+
+std::string igs_name(IntGuardState igs);
+IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
+
 // per-function state for checking SEXP guards
-struct IntGuardsCheckerTy {
+class IntGuardsChecker {
 
   struct IntGuardsTy_hash {
     size_t operator()(const IntGuardsTy& t) const;
   };
 
   typedef InterningTable<IntGuardsTy, IntGuardsTy_hash> IntGuardsTableTy;
-  IntGuardsTableTy igTable; // intern table
 
-  IntGuardsCheckerTy() : igTable() {};
+  IntGuardsTableTy igTable;
+  VarBoolCacheTy varsCache;
+  LineMessenger* msg;
 
-  PackedIntGuardsTy pack(const IntGuardsTy& intGuards);
-  IntGuardsTy unpack(const PackedIntGuardsTy& intGuards);
-  void hash(size_t& res, const IntGuardsTy& intGuards);
+  public:
+    IntGuardsChecker(LineMessenger* msg): igTable(), varsCache(), msg(msg) {};
 
-  void reset(Function *f) {};
-  void clear() { igTable.clear(); };  
+    PackedIntGuardsTy pack(const IntGuardsTy& intGuards);
+    IntGuardsTy unpack(const PackedIntGuardsTy& intGuards);
+    void hash(size_t& res, const IntGuardsTy& intGuards);
+
+    bool isGuard(AllocaInst* var);
+    void handleForNonTerminator(Instruction* in, IntGuardsTy& intGuards);
+    bool handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s);
+
+    void reset(Function *f) {};    
+    void clear() { igTable.clear(); varsCache.clear(); } // FIXME: get rid of this
 };
 
-struct StateWithGuardsTy;
-
-std::string igs_name(IntGuardState igs);
-IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
-bool isIntegerGuardVariable(AllocaInst* var);
-bool isIntegerGuardVariable(AllocaInst* var, VarBoolCacheTy& cache);
-void handleIntGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& intGuardVarsCache, IntGuardsTy& intGuards, LineMessenger& msg);
-bool handleIntGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& intGuardVarsCache, StateWithGuardsTy& s, LineMessenger& msg);
 
 // SEXP - an "R pointer" used as a guard
 
