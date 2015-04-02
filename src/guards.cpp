@@ -90,7 +90,7 @@ std::string igs_name(IntGuardState gs) {
   }
 }
 
-IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var) {
+IntGuardState IntGuardsChecker::getGuardState(const IntGuardsTy& intGuards, AllocaInst* var) {
   auto gsearch = intGuards.find(var);
   if (gsearch == intGuards.end()) {
     return IGS_UNKNOWN;
@@ -175,7 +175,7 @@ bool IntGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy&
   } 
   // if (intguard) ...
    
-  IntGuardState g = getIntGuardState(s.intGuards, var);
+  IntGuardState g = getGuardState(s.intGuards, var);
   int succIndex = -1;
   if (g != IGS_UNKNOWN) {
     if (ci->isTrueWhenEqual()) {
@@ -224,7 +224,16 @@ bool IntGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy&
 }
 
 PackedIntGuardsTy IntGuardsChecker::pack(const IntGuardsTy& intGuards) {
-  PackedIntGuardsTy packed(intGuards.size());
+
+  // note we first have to call indexOf on each variable to make sure
+  // it is indexed [later this should be perhaps done alreading when manipulating guards]
+  
+  for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; ++gi) {
+    AllocaInst* var = gi->first;
+    varIndex.indexOf(var);
+  }  
+
+  PackedIntGuardsTy packed(varIndex.size());
   
   for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; ++gi) {
     AllocaInst* var = gi->first;
@@ -247,9 +256,9 @@ PackedIntGuardsTy IntGuardsChecker::pack(const IntGuardsTy& intGuards) {
 IntGuardsTy IntGuardsChecker::unpack(const PackedIntGuardsTy& intGuards) {
 
   IntGuardsTy unpacked;
-  unsigned nvars = intGuards.bits.size() / 2;
+  unsigned nvars = intGuards.bits.size() / IGS_BITS;
   
-  assert(nvars * 2 == intGuards.bits.size());
+  assert(nvars * IGS_BITS == intGuards.bits.size());
   
   for(unsigned varIdx = 0; varIdx < nvars; varIdx++) {
     unsigned base = varIdx * IGS_BITS;
@@ -283,7 +292,7 @@ void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
 //   that follows the heuristics included below
 //   these heuristics are important because the keep the state space small(er)
 
-bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g) {
+bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
   if (!isSEXP(var)) {
     return false;
   }
@@ -369,15 +378,15 @@ bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g) {
   return nComparisons >= 2 || ((nComparisons == 1 || nGEPs > 0 || nEscapesToCalls > 0) && (nNilAssignments + nCopies + nStoresFromArgument + nStoresFromFunction > 0));
 }
 
-bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, VarBoolCacheTy& cache) {
-  auto csearch = cache.find(var);
-  if (csearch != cache.end()) {
+bool SEXPGuardsChecker::isGuard(AllocaInst* var) {
+  auto csearch = varsCache.find(var);
+  if (csearch != varsCache.end()) {
     return csearch->second;
   }
 
-  bool res = isSEXPGuardVariable(var, g);
+  bool res = uncachedIsGuard(var);
   
-  cache.insert({var, res});
+  varsCache.insert({var, res});
   return res;
 }
 
@@ -392,7 +401,7 @@ std::string sgs_name(SEXPGuardTy& g) {
   }
 }
 
-SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName) {
+SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName) {
   auto gsearch = sexpGuards.find(var);
   if (gsearch == sexpGuards.end()) {
     return SGS_UNKNOWN;
@@ -402,7 +411,7 @@ SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var, std:
   }
 }
 
-SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var) {
+SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, AllocaInst* var) {
   auto gsearch = sexpGuards.find(var);
   if (gsearch == sexpGuards.end()) {
     return SGS_UNKNOWN;
@@ -411,8 +420,7 @@ SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var) {
   }
 }
 
-void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalsTy* g, const ArgInfosVectorTy *argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators) {
+void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& sexpGuards) {
 
   if (!StoreInst::classof(in)) {
     return;
@@ -425,7 +433,7 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
     return;
   }
   AllocaInst* storePointerVar = cast<AllocaInst>(storePointerOp);
-  if (!isSEXPGuardVariable(storePointerVar, g, sexpGuardVarsCache)) {
+  if (!isGuard(storePointerVar)) {
     return;
   }
   // sexpguard = ...
@@ -436,7 +444,7 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
     if (ai && ai->isSymbol()) {
       SEXPGuardTy newGS(SGS_SYMBOL, static_cast<const SymbolArgInfoTy*>(ai)->symbolName);
       sexpGuards[storePointerVar] = newGS;
-      if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" +
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" +
         static_cast<const SymbolArgInfoTy*>(ai)->symbolName + "\" from argument\n", store);
       return;
     }
@@ -445,22 +453,22 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
   if (LoadInst::classof(storeValueOp)) {
     Value *src = cast<LoadInst>(storeValueOp)->getPointerOperand();
     if (src == g->nilVariable) {  // sexpguard = R_NilValue
-      if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to nil", store);
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to nil", store);
       SEXPGuardTy newGS(SGS_NIL);
       sexpGuards[storePointerVar] = newGS;
       return;
     }
     if (AllocaInst::classof(src) && 
-        isSEXPGuardVariable(cast<AllocaInst>(src), g, sexpGuardVarsCache)) { // sexpguard1 = sexpguard2
+        isGuard(cast<AllocaInst>(src))) { // sexpguard1 = sexpguard2
 
       auto gsearch = sexpGuards.find(cast<AllocaInst>(src));
       if (gsearch == sexpGuards.end()) {
         sexpGuards.erase(storePointerVar);
-        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to unknown state because " +
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to unknown state because " +
           varName(cast<AllocaInst>(src)) + " is also unknown.", store);
       } else {
         sexpGuards[storePointerVar] = gsearch->second;
-        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to state of " +
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to state of " +
           varName(cast<AllocaInst>(src)) + ", which is " + sgs_name(gsearch->second), store);
       }
       return;
@@ -470,7 +478,7 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
       if (sfind != symbolsMap->end()) {
         SEXPGuardTy newGS(SGS_SYMBOL, sfind->second);
         sexpGuards[storePointerVar] = newGS;
-        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + sfind->second + "\" at assignment\n", store);
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + sfind->second + "\" at assignment\n", store);
         return;
       } 
     }
@@ -481,16 +489,16 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
       if (possibleAllocators->find(afun) != possibleAllocators->end()) {
         SEXPGuardTy newGS(SGS_NONNIL);
         sexpGuards[storePointerVar] = newGS;
-        if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to non-nill (allocated by " + funName(afun) + ")", store);
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to non-nill (allocated by " + funName(afun) + ")", store);
         return;
       }
     }
   }
   sexpGuards.erase(storePointerVar);
-  if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to unknown", store);
+  if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to unknown", store);
 }
 
-bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s, LineMessenger& msg) {
+bool SEXPGuardsChecker::handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s) {
 
   int succIndex = -1;
     
@@ -509,16 +517,16 @@ bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, Branch
     }
   }
 
-  if (msg.debug()) {
+  if (msg->debug()) {
     switch(succIndex) {
       case -1:
-        msg.debug("undecided branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("undecided branch on sexp guard variable " + varName(guard), branch);
         break;
       case 0:
-        msg.debug("taking true branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking true branch on sexp guard variable " + varName(guard), branch);
         break;
       case 1:
-        msg.debug("taking false branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking false branch on sexp guard variable " + varName(guard), branch);
         break;
     }
   }
@@ -531,7 +539,7 @@ bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, Branch
         state->sexpGuards[guard] = newGS;
       }
       if (state->add()) {
-        msg.trace("added true branch on sexp guard of branch at", branch);
+        msg->trace("added true branch on sexp guard of branch at", branch);
       }
     }
   }
@@ -544,14 +552,14 @@ bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, Branch
         state->sexpGuards[guard] = newGS;
       }
       if (state->add()) {
-        msg.trace("added false branch on sexp guard of branch at", branch);
+        msg->trace("added false branch on sexp guard of branch at", branch);
       }
     }
   }
   return true;
 }
 
-bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s, LineMessenger& msg, GlobalsTy* g) {
+bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s) {
 
   // SGS_NONNIL and SGS_UNKNOWN are special states
   // SGS_NIL corresponds to a tested type and has a complement SGS_NONNIL
@@ -562,7 +570,7 @@ bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, Allo
   }
 
   if (testedType == RT_NIL) {
-    return handleNullCheck(positive, gs, guard, branch, s, msg);
+    return handleNullCheck(positive, gs, guard, branch, s);
   }
   
   SEXPGuardState testedState = SGS_UNKNOWN;
@@ -600,16 +608,16 @@ bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, Allo
   if (!canBeFalse) succIndex = 0;
   if (!canBeTrue) succIndex = 1;
   
-  if (msg.debug()) {
+  if (msg->debug()) {
     switch(succIndex) {
       case -1:
-        msg.debug("undecided type branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("undecided type branch on sexp guard variable " + varName(guard), branch);
         break;
       case 0:
-        msg.debug("taking true type branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking true type branch on sexp guard variable " + varName(guard), branch);
         break;
       case 1:
-        msg.debug("taking false type branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking false type branch on sexp guard variable " + varName(guard), branch);
         break;
     }
   }
@@ -618,7 +626,7 @@ bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, Allo
     {
       StateWithGuardsTy* state = s.clone(branch->getSuccessor(0)); // FIXME: capture that something is a symbol even if we don't know which one
       if (state->add()) {
-        msg.trace("added true type branch on sexp guard of branch at", branch);
+        msg->trace("added true type branch on sexp guard of branch at", branch);
       }
     }
   }
@@ -627,7 +635,7 @@ bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, Allo
     {
       StateWithGuardsTy* state = s.clone(branch->getSuccessor(1)); // FIXME: capture that something is a symbol even if we don't know which one
       if (state->add()) {
-        msg.trace("added false type branch on sexp guard of branch at", branch);
+        msg->trace("added false type branch on sexp guard of branch at", branch);
       }
     }
   }
@@ -635,8 +643,7 @@ bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, Allo
   
 }
 
-bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, GlobalsTy *g, const ArgInfosVectorTy* argInfos, 
-  SymbolsMapTy* symbolsMap, LineMessenger& msg) {
+bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s) {
   
   if (!BranchInst::classof(t)) {
     return false;
@@ -650,8 +657,8 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
   bool tcPositive;
   AllocaInst* tcVar;
   unsigned tcType;
-  if (isTypeCheck(branch->getCondition(), tcPositive, tcVar, tcType) && isSEXPGuardVariable(tcVar, g, sexpGuardVarsCache)) {
-    return handleTypeCheck(tcPositive, tcType, getSEXPGuardState(s.sexpGuards, tcVar), tcVar, branch, s, msg, g);
+  if (isTypeCheck(branch->getCondition(), tcPositive, tcVar, tcType) && isGuard(tcVar)) {
+    return handleTypeCheck(tcPositive, tcType, getGuardState(s.sexpGuards, tcVar), tcVar, branch, s);
   }
   
   CmpInst* ci = cast<CmpInst>(branch->getCondition());
@@ -687,12 +694,12 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
       }
     }
     
-    if (tcType == RT_UNKNOWN || !guard || !isSEXPGuardVariable(guard, g, sexpGuardVarsCache)) {
+    if (tcType == RT_UNKNOWN || !guard || !isGuard(guard)) {
       return false;
     }
-    SEXPGuardState gs = getSEXPGuardState(s.sexpGuards, guard);
+    SEXPGuardState gs = getGuardState(s.sexpGuards, guard);
     
-    return handleTypeCheck(ci->isTrueWhenEqual(), tcType, gs, guard, branch, s, msg, g);
+    return handleTypeCheck(ci->isTrueWhenEqual(), tcType, gs, guard, branch, s);
   }
   
   
@@ -713,12 +720,12 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     gv = cast<GlobalVariable>(lo);
   }
 
-  if (!guard || !gv || !isSEXPGuardVariable(guard, g, sexpGuardVarsCache)) {
+  if (!guard || !gv || !isGuard(guard)) {
     return false;
   }
   
   std::string guardSymbolName;
-  SEXPGuardState gs = getSEXPGuardState(s.sexpGuards, guard, guardSymbolName);
+  SEXPGuardState gs = getGuardState(s.sexpGuards, guard, guardSymbolName);
   int succIndex = -1;
 
   if (gv == g->nilVariable) {
@@ -728,7 +735,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     // if (x == R_NilValue) ...
     // if (x != R_NilValue) ...
     
-    return handleNullCheck(ci->isTrueWhenEqual(), gs, guard, branch, s, msg);
+    return handleNullCheck(ci->isTrueWhenEqual(), gs, guard, branch, s);
   }
   // handle comparisons with symbols
   
@@ -741,7 +748,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     return false;
   }
       
-  std::string& constSymbolName = sfind->second;
+  const std::string& constSymbolName = sfind->second;
 
   // if (x == R_XSymbol) ...
   // if (x != R_XSymbol) ...
@@ -765,16 +772,16 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
     }
   }
 
-  if (msg.debug()) {
+  if (msg->debug()) {
     switch(succIndex) {
       case -1:
-        msg.debug("undecided symbol branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("undecided symbol branch on sexp guard variable " + varName(guard), branch);
         break;
       case 0:
-        msg.debug("taking true symbol branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking true symbol branch on sexp guard variable " + varName(guard), branch);
         break;
       case 1:
-        msg.debug("taking false symbol branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking false symbol branch on sexp guard variable " + varName(guard), branch);
         break;
     }
   }
@@ -788,7 +795,7 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
         state->sexpGuards[guard] = newGS;
       }
       if (state->add()) {
-        msg.trace("added true branch on sexp guard of symbol branch at", branch);
+        msg->trace("added true branch on sexp guard of symbol branch at", branch);
       }
     }
   }
@@ -801,23 +808,91 @@ bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardV
         state->sexpGuards[guard] = newGS;
       }
       if (state->add()) {
-        msg.trace("added false branch on sexp guard of branch at", branch);
+        msg->trace("added false branch on sexp guard of branch at", branch);
       }
     }
   }
   return true;  
 }
   
-PackedSEXPGuardsTy SEXPGuardsCheckerTy::pack(const SEXPGuardsTy& sexpGuards) {
+PackedSEXPGuardsTy SEXPGuardsChecker::pack(const SEXPGuardsTy& sexpGuards) {
 
-  return PackedSEXPGuardsTy(sgTable.intern(sexpGuards)); // FIXME: the envelope is not interned
+  // note we first have to call indexOf on each variable to make sure
+  // it is indexed [later this should be perhaps done alreading when manipulating guards]
+  
+  for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; ++gi) {
+    AllocaInst* var = gi->first;
+    varIndex.indexOf(var);
+  }  
+  
+  PackedSEXPGuardsTy packed(varIndex.size());
+  
+  const VarIndexTy::Index& vars = varIndex.getIndex();
+  unsigned idx = 0;
+  
+  // store variables in the order of varIndex, so that symbol names in the list of symbols
+  //   can be mapped back to variables
+  for(VarIndexTy::Index::const_iterator vi = vars.begin(), ve = vars.end(); vi != ve; ++vi, ++idx) {
+    AllocaInst *var = *vi;
+    
+    auto vfind = sexpGuards.find(var);
+    if (vfind == sexpGuards.end()) {
+      continue;
+    }
+    const SEXPGuardTy& guard = vfind->second;
+    SEXPGuardState gs = guard.state;
+    
+    unsigned base = idx * SGS_BITS;
+    switch(gs) {
+      case SGS_NIL:    packed.bits[base] = true; break;     // 1 0
+      case SGS_NONNIL: packed.bits[base + 1] = true; break; // 0 1
+      case SGS_SYMBOL: packed.bits[base] = true; packed.bits[base + 1] = true; // 1 1
+                       packed.symbols.push_back(guard.symbolName);
+                       break;
+      case SGS_UNKNOWN: break; // 0 0
+    }
+  }
+
+  return packed;
 }
 
-SEXPGuardsTy SEXPGuardsCheckerTy::unpack(const PackedSEXPGuardsTy& sexpGuards) {
-  return SEXPGuardsTy(*sexpGuards.sexpGuards);
+SEXPGuardsTy SEXPGuardsChecker::unpack(const PackedSEXPGuardsTy& sexpGuards) {
+  SEXPGuardsTy unpacked;
+  unsigned nvars = sexpGuards.bits.size() / SGS_BITS;
+  
+  assert(nvars * SGS_BITS == sexpGuards.bits.size());
+  unsigned symbolIdx = 0;
+  
+  for(unsigned idx = 0; idx < nvars; idx++) {
+    unsigned base = idx * SGS_BITS;
+    SEXPGuardState gs = SGS_UNKNOWN;
+    std::string symbolName;
+    
+    bool bit1 = sexpGuards.bits[base];
+    bool bit0 = sexpGuards.bits[base + 1];
+    
+    if (bit1) {
+      if (bit0) {
+        gs = SGS_SYMBOL;
+        symbolName = sexpGuards.symbols[symbolIdx];
+        symbolIdx++;
+      } else {
+        gs = SGS_NIL;
+      }
+    } else {
+      if (bit0) {
+        gs = SGS_NONNIL;
+      }
+    }
+    
+    if (gs != SGS_UNKNOWN) {
+      unpacked.insert({varIndex.at(idx), SEXPGuardTy(gs, symbolName)});
+    }
+  }
+  return unpacked;
 }
   
-void SEXPGuardsCheckerTy::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
+void SEXPGuardsChecker::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
   hash_combine(res, sexpGuards.size());
   for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; ++gi) {
     AllocaInst* var = gi->first;
@@ -826,19 +901,6 @@ void SEXPGuardsCheckerTy::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
     hash_combine(res, (size_t) g.state);
     hash_combine(res, g.symbolName);
   } // ordered map
-}
-
-size_t SEXPGuardsCheckerTy::SEXPGuardsTy_hash::operator()(const SEXPGuardsTy& t) const { // FIXME: cannot call SEXPGuardsCheckerTy::hash
-  size_t res = 0;
-  hash_combine(res, t.size());
-  for(SEXPGuardsTy::const_iterator gi = t.begin(), ge = t.end(); gi != ge; ++gi) {
-    AllocaInst* var = gi->first;
-    const SEXPGuardTy& g = gi->second;
-    hash_combine(res, (void *) var);
-    hash_combine(res, (size_t) g.state);
-    hash_combine(res, g.symbolName);
-  } // ordered map
-  return res;
 }
 
 // common

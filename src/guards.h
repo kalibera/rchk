@@ -39,7 +39,6 @@ struct PackedIntGuardsTy {
 struct StateWithGuardsTy;
 
 std::string igs_name(IntGuardState igs);
-IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
 
 // per-function state for checking SEXP guards
 class IntGuardsChecker {
@@ -60,6 +59,8 @@ class IntGuardsChecker {
     bool isGuard(AllocaInst* var);
     void handleForNonTerminator(Instruction* in, IntGuardsTy& intGuards);
     bool handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s);
+    
+    IntGuardState getGuardState(const IntGuardsTy& intGuards, AllocaInst* var);
 
     void reset(Function *f) {};    
     void clear() { varsCache.clear(); } // FIXME: get rid of this
@@ -74,6 +75,7 @@ enum SEXPGuardState {
   SGS_NONNIL,
   SGS_UNKNOWN
 };
+const unsigned SGS_BITS = 2;
 
 struct SEXPGuardTy {
   SEXPGuardState state;
@@ -90,45 +92,59 @@ struct SEXPGuardTy {
 typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
 struct PackedSEXPGuardsTy {
-  const SEXPGuardsTy* sexpGuards; // pointer to intern table
+
+  typedef std::vector<bool> BitsTy;
+  BitsTy bits;
   
-  PackedSEXPGuardsTy(const SEXPGuardsTy* sexpGuards): sexpGuards(sexpGuards) {};
-  bool operator==(const PackedSEXPGuardsTy& other) const { return sexpGuards == other.sexpGuards; };
-};
-
-// per-function state for checking SEXP guards
-struct SEXPGuardsCheckerTy {
-
-  struct SEXPGuardsTy_hash {
-    size_t operator()(const SEXPGuardsTy& t) const;
-  };
-
-  typedef InterningTable<SEXPGuardsTy, SEXPGuardsTy_hash> SEXPGuardsTableTy;
-  SEXPGuardsTableTy sgTable;
-
-  SEXPGuardsCheckerTy() : sgTable() {};
-
-  PackedSEXPGuardsTy pack(const SEXPGuardsTy& sexpGuards);
-  SEXPGuardsTy unpack(const PackedSEXPGuardsTy& sexpGuards);
-  void hash(size_t& res, const SEXPGuardsTy& sexpGuards);
+  typedef std::vector<std::string> SymbolsTy;
+  SymbolsTy symbols;
   
-  void reset(Function *f) {};
-  void clear() { sgTable.clear(); };
-  
+  PackedSEXPGuardsTy(unsigned nvars) : bits(nvars * SGS_BITS), symbols() {};
+  bool operator==(const PackedSEXPGuardsTy& other) const { return bits == other.bits && symbols == other.symbols; };
 };
 
   // yikes, need forward type-def
 struct ArgInfoTy;
 typedef std::vector<const ArgInfoTy*> ArgInfosVectorTy;
 
+// per-function state for checking SEXP guards
+class SEXPGuardsChecker {
+
+  typedef IndexedTable<AllocaInst> VarIndexTy; // index of guard variables known so far
+
+  VarIndexTy varIndex;
+  VarBoolCacheTy varsCache; // FIXME: could eagerly search all variables and merge var cache with index
+  LineMessenger* msg;
+  const GlobalsTy* g;
+  const FunctionsSetTy* possibleAllocators;
+  const SymbolsMapTy* symbolsMap;
+  const ArgInfosVectorTy* argInfos;
+  
+  public:
+    SEXPGuardsChecker(LineMessenger* msg, const GlobalsTy* g, const FunctionsSetTy* possibleAllocators, const SymbolsMapTy* symbolsMap, const ArgInfosVectorTy* argInfos):
+      varIndex(), varsCache(), msg(msg), g(g), possibleAllocators(possibleAllocators), symbolsMap(symbolsMap), argInfos(argInfos) {};
+
+    PackedSEXPGuardsTy pack(const SEXPGuardsTy& sexpGuards);
+    SEXPGuardsTy unpack(const PackedSEXPGuardsTy& sexpGuards);
+    void hash(size_t& res, const SEXPGuardsTy& sexpGuards);
+
+    bool isGuard(AllocaInst* var);
+    void handleForNonTerminator(Instruction* in, SEXPGuardsTy& sexpGuards);
+    bool handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s);
+    
+    SEXPGuardState getGuardState(const SEXPGuardsTy& sexpGuards, AllocaInst* var);
+    SEXPGuardState getGuardState(const SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName);
+
+    void reset(Function *f) {};    
+    void clear() { varsCache.clear(); } // FIXME: get rid of this
+    
+  private:
+    bool uncachedIsGuard(AllocaInst* var);
+    bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s);
+    bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s);
+};
+
 std::string sgs_name(SEXPGuardState sgs);
-SEXPGuardState getSEXPGuardState(SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName);
-bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, Function* isNullFunction);
-bool isSEXPGuardVariable(AllocaInst* var, GlobalsTy* g, Function* isNullFunction, VarBoolCacheTy& cache);
-void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuardVarsCache, SEXPGuardsTy& sexpGuards,
-  GlobalsTy *g, const ArgInfosVectorTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg, FunctionsSetTy* possibleAllocators);
-bool handleSEXPGuardsForTerminator(TerminatorInst* t, VarBoolCacheTy& sexpGuardVarsCache, StateWithGuardsTy& s, 
-  GlobalsTy *g, const ArgInfosVectorTy* argInfos, SymbolsMapTy* symbolsMap, LineMessenger& msg);
 
 // checking state with guards
 

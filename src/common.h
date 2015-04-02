@@ -89,7 +89,7 @@ struct GlobalsTy {
   
   public:
     GlobalsTy(Module *m);
-    SEXPType getTypeForTypeTest(Function *f);
+    SEXPType getTypeForTypeTest(Function *f) const;
   
   private:
     Function *getSpecialFunction(Module *m, std::string name);
@@ -102,7 +102,7 @@ bool isSEXPPtr(Type *type);
 bool isSEXP(GlobalVariable *var);
 bool isInstall(Function *f);
 
-bool isTypeTest(Function *f, GlobalsTy* g);
+bool isTypeTest(Function *f, const GlobalsTy* g);
   
 // from Boost
 template <class T>

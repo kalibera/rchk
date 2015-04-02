@@ -96,6 +96,7 @@ typedef InterningTable<ArgInfosVectorTy, ArgInfosVectorTy_hash> ArgInfoVectorsTa
 
   // yikes, need forward type def
 struct SEXPGuardTy;
+struct SEXPGuardsChecker;
 typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
 typedef std::map<Value*, CalledFunctionsSetTy> CallSiteTargetsTy;
@@ -129,7 +130,7 @@ class CalledModuleTy {
     static void release(CalledModuleTy *cm);
       
     const CalledFunctionTy* getCalledFunction(Value *inst, bool registerCallSite = false);
-    const CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsTy *sexpGuards, bool registerCallSite); // takes context from guards
+    const CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, bool registerCallSite); // takes context from guards
     const CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
     const CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsTable.at(idx); };
     const CalledFunctionsIndexTy* getCalledFunctions() { return calledFunctionsTable.getIndex(); }

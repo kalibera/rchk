@@ -240,6 +240,7 @@ void clearStates() {
 }
 
 void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, IntGuardsChecker& intGuardsChecker, LineMessenger& msg, unsigned& refinableInfos) { 
+  
   // UNPROTECT(intguard ? 3 : 4)
   
   CallSite cs(cast<Value>(in));
@@ -287,7 +288,7 @@ void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, IntG
     return;
   }
                   
-  IntGuardState gs = getIntGuardState(s.intGuards, cast<AllocaInst>(guardValue));
+  IntGuardState gs = intGuardsChecker.getGuardState(s.intGuards, cast<AllocaInst>(guardValue));
                     
   if (gs != IGS_UNKNOWN) {
     uint64_t arg; 
@@ -324,7 +325,7 @@ class FunctionChecker {
   VarBoolCacheTy saveVarsCache;
   VarBoolCacheTy counterVarsCache;
   IntGuardsChecker intGuardsChecker;
-  VarBoolCacheTy sexpGuardVarsCache;
+  SEXPGuardsChecker sexpGuardsChecker;
   BasicBlocksSetTy errorBasicBlocks;
 
   ModuleCheckingStateTy& m;
@@ -394,7 +395,7 @@ class FunctionChecker {
           }
         }
         if (sexpGuardsEnabled) {
-          handleSEXPGuardsForNonTerminator(in, sexpGuardVarsCache, s.sexpGuards, &m.gl, NULL, m.cm.getSymbolsMap(), m.msg, &m.possibleAllocators);
+          sexpGuardsChecker.handleForNonTerminator(in, s.sexpGuards);
           if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
       }
@@ -407,7 +408,7 @@ class FunctionChecker {
         continue;
       }
 
-      if (sexpGuardsEnabled && handleSEXPGuardsForTerminator(t, sexpGuardVarsCache, s, &m.gl, NULL, m.cm.getSymbolsMap(), m.msg)) {
+      if (sexpGuardsEnabled && sexpGuardsChecker.handleForTerminator(t, s)) {
         continue;
       }
 
@@ -432,7 +433,10 @@ class FunctionChecker {
   
   public:
     FunctionChecker(Function *fun, ModuleCheckingStateTy& moduleState): 
-        fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), sexpGuardVarsCache(), errorBasicBlocks(), m(moduleState) {
+        fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), 
+        /* TODO: we would need "sure" allocators here instead of possible allocators! */
+        sexpGuardsChecker(&moduleState.msg, &moduleState.gl, &moduleState.possibleAllocators/ /* NULL */, moduleState.cm.getSymbolsMap(), NULL),
+        errorBasicBlocks(), m(moduleState) {
         
       findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
     }  
@@ -442,7 +446,7 @@ class FunctionChecker {
 
       m.msg.newFunction(fun, checksName);
       bool intGuardsEnabled = false;
-      bool sexpGuardsEnabled = true;
+      bool sexpGuardsEnabled = false;
       unsigned refinableInfos;
     
       for(;;) {

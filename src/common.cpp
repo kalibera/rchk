@@ -211,13 +211,13 @@ bool isInstall(Function *f) {
     f->getName() == "Rf_installChar" || f->getName() == "Rf_installS3Signature");
 }
 
-bool isTypeTest(Function *f, GlobalsTy* g) {
+bool isTypeTest(Function *f, const GlobalsTy* g) {
   return f == g->isNullFunction || f == g->isSymbolFunction || f == g->isLogicalFunction || f == g->isRealFunction ||
     f == g->isComplexFunction || f == g->isExpressionFunction || f == g->isEnvironmentFunction || f == g->isStringFunction;
 }
 
 
-SEXPType GlobalsTy::getTypeForTypeTest(Function *f) {
+SEXPType GlobalsTy::getTypeForTypeTest(Function *f) const {
   auto tsearch = typesMap.find(f);
   if (tsearch != typesMap.end()) {
     return tsearch->second;

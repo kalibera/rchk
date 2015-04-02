@@ -84,11 +84,13 @@ template <
 
 template <class Member> class IndexedTable {
 
-  typedef std::unordered_map<Member*, unsigned> Table;
-  typedef std::vector<Member*> Index;
+  public:
+    typedef std::vector<Member*> Index;
 
-  Table table;
-  Index index;
+  private:
+    typedef std::unordered_map<Member*, unsigned> Table;
+    Table table;
+    Index index;
   
   public:
     unsigned indexOf(Member* m) {
@@ -111,8 +113,12 @@ template <class Member> class IndexedTable {
       index.clear();
     }
     
-    const Index* getIndex() const {
-      return &index;
+    const Index& getIndex() const {
+      return index;
+    }
+    
+    size_t size() {
+      return index.size();
     }
 };
 
