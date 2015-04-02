@@ -1,6 +1,15 @@
 #ifndef RCHK_COMMON_H
 #define RCHK_COMMON_H
 
+// assertions are enabled when NDEBUG is NOT defined
+#ifdef NDEBUG
+  //#undef NDEBUG
+#else
+   #define NDEBUG
+#endif
+
+#include <assert.h>
+
 #include <set>
 #include <unordered_set>
 #include <unordered_map>

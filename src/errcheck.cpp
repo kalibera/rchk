@@ -2,7 +2,9 @@
 /* 
    Check if there are functions that do not return, but are not marked as
    noreturn (e.g. error call wrappers)
- */
+*/
+ 
+#include "common.h" 
  
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/DebugInfo.h> 
@@ -13,7 +15,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
 #include "errors.h"
 
 using namespace llvm;

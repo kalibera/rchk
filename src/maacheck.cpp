@@ -15,6 +15,8 @@
   By default the checking ignores error paths.
 */
 
+#include "common.h"
+
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
@@ -23,7 +25,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
 #include "allocators.h"
 #include "cgclosure.h"
 
@@ -81,54 +82,52 @@ int main(int argc, char* argv[])
       continue;
     }
 
-    FunctionInfo *finfo = FI->second;
+    FunctionInfo& finfo = FI->second;
 
-    for(std::vector<CallInfo*>::iterator CI = finfo->callInfos.begin(), CE = finfo->callInfos.end(); CI != CE; ++CI) {
-      CallInfo* cinfo = *CI;
-      for(std::set<FunctionInfo*>::iterator MFI = cinfo->targets.begin(), MFE = cinfo->targets.end(); MFI != MFE; ++MFI) {
-        FunctionInfo *middleFinfo = *MFI;
+    for(std::vector<CallInfo>::const_iterator CI = finfo.callInfos.begin(), CE = finfo.callInfos.end(); CI != CE; ++CI) {
+      const CallInfo& cinfo = *CI;
         
-        const Instruction* inst = cinfo->instruction;
-        unsigned nFreshObjects = 0;
-        unsigned nAllocatingArgs = 0;
+      const Instruction* inst = cinfo.instruction;
+      const FunctionInfo *middleFinfo = cinfo.target;
         
-        for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
-          Value* o = inst->getOperand(u);
+      unsigned nFreshObjects = 0;
+      unsigned nAllocatingArgs = 0;
+        
+      for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
+        Value* o = inst->getOperand(u);
 
-          ArgExpKind k;
+        ArgExpKind k;
           
-          if (PHINode::classof(o)) {
+        if (PHINode::classof(o)) {
 
-            // for each argument comming from a PHI node, take the most
-            // difficult kind of allocation (this is an approximation, the
-            // most difficult combination of different arguments may not be
-            // possible).
+          // for each argument comming from a PHI node, take the most
+          // difficult kind of allocation (this is an approximation, the
+          // most difficult combination of different arguments may not be
+          // possible).
 
-            PHINode* phi = cast<PHINode>(o);
-            unsigned nvals = phi->getNumIncomingValues();
-            k = AK_NOALLOC;
-            for(unsigned i = 0; i < nvals; i++) {
-              ArgExpKind cur = classifyArgumentExpression(phi->getIncomingValue(i), functionsMap, gcFunctionIndex, possibleAllocators);
-              if (cur > k) {
-                k = cur;
-              }
+          PHINode* phi = cast<PHINode>(o);
+          unsigned nvals = phi->getNumIncomingValues();
+          k = AK_NOALLOC;
+          for(unsigned i = 0; i < nvals; i++) {
+            ArgExpKind cur = classifyArgumentExpression(phi->getIncomingValue(i), functionsMap, gcFunctionIndex, possibleAllocators);
+            if (cur > k) {
+              k = cur;
             }
-          } else {
-            k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
           }
+        } else {
+          k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
+        }
 
-          if (k >= AK_ALLOCATING) nAllocatingArgs++;
-          if (k >= AK_FRESH) nFreshObjects++;
-        }
+        if (k >= AK_ALLOCATING) nAllocatingArgs++;
+        if (k >= AK_FRESH) nFreshObjects++;
+      }
         
-        if (nAllocatingArgs >= 2 && nFreshObjects >= 1 ) {
-          outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << funName(middleFinfo->function) <<
-            " at " << funName(finfo->function) << " " << sourceLocation(inst) << "\n";
-        }
+      if (nAllocatingArgs >= 2 && nFreshObjects >= 1 ) {
+        outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << funName(middleFinfo->function) <<
+          " at " << funName(finfo.function) << " " << sourceLocation(inst) << "\n";
       }
     }
   }
 
-  releaseMap(functionsMap);
   delete m;
 }

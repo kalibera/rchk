@@ -6,6 +6,8 @@
   pretty much anything then would be a safepoint.
 */
 
+#include "common.h"
+
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/DebugInfo.h> 
 #include <llvm/IR/Function.h>
@@ -15,7 +17,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
 #include "allocators.h"
 #include "cgclosure.h"
 
@@ -43,42 +44,39 @@ int main(int argc, char* argv[])
     if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {
       continue;
     }
-    FunctionInfo *finfo = FI->second;
+    FunctionInfo& finfo = FI->second;
 
-    for(std::vector<CallInfo*>::iterator CI = finfo->callInfos.begin(), CE = finfo->callInfos.end(); CI != CE; ++CI) {
-      CallInfo* cinfo = *CI;
-      for(std::set<FunctionInfo*>::iterator MFI = cinfo->targets.begin(), MFE = cinfo->targets.end(); MFI != MFE; ++MFI) {
-        FunctionInfo *middleFinfo = *MFI;
+    for(std::vector<CallInfo>::const_iterator CI = finfo.callInfos.begin(), CE = finfo.callInfos.end(); CI != CE; ++CI) {
+      const CallInfo& cinfo = *CI;
+      const FunctionInfo *middleFinfo = cinfo.target;
         
-        for(std::vector<FunctionInfo*>::iterator TFI = middleFinfo->calledFunctionsList.begin(), TFE = middleFinfo->calledFunctionsList.end(); TFI != TFE; ++TFI) {
-          FunctionInfo *targetFinfo = *TFI;
+      for(std::vector<FunctionInfo*>::const_iterator TFI = middleFinfo->calledFunctionsList.begin(), TFE = middleFinfo->calledFunctionsList.end(); TFI != TFE; ++TFI) {
+        const FunctionInfo *targetFinfo = *TFI;
           
-          if ((*targetFinfo->callsFunctionMap)[gcFunctionIndex]) {
-            const DebugLoc &callDebug = cinfo->instruction->getDebugLoc();
-            const MDNode* scope = callDebug.getScopeNode(context);
-            DILocation loc(scope);
+        if ((targetFinfo->callsFunctionMap)[gcFunctionIndex]) {
+          const DebugLoc &callDebug = cinfo.instruction->getDebugLoc();
+          const MDNode* scope = callDebug.getScopeNode(context);
+          DILocation loc(scope);
             
-            unsigned line = callDebug.getLine();
-            std::string directory = loc.getDirectory().str();
-            std::string file = loc.getFilename().str();
+          unsigned line = callDebug.getLine();
+          std::string directory = loc.getDirectory().str();
+          std::string file = loc.getFilename().str();
             
-            if (line != lastLine || file != lastFile || directory != lastDirectory) {
-              outs() << directory << "/" << file << " " << line << "\n";
-              errs() << "  " << funName(finfo->function) << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
-              lastFile = file;
-              lastDirectory = directory;
-              lastLine = line;
-            } else {
-              errs() << "  (GC point on another call at line) " << funName(finfo->function) << " " << loc.getDirectory() << "/" 
-                << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
-            }
-            break;
+          if (line != lastLine || file != lastFile || directory != lastDirectory) {
+            outs() << directory << "/" << file << " " << line << "\n";
+            errs() << "  " << funName(finfo.function) << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
+            lastFile = file;
+            lastDirectory = directory;
+            lastLine = line;
+          } else {
+            errs() << "  (GC point on another call at line) " << funName(finfo.function) << " " << loc.getDirectory() << "/" 
+              << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
           }
+          break;
         }
       }
     }
   }
 
-  releaseMap(functionsMap);
   delete m;
 }

@@ -2,6 +2,7 @@
 #define RCHK_FRESHVARS_H
 
 #include "common.h"
+
 #include "linemsg.h"
 #include "state.h"
 #include "guards.h"

@@ -44,7 +44,7 @@ std::string CalledFunctionTy::getNameSuffix() const {
       suff += ",";
     }
     if (a && a->isSymbol()) {
-      suff += "S:" + cast<SymbolArgInfoTy>(a)->symbolName;
+      suff += "S:" + static_cast<const SymbolArgInfoTy*>(a)->symbolName;
       nKnown++;
     } else {
       suff += "?";
@@ -83,7 +83,7 @@ size_t ArgInfosVectorTy_hash::operator()(const ArgInfosVectorTy& t) const {
   for(ArgInfosVectorTy::const_iterator ai = t.begin(), ae = t.end(); ai != ae; ++ai) {
     const ArgInfoTy *a = *ai;
     if (a && a->isSymbol()) {
-      hash_combine(res, cast<SymbolArgInfoTy>(a)->symbolName);
+      hash_combine(res, static_cast<const SymbolArgInfoTy*>(a)->symbolName);
       cnt++;
     }
   }

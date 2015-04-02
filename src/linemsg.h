@@ -2,6 +2,7 @@
 #define RCHK_LINEMSG_H
 
 #include "common.h"
+
 #include "table.h"
 
 #include <set>

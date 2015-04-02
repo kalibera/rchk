@@ -6,6 +6,8 @@
   
   The intended name for this was unescaped-argument-expressions.
 */
+
+#include "common.h"
        
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallSite.h>
@@ -20,7 +22,6 @@
 #include <llvm/Support/GenericDomTree.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
 #include "allocators.h"
 #include "cgclosure.h"
 
@@ -218,78 +219,75 @@ int main(int argc, char* argv[])
       continue;
     }
 
-    FunctionInfo *finfo = FI->second;
-    if (finfo->function->empty()) {
+    FunctionInfo& finfo = FI->second;
+    if (finfo.function->empty()) {
       continue;
     }
 
-    dtPass.runOnFunction(*const_cast<Function*>(finfo->function));
+    dtPass.runOnFunction(*const_cast<Function*>(finfo.function));
     DominatorTree& dominatorTree = dtPass.getDomTree();
     
-    for(std::vector<CallInfo*>::iterator CI = finfo->callInfos.begin(), CE = finfo->callInfos.end(); CI != CE; ++CI) {
-      CallInfo* cinfo = *CI;
-      for(std::set<FunctionInfo*>::iterator MFI = cinfo->targets.begin(), MFE = cinfo->targets.end(); MFI != MFE; ++MFI) {
-        FunctionInfo *middleFinfo = *MFI;
+    for(std::vector<CallInfo>::const_iterator CI = finfo.callInfos.begin(), CE = finfo.callInfos.end(); CI != CE; ++CI) {
+      const CallInfo& cinfo = *CI;
+      const FunctionInfo *middleFinfo = cinfo.target;
+      const Instruction* inst = cinfo.instruction;
+      
+      unsigned nFreshObjects = 0;
+      unsigned nAllocatingArgs = 0;
         
-        const Instruction* inst = cinfo->instruction;
-        unsigned nFreshObjects = 0;
-        unsigned nAllocatingArgs = 0;
-        
-        for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
-          Value* o = inst->getOperand(u);
+      for(unsigned u = 0, nop = inst->getNumOperands(); u < nop; u++) {
+        Value* o = inst->getOperand(u);
           
-          // FIXME: partial copy-paste from maacheck vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        // FIXME: partial copy-paste from maacheck vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
           
-          ArgExpKind k;
+        ArgExpKind k;
           
-          if (PHINode::classof(o)) {
+        if (PHINode::classof(o)) {
 
-            // for each argument comming from a PHI node, take the most
-            // difficult kind of allocation (this is an approximation, the
-            // most difficult combination of different arguments may not be
-            // possible).
+          // for each argument comming from a PHI node, take the most
+          // difficult kind of allocation (this is an approximation, the
+          // most difficult combination of different arguments may not be
+          // possible).
 
-            PHINode* phi = cast<PHINode>(o);
-            unsigned nvals = phi->getNumIncomingValues();
-            k = AK_NOALLOC;
-            for(unsigned i = 0; i < nvals; i++) {
-              Value* incoming = phi->getIncomingValue(i);
-              ArgExpKind cur = classifyArgumentExpression(incoming, functionsMap, gcFunctionIndex, possibleAllocators);
-              if (isLoadOfUnprotectedObject(incoming, const_cast<Instruction*>(inst), possibleAllocators, dominatorTree)) {
-                cur = AK_FRESH;
-              }
-              if (cur > k) {
-                k = cur;
-                if (cur == AK_FRESH) break; // no need to check more args
-              }
+          PHINode* phi = cast<PHINode>(o);
+          unsigned nvals = phi->getNumIncomingValues();
+          k = AK_NOALLOC;
+          for(unsigned i = 0; i < nvals; i++) {
+            Value* incoming = phi->getIncomingValue(i);
+            ArgExpKind cur = classifyArgumentExpression(incoming, functionsMap, gcFunctionIndex, possibleAllocators);
+            if (isLoadOfUnprotectedObject(incoming, const_cast<Instruction*>(inst), possibleAllocators, dominatorTree)) {
+              cur = AK_FRESH;
             }
-          } else {
-            k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
-            if (isLoadOfUnprotectedObject(o, const_cast<Instruction*>(inst), possibleAllocators, dominatorTree)) {
-              k = AK_FRESH;
+            if (cur > k) {
+              k = cur;
+              if (cur == AK_FRESH) break; // no need to check more args
             }
           }
-
-          if (k >= AK_ALLOCATING) nAllocatingArgs++;
-          if (k >= AK_FRESH) nFreshObjects++;
-
-          if (VERBOSE) {
-            if (k != AK_NOALLOC) {
-              outs() << " Argument " << *o << " in call to " << funName(middleFinfo->function) << " is of kind " << k << 
-              " at " << sourceLocation(inst)  << "\n";
-            }
+        } else {
+          k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
+          if (isLoadOfUnprotectedObject(o, const_cast<Instruction*>(inst), possibleAllocators, dominatorTree)) {
+            k = AK_FRESH;
           }
-          // FIXME: partial copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         }
+
+        if (k >= AK_ALLOCATING) nAllocatingArgs++;
+        if (k >= AK_FRESH) nFreshObjects++;
+
+        if (VERBOSE) {
+          if (k != AK_NOALLOC) {
+            outs() << " Argument " << *o << " in call to " << funName(middleFinfo->function) << " is of kind " << k << 
+            " at " << sourceLocation(inst)  << "\n";
+          }
+        }
+        // FIXME: partial copy-paste from maacheck ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      }
         
-        if (nAllocatingArgs >= 2 && nFreshObjects >= 1) {
-          outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << funName(middleFinfo->function) <<
-            " at " << funName(finfo->function) << " " << sourceLocation(inst) << "\n";
-        }
+      if (nAllocatingArgs >= 2 && nFreshObjects >= 1) {
+        outs() << "WARNING Suspicious call (two or more unprotected arguments) to " << funName(middleFinfo->function) <<
+          " at " << funName(finfo.function) << " " << sourceLocation(inst) << "\n";
       }
     }
   }
   
-  releaseMap(functionsMap);
   delete m;
 }

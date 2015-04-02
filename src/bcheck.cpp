@@ -14,6 +14,8 @@
   has a lot of false alarms.
 */
 
+#include "common.h"
+
 #include <map>
 #include <set>
 #include <stack>
@@ -28,7 +30,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
 #include "errors.h"
 #include "callocators.h"
 #include "allocators.h"

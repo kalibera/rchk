@@ -31,7 +31,7 @@ unsigned getGCFunctionIndex(FunctionsInfoMapTy& functionsMap, Module *m) {
     errs() << "Cannot find function info in callgraph for function " << gcFunction << ", internal error?\n";
     exit(1);
   }
-  return fsearch->second->index;
+  return fsearch->second.index;
 }
 
 // Possible allocators are (all) functions that may be returning a pointer
@@ -196,16 +196,15 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 
   for(FunctionsInfoMapTy::iterator fi = functionsMap.begin(), fe = functionsMap.end(); fi != fe; ++fi) {
-    Function *f = const_cast<Function *>(fi->second->function);
+    Function *f = const_cast<Function *>(fi->second.function);
     if (!f) continue;
 
-    if ((*fi->second->callsFunctionMap)[gcFunctionIndex]) {
+    if ((fi->second.callsFunctionMap)[gcFunctionIndex]) {
       possibleAllocators.insert(f);
     }
   }
   
   possibleAllocators.insert(gcFunction);
-  releaseMap(functionsMap);
 }
 
 bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
@@ -217,9 +216,9 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
     // should not happen
     return false;
   }
-  FunctionInfo *finfo = fsearch->second;
+  FunctionInfo& finfo = fsearch->second;
 
-  return (*finfo->callsFunctionMap)[gcFunctionIndex];
+  return (finfo.callsFunctionMap)[gcFunctionIndex];
 }
 
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
@@ -230,14 +229,13 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 
   for(FunctionsInfoMapTy::iterator fi = functionsMap.begin(), fe = functionsMap.end(); fi != fe; ++fi) {
-    Function *f = const_cast<Function *>(fi->second->function);
+    Function *f = const_cast<Function *>(fi->second.function);
     if (!f) continue;
 
-    if ((*fi->second->callsFunctionMap)[gcFunctionIndex]) {
+    if ((fi->second.callsFunctionMap)[gcFunctionIndex]) {
       allocatingFunctions.insert(f);
     }
   }
   
   allocatingFunctions.insert(getGCFunction(m));
-  releaseMap(functionsMap);
 }

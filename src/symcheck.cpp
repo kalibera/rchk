@@ -4,6 +4,8 @@
   symbols are defined, if necessary.
 */ 
 
+#include "common.h"
+
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
@@ -14,7 +16,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
 #include "symbols.h"
 
 using namespace llvm;

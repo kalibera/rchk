@@ -1,12 +1,11 @@
 
-#include "state.h"
-#include "common.h"
-
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
 
 #include <llvm/Support/raw_ostream.h>
+
+#include "state.h"
 
 using namespace llvm;
 

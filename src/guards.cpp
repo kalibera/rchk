@@ -249,6 +249,8 @@ IntGuardsTy IntGuardsChecker::unpack(const PackedIntGuardsTy& intGuards) {
   IntGuardsTy unpacked;
   unsigned nvars = intGuards.bits.size() / 2;
   
+  assert(nvars * 2 == intGuards.bits.size());
+  
   for(unsigned varIdx = 0; varIdx < nvars; varIdx++) {
     unsigned base = varIdx * IGS_BITS;
     IntGuardState gs = IGS_UNKNOWN;
@@ -276,19 +278,6 @@ void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
     hash_combine(res, (size_t) s);
   } // ordered map
 }
-
-size_t IntGuardsChecker::IntGuardsTy_hash::operator()(const IntGuardsTy& t) const { // FIXME: cannot call SEXPGuardsCheckerTy::hash
-  size_t res = 0;
-  hash_combine(res, t.size());
-  for(IntGuardsTy::const_iterator gi = t.begin(), ge = t.end(); gi != ge; *gi++) {
-    AllocaInst* var = gi->first;
-    IntGuardState s = gi->second;
-    hash_combine(res, (void *)var);
-    hash_combine(res, (size_t) s);
-  } // ordered map
-  return res;
-}
-
 
 // SEXP guard is a local variable of type SEXP
 //   that follows the heuristics included below
@@ -445,10 +434,10 @@ void handleSEXPGuardsForNonTerminator(Instruction* in, VarBoolCacheTy& sexpGuard
     Argument *arg = cast<Argument>(storeValueOp);
     const ArgInfoTy *ai = (*argInfos)[arg->getArgNo()];
     if (ai && ai->isSymbol()) {
-      SEXPGuardTy newGS(SGS_SYMBOL, cast<SymbolArgInfoTy>(ai)->symbolName);
+      SEXPGuardTy newGS(SGS_SYMBOL, static_cast<const SymbolArgInfoTy*>(ai)->symbolName);
       sexpGuards[storePointerVar] = newGS;
       if (msg.debug()) msg.debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" +
-        cast<SymbolArgInfoTy>(ai)->symbolName + "\" from argument\n", store);
+        static_cast<const SymbolArgInfoTy*>(ai)->symbolName + "\" from argument\n", store);
       return;
     }
   }

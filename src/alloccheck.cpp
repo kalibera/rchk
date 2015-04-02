@@ -3,6 +3,8 @@
   returns a newly allocated pointer.  An allocator may indeed be a wrapper
   for other allocators, so there is a lot of allocators in the R source code.
 */
+
+#include "common.h"
        
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallSite.h>
@@ -13,11 +15,9 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "common.h"
 #include "allocators.h"
 #include "callocators.h"
 #include "errors.h"
-
 
 using namespace llvm;
 

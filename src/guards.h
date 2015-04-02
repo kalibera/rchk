@@ -2,6 +2,7 @@
 #define RCHK_GUARDS_H
 
 #include "common.h"
+
 #include "callocators.h"
 #include "linemsg.h"
 #include "state.h"
@@ -43,20 +44,14 @@ IntGuardState getIntGuardState(IntGuardsTy& intGuards, AllocaInst* var);
 // per-function state for checking SEXP guards
 class IntGuardsChecker {
 
-  struct IntGuardsTy_hash {
-    size_t operator()(const IntGuardsTy& t) const;
-  };
+  typedef IndexedTable<AllocaInst> VarIndexTy; // index of guard variables known so far
 
-  typedef std::unordered_map<IntGuardsTy, PackedIntGuardsTy, IntGuardsTy_hash> IntGuardsTableTy;
-  typedef IndexedTable<AllocaInst> VarIndexTy;
-
-  IntGuardsTableTy igTable;
   VarIndexTy varIndex;
   VarBoolCacheTy varsCache; // FIXME: could eagerly search all variables and merge var cache with index
   LineMessenger* msg;
 
   public:
-    IntGuardsChecker(LineMessenger* msg): igTable(), varIndex(), varsCache(), msg(msg) {};
+    IntGuardsChecker(LineMessenger* msg): varIndex(), varsCache(), msg(msg) {};
 
     PackedIntGuardsTy pack(const IntGuardsTy& intGuards);
     IntGuardsTy unpack(const PackedIntGuardsTy& intGuards);
@@ -67,7 +62,7 @@ class IntGuardsChecker {
     bool handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s);
 
     void reset(Function *f) {};    
-    void clear() { igTable.clear(); varsCache.clear(); } // FIXME: get rid of this
+    void clear() { varsCache.clear(); } // FIXME: get rid of this
 };
 
 
