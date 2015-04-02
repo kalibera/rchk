@@ -114,7 +114,7 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
       hash_combine(res, balance.savedDepth);
       hash_combine(res, (int) balance.countState);
       hash_combine(res, intGuards.size());
-      for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
+      for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; ++gi) {
         AllocaInst* var = gi->first;
         IntGuardState s = gi->second;
         hash_combine(res, (void *)var);
@@ -122,7 +122,7 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
       } // ordered map
 
       hash_combine(res, sexpGuards.size());
-      for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
+      for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; ++gi) {
         AllocaInst* var = gi->first;
         const SEXPGuardTy& g = gi->second;
         hash_combine(res, (void *) var);

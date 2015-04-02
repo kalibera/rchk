@@ -271,7 +271,7 @@ IntGuardsTy IntGuardsChecker::unpack(const PackedIntGuardsTy& intGuards) {
 void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
 
   hash_combine(res, intGuards.size());
-  for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
+  for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; ++gi) {
     AllocaInst* var = gi->first;
     IntGuardState s = gi->second;
     hash_combine(res, (void *)var);
@@ -819,7 +819,7 @@ SEXPGuardsTy SEXPGuardsCheckerTy::unpack(const PackedSEXPGuardsTy& sexpGuards) {
   
 void SEXPGuardsCheckerTy::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
   hash_combine(res, sexpGuards.size());
-  for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
+  for(SEXPGuardsTy::const_iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; ++gi) {
     AllocaInst* var = gi->first;
     const SEXPGuardTy& g = gi->second;
     hash_combine(res, (void *) var);
@@ -831,7 +831,7 @@ void SEXPGuardsCheckerTy::hash(size_t& res, const SEXPGuardsTy& sexpGuards) {
 size_t SEXPGuardsCheckerTy::SEXPGuardsTy_hash::operator()(const SEXPGuardsTy& t) const { // FIXME: cannot call SEXPGuardsCheckerTy::hash
   size_t res = 0;
   hash_combine(res, t.size());
-  for(SEXPGuardsTy::const_iterator gi = t.begin(), ge = t.end(); gi != ge; *gi++) {
+  for(SEXPGuardsTy::const_iterator gi = t.begin(), ge = t.end(); gi != ge; ++gi) {
     AllocaInst* var = gi->first;
     const SEXPGuardTy& g = gi->second;
     hash_combine(res, (void *) var);
@@ -846,7 +846,7 @@ size_t SEXPGuardsCheckerTy::SEXPGuardsTy_hash::operator()(const SEXPGuardsTy& t)
 void StateWithGuardsTy::dump(bool verbose) {
   
   errs() << "=== integer guards: " << &intGuards << "\n";
-  for(IntGuardsTy::iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; *gi++) {
+  for(IntGuardsTy::iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; ++gi) {
     AllocaInst *i = gi->first;
     IntGuardState s = gi->second;
     errs() << "   " << varName(i) << " ";
@@ -857,7 +857,7 @@ void StateWithGuardsTy::dump(bool verbose) {
   }
 
   errs() << "=== sexp guards: " << &sexpGuards << "\n";
-  for(SEXPGuardsTy::iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; *gi++) {
+  for(SEXPGuardsTy::iterator gi = sexpGuards.begin(), ge = sexpGuards.end(); gi != ge; ++gi) {
     AllocaInst *i = gi->first;
     SEXPGuardTy &g = gi->second;
     
