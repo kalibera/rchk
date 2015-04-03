@@ -435,7 +435,7 @@ class FunctionChecker {
     FunctionChecker(Function *fun, ModuleCheckingStateTy& moduleState): 
         fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), 
         /* TODO: we would need "sure" allocators here instead of possible allocators! */
-        sexpGuardsChecker(&moduleState.msg, &moduleState.gl, &moduleState.possibleAllocators/ /* NULL */, moduleState.cm.getSymbolsMap(), NULL),
+        sexpGuardsChecker(&moduleState.msg, &moduleState.gl, &moduleState.possibleAllocators /* NULL */, moduleState.cm.getSymbolsMap(), NULL),
         errorBasicBlocks(), m(moduleState) {
         
       findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
