@@ -49,19 +49,19 @@ TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck allocchec
 
 all: $(TOOLS)
 
-alloccheck: alloccheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o
+alloccheck: alloccheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o
 
 errcheck: errcheck.o errors.o common.o
 
-sfpcheck: sfpcheck.o allocators.o errors.o cgclosure.o common.o
+sfpcheck: sfpcheck.o allocators.o errors.o cgclosure.o common.o exceptions.o
 
-csfpcheck: csfpcheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o
+csfpcheck: csfpcheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o
 
-maacheck: maacheck.o allocators.o errors.o cgclosure.o common.o
+maacheck: maacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o
 
-bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cgclosure.o linemsg.o common.o patterns.o callocators.o patterns.o symbols.o
+bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cgclosure.o linemsg.o common.o patterns.o callocators.o patterns.o symbols.o exceptions.o
 
-ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o
+ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o
 
 symcheck: symcheck.o symbols.o common.o
 

@@ -1,5 +1,6 @@
 
 #include "allocators.h"
+#include "exceptions.h"
 
 using namespace llvm;
 
@@ -122,13 +123,6 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
   }
   return false;
 }
-
-// some manually added exceptions that so far seem too hard to find automatically
-bool isKnownNonAllocator(Function *f) {
-  if (isInstall(f)) return true;
-  return false;
-}
-
 
 // returns a set of functions such that if any of them was an allocator,
 // this function f could also have been an allocator
