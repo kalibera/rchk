@@ -38,6 +38,7 @@
 #include "guards.h"
 #include "linemsg.h"
 #include "symbols.h"
+#include "exceptions.h"
 
 using namespace llvm;
 
@@ -333,7 +334,7 @@ class FunctionChecker {
   void checkFunction(bool intGuardsEnabled, bool sexpGuardsEnabled, bool balanceCheckingEnabled, bool freshVarsCheckingEnabled, unsigned& refinableInfos) {
   
     refinableInfos = 0;
-    bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
+    bool restartable = (!intGuardsEnabled && !avoidIntGuardsFor(fun)) || (!sexpGuardsEnabled && !avoidSEXPGuardsFor(fun));
     clearStates();
     {
       StateTy* initState = new StateTy(&fun->getEntryBlock());
@@ -456,9 +457,9 @@ class FunctionChecker {
         if (restartable && refinableInfos>0) {
           // retry with more precise checking
           m.msg.clear();
-          if (!intGuardsEnabled) {
+          if (!intGuardsEnabled && !avoidIntGuardsFor(fun)) {
             intGuardsEnabled = true;
-          } else if (!sexpGuardsEnabled) {
+          } else if (!sexpGuardsEnabled && !avoidSEXPGuardsFor(fun)) {
             sexpGuardsEnabled = true;
           }
         } else {

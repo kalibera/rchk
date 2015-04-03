@@ -6,6 +6,7 @@
 #include "linemsg.h"
 #include "state.h"
 #include "table.h"
+#include "exceptions.h"
 
 #include <map>
 #include <stack>
@@ -26,9 +27,9 @@ const int MAX_STATES = CALLOCATORS_MAX_STATES;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "bcEval"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "CallHook"; // only dump states in this function
 const bool ONLY_CHECK_ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "bcEval";
+const std::string ONLY_FUNCTION_NAME = "CallHook";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
@@ -446,6 +447,9 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
   intGuardsChecker = new IntGuardsChecker(&msg);
   sexpGuardsChecker = new SEXPGuardsChecker(&msg, cm->getGlobals(), NULL /* possible allocators */, cm->getSymbolsMap(), f->argInfo);
   
+  bool intGuardsEnabled = !avoidIntGuardsFor(f);
+  bool sexpGuardsEnabled = !avoidSEXPGuardsFor(f);
+  
   {
     CAllocStateTy* initState = new CAllocStateTy(&f->fun->getEntryBlock());
     initState->add();
@@ -516,8 +520,12 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
       msg.trace("visiting", in);
    
-      intGuardsChecker->handleForNonTerminator(in, s.intGuards);
-      sexpGuardsChecker->handleForNonTerminator(in, s.sexpGuards);
+      if (intGuardsEnabled) {
+        intGuardsChecker->handleForNonTerminator(in, s.intGuards);
+      }
+      if (sexpGuardsEnabled) {
+        sexpGuardsChecker->handleForNonTerminator(in, s.sexpGuards);
+      }
         
       // handle stores
       if (trackOrigins && StoreInst::classof(in)) {
@@ -606,11 +614,11 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
       }
     }
 
-    if (sexpGuardsChecker->handleForTerminator(t, s)) {
+    if (sexpGuardsEnabled && sexpGuardsChecker->handleForTerminator(t, s)) {
       continue;
     }
 
-    if (intGuardsChecker->handleForTerminator(t, s)) {
+    if (intGuardsEnabled && intGuardsChecker->handleForTerminator(t, s)) {
       continue;
     }
       
