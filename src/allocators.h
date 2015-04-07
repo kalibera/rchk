@@ -21,6 +21,7 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions);
 
 void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned);
+void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Function* gcFunction);
 
 bool isKnownNonAllocator(Function *f);
 

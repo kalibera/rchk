@@ -27,9 +27,9 @@ const int MAX_STATES = CALLOCATORS_MAX_STATES;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "CallHook"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "Rf_eval"; // only dump states in this function
 const bool ONLY_CHECK_ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "CallHook";
+const std::string ONLY_FUNCTION_NAME = "Rf_eval";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
@@ -603,7 +603,17 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
               wrapped.insert(knownOrigins.begin(), knownOrigins.end()); // copy origins as result
               nOrigins = knownOrigins.size();
             }
-            if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t); 
+            if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t);
+            if (msg.debug() && origins != s.varOrigins.end()) {
+              std::string tmp = "tracked origins included:";
+              CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
+              for(CalledFunctionsOrderedSetTy::iterator oi = knownOrigins.begin(), oe = knownOrigins.end(); oi != oe; ++oi) {
+                const CalledFunctionTy* cf = *oi;
+                tmp += " ";
+                tmp += funName(cf);
+              }
+              msg.debug(tmp, t);
+            }
           }
         }
         const CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, sexpGuardsChecker, &s.sexpGuards, true);
@@ -740,6 +750,17 @@ void CalledModuleTy::computeCalledAllocators() {
       for(CalledFunctionsOrderedSetTy::const_iterator cfi = wrapped.begin(), cfe = wrapped.end(); cfi != cfe; ++cfi) {
         const CalledFunctionTy *cf = *cfi;
         errs() << "   " << funName(cf) << "\n";
+      }
+    }
+    if (DEBUG) {
+      FunctionsSetTy wrappedAllocators;
+      getWrappedAllocators(f->fun, wrappedAllocators, getGCFunction(m));
+      if (!wrappedAllocators.empty()) {
+        errs() << "\nSimple (possible allocators) wrapped by function " << funName(f) << ":\n";
+        for(FunctionsSetTy::iterator fi = wrappedAllocators.begin(), fe = wrappedAllocators.end(); fi != fe; ++fi) {
+          Function *sf = *fi;
+          errs() << "   " << funName(sf) << "\n";
+        }
       }
     }
     
