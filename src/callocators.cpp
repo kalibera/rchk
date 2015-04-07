@@ -28,9 +28,9 @@ const int MAX_STATES = CALLOCATORS_MAX_STATES;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "GetPersistentName"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "Rf_allocMatrix"; // only dump states in this function
 const bool ONLY_CHECK_ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "GetPersistentName";
+const std::string ONLY_FUNCTION_NAME = "Rf_allocMatrix";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
@@ -556,46 +556,49 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
           
         if (AllocaInst::classof(st->getPointerOperand())) {
           AllocaInst *dst = cast<AllocaInst>(st->getPointerOperand());
-          if (possiblyReturnedVars.find(dst) != possiblyReturnedVars.end()) {
+          if (possiblyReturnedVars.find(dst) != possiblyReturnedVars.end() && isSEXP(dst)) {
             
             // FIXME: should also handle phi nodes here, currently we may miss some allocators
             if (msg.debug()) msg.debug("dropping origins of " + varName(dst) + " at variable overwrite", in);
             s.varOrigins.erase(dst);
             
-            // dst is a variable to be tracked
-            if (LoadInst::classof(st->getValueOperand())) {
-              Value *src = cast<LoadInst>(st->getValueOperand())->getPointerOperand();
-              if (AllocaInst::classof(src)) {
-                // copy all var origins of src into dst
-                if (msg.debug()) msg.debug("propagating origins on assignment of " + varName(cast<AllocaInst>(src)) + " to " + varName(dst), in); 
-                auto sorig = s.varOrigins.find(cast<AllocaInst>(src));
-                if (sorig != s.varOrigins.end()) {
-                  CalledFunctionsOrderedSetTy& srcOrigs = sorig->second;
-                  s.varOrigins.insert({dst, srcOrigs}); // set (copy) origins
+            ValuesSetTy vorig = valueOrigins(st->getValueOperand()); // this goes through Phi's and macros like CDR, CAR etc
+            for(ValuesSetTy::iterator vi = vorig.begin(), ve = vorig.end(); vi != ve; ++vi) { 
+              Value *v = *vi;
+            
+              if (AllocaInst* src = dyn_cast<AllocaInst>(v)) {
+                if (isSEXP(src)) {
+                  // copy all var origins of src into dst
+                  if (msg.debug()) msg.debug("propagating origins on assignment of " + varName(src) + " to " + varName(dst), in); 
+                  auto sorig = s.varOrigins.find(src);
+                  if (sorig != s.varOrigins.end()) {
+                    CalledFunctionsOrderedSetTy& srcOrigs = sorig->second;
+                    s.varOrigins.insert({dst, srcOrigs}); // set (copy) origins
+                  }
+                  continue;
                 }
               }
-              continue;
-            }
             
-            const CalledFunctionTy *tgt;
-            
-            if (isCallThroughPointer(st->getValueOperand()) && isSEXP(dst)) {
-              // a function called through a pointer may be e.g. a builtin function, and indeed may be an allocator
-              if (msg.debug()) msg.debug("call through a pointer, asserting it may be allocating (marking as call to gc function) - assigned to " + varName(dst), in);
-              tgt = cm->getCalledGCFunction();
-            } else {
-              tgt = cm->getCalledFunction(st->getValueOperand(), sexpGuardsChecker, &s.sexpGuards, true);
-              if (tgt && !cm->isPossibleAllocator(tgt->fun)) {
-                tgt = NULL;
+              const CalledFunctionTy *tgt;
+              if (isCallThroughPointer(v)) {
+                // a function called through a pointer may be e.g. a builtin function, and indeed may be an allocator
+                if (msg.debug())
+                  msg.debug("call through a pointer, asserting it may be allocating (marking as call to gc function) - assigned to " + varName(dst), dyn_cast<Instruction>(v));
+                tgt = cm->getCalledGCFunction();
+              } else {
+                tgt = cm->getCalledFunction(st->getValueOperand(), sexpGuardsChecker, &s.sexpGuards, true);
+                if (tgt && !cm->isPossibleAllocator(tgt->fun)) {
+                  tgt = NULL;
+                }
               }
-            }
-            if (tgt) {
-              // storing a value gotten from a (possibly allocator) function
-              if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
-              CalledFunctionsOrderedSetTy newOrigins;
-              newOrigins.insert(tgt);
-              s.varOrigins.insert({dst, newOrigins});
-              continue;
+              if (tgt) {
+                // storing a value gotten from a (possibly allocator) function
+                if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
+                CalledFunctionsOrderedSetTy newOrigins;
+                newOrigins.insert(tgt);
+                s.varOrigins.insert({dst, newOrigins});
+                continue;
+              }
             }
           }
         }
@@ -638,45 +641,49 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
 
       if (trackOrigins) {
         Value *returnOperand = cast<ReturnInst>(t)->getReturnValue();
-        if (LoadInst::classof(returnOperand)) { // return(var)
-          Value *src = cast<LoadInst>(returnOperand)->getPointerOperand();
-          if (AllocaInst::classof(src)) {
-              
-            auto origins = s.varOrigins.find(cast<AllocaInst>(src));
-            size_t nOrigins = 0;
-            if (origins != s.varOrigins.end()) {
-              CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
-              wrapped.insert(knownOrigins.begin(), knownOrigins.end()); // copy origins as result
-              nOrigins = knownOrigins.size();
-            }
-            if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(cast<AllocaInst>(src)), t);
-            if (msg.debug() && origins != s.varOrigins.end()) {
-              std::string tmp = "tracked origins included:";
-              CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
-              for(CalledFunctionsOrderedSetTy::iterator oi = knownOrigins.begin(), oe = knownOrigins.end(); oi != oe; ++oi) {
-                const CalledFunctionTy* cf = *oi;
-                tmp += " ";
-                tmp += funName(cf);
+        ValuesSetTy vorig = valueOrigins(returnOperand); // this goes through Phi's and macros like CDR, CAR etc
+        for(ValuesSetTy::iterator vi = vorig.begin(), ve = vorig.end(); vi != ve; ++vi) { 
+          Value *v = *vi;
+
+          if (AllocaInst *src = dyn_cast<AllocaInst>(v)) {
+            if (isSEXP(src)) {
+              auto origins = s.varOrigins.find(src);
+              size_t nOrigins = 0;
+              if (origins != s.varOrigins.end()) {
+                CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
+                wrapped.insert(knownOrigins.begin(), knownOrigins.end()); // copy origins as result
+                nOrigins = knownOrigins.size();
               }
-              msg.debug(tmp, t);
+              if (msg.debug()) msg.debug("collecting " + std::to_string(nOrigins) + " at function return, variable " + varName(src), t);
+              if (msg.debug() && origins != s.varOrigins.end()) {
+                std::string tmp = "tracked origins included:";
+                CalledFunctionsOrderedSetTy& knownOrigins = origins->second;
+                for(CalledFunctionsOrderedSetTy::iterator oi = knownOrigins.begin(), oe = knownOrigins.end(); oi != oe; ++oi) {
+                  const CalledFunctionTy* cf = *oi;
+                  tmp += " ";
+                  tmp += funName(cf);
+                }
+                msg.debug(tmp, t);
+              }
+              continue;
             }
           }
-        }
-        const CalledFunctionTy *tgt;
+          const CalledFunctionTy *tgt;
       
-        if (isCallThroughPointer(returnOperand)) {
-          if (msg.debug()) msg.debug("returning value from external function, asserting it is from gc function", t);
-          tgt = cm->getCalledGCFunction();
-        } else {
-          tgt = cm->getCalledFunction(returnOperand, sexpGuardsChecker, &s.sexpGuards, true);
-          if (tgt && !cm->isPossibleAllocator(tgt->fun)) {
-            tgt = NULL;
+          if (isCallThroughPointer(returnOperand)) {
+            if (msg.debug()) msg.debug("returning value from external function, asserting it is from gc function", t);
+            tgt = cm->getCalledGCFunction();
+          } else {
+            tgt = cm->getCalledFunction(returnOperand, sexpGuardsChecker, &s.sexpGuards, true);
+            if (tgt && !cm->isPossibleAllocator(tgt->fun)) {
+              tgt = NULL;
+            }
+          }
+          if (tgt) { // return(foo())
+            if (msg.debug()) msg.debug("collecting immediate origin " + funName(tgt) + " at function return", t); 
+            wrapped.insert(tgt);
           }
         }
-        if (tgt) { // return(foo())
-          if (msg.debug()) msg.debug("collecting immediate origin " + funName(tgt) + " at function return", t); 
-          wrapped.insert(tgt);
-        }   
       }
     }
 

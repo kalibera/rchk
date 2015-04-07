@@ -436,7 +436,7 @@ class FunctionChecker {
     FunctionChecker(Function *fun, ModuleCheckingStateTy& moduleState): 
         fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), 
         /* TODO: we would need "sure" allocators here instead of possible allocators! */
-        sexpGuardsChecker(&moduleState.msg, &moduleState.gl, &moduleState.possibleAllocators /* NULL */, moduleState.cm.getSymbolsMap(), NULL),
+        sexpGuardsChecker(&moduleState.msg, &moduleState.gl, USE_ALLOCATOR_DETECTION ? &moduleState.possibleAllocators : NULL, moduleState.cm.getSymbolsMap(), NULL),
         errorBasicBlocks(), m(moduleState) {
         
       findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
@@ -453,7 +453,7 @@ class FunctionChecker {
       for(;;) {
         checkFunction(intGuardsEnabled, sexpGuardsEnabled, balanceCheckingEnabled, freshVarsCheckingEnabled, refinableInfos);
     
-        bool restartable = !intGuardsEnabled || !sexpGuardsEnabled;
+        bool restartable = (!intGuardsEnabled && !avoidIntGuardsFor(fun)) || (!sexpGuardsEnabled && !avoidSEXPGuardsFor(fun));
         if (restartable && refinableInfos>0) {
           // retry with more precise checking
           m.msg.clear();

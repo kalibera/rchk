@@ -3,6 +3,7 @@
 
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/Instructions.h>
 
 #include <llvm/Support/raw_ostream.h>
 
@@ -97,3 +98,67 @@ bool isCallThroughPointer(Value *inst) {
     return false;
   }
 }
+
+ValuesSetTy valueOrigins(Value *inst) {
+
+  ValuesSetTy origins;
+  origins.insert(inst);
+  bool insertedValue = true;
+  
+  while(insertedValue) {
+    insertedValue = false;
+    for(ValuesSetTy::iterator vi = origins.begin(), ve = origins.end(); vi != ve; ++vi) {
+      Value *v = *vi;
+      
+      if (!Instruction::classof(v) || CallInst::classof(v) || InvokeInst::classof(v) || AllocaInst::classof(v)) {
+        continue;
+      }
+      Instruction *inst = cast<Instruction>(v);
+      for(Instruction::op_iterator oi = inst->op_begin(), oe = inst->op_end(); oi != oe; ++oi) {
+        Value *op = *oi;
+        auto vinsert = origins.insert(op);
+        if (vinsert.second) {
+          insertedValue = true;
+        }
+      }
+    }
+  }
+  return origins;
+}
+
+// check if value inst origins from a load of variable var
+//   it may directly be the load of var
+//   but it may also be a result of a number of non-load and non-call instructions
+
+AllocaInst* originsOnlyFromLoad(Value *inst) {
+
+  if (LoadInst *l = dyn_cast<LoadInst>(inst)) {
+    if (AllocaInst *lv = dyn_cast<AllocaInst>(l->getPointerOperand())) { // fast path
+      return lv;
+    }
+  }
+
+  ValuesSetTy origins = valueOrigins(inst);
+  
+  AllocaInst* onlyVar = NULL;
+  for(ValuesSetTy::iterator vi = origins.begin(), ve = origins.end(); vi != ve; ++vi) {
+    Value *v = *vi;
+    if (CallInst::classof(v) || InvokeInst::classof(v)) {
+      return NULL;
+    }
+    if (AllocaInst *curVar = dyn_cast<AllocaInst>(v)) {
+      if (!onlyVar) {
+        onlyVar = curVar;
+      } else {
+        if (onlyVar != curVar) {
+          // multiple origins
+          return NULL;
+        }
+      }
+    }
+    // FIXME: need to handle anything more?
+  }
+  return onlyVar;
+}
+
+

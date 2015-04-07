@@ -54,10 +54,11 @@ void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
     Instruction *in = &*ini;
     if (ReturnInst::classof(in)) {
       Value* returnOperand = cast<ReturnInst>(in)->getReturnValue();
-      if (LoadInst::classof(returnOperand)) {
-        Value* loadOperand = cast<LoadInst>(returnOperand)->getPointerOperand();
-        if (AllocaInst::classof(loadOperand)) {
-          AllocaInst* var = cast<AllocaInst>(loadOperand);
+
+      ValuesSetTy vorig = valueOrigins(returnOperand); 
+      for(ValuesSetTy::iterator vi = vorig.begin(), ve = vorig.end(); vi != ve; ++vi) { 
+        Value *v = *vi;
+        if (AllocaInst* var = dyn_cast<AllocaInst>(v)) {
           possiblyReturned.insert(var);
           if (DEBUG) errs() << "  directly returned " << varName(var) << "(" << *var << ")\n";
         }
@@ -78,27 +79,28 @@ void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
         Value *storePointerOperand = cast<StoreInst>(in)->getPointerOperand();
         if (!AllocaInst::classof(storePointerOperand)) continue;
         
-        Value *storeValueOperand = cast<StoreInst>(in)->getValueOperand();
-        if (!LoadInst::classof(storeValueOperand)) continue;
-        Value *loadOperand = cast<LoadInst>(storeValueOperand)->getPointerOperand();
-        if (!AllocaInst::classof(loadOperand)) continue;
+        AllocaInst* dst = cast<AllocaInst>(storePointerOperand);
+        if (possiblyReturned.find(dst) == possiblyReturned.end()) {
+          continue;
+        }
         
-        AllocaInst* varDst = cast<AllocaInst>(storePointerOperand);
-        AllocaInst* varSrc = cast<AllocaInst>(loadOperand);
-        
-        if (possiblyReturned.find(varDst) != possiblyReturned.end() &&
-          possiblyReturned.find(varSrc) == possiblyReturned.end()) { // FIXME: what about phi nodes?
-          
-          possiblyReturned.insert(varSrc);
-          addedVar = true;
-          if (DEBUG) errs() << "  indirectly returned " << varName(varSrc) << " through " << varName(varDst) 
-            << " via load " << *storeValueOperand << " and store " << *in << "\n";
+        ValuesSetTy vorig = valueOrigins(cast<StoreInst>(in)->getValueOperand());
+        for(ValuesSetTy::iterator vi = vorig.begin(), ve = vorig.end(); vi != ve; ++vi) { 
+          Value *v = *vi;
+          if (AllocaInst* src = dyn_cast<AllocaInst>(v)) {
+            if (possiblyReturned.find(src) == possiblyReturned.end()) {
+              possiblyReturned.insert(src);
+              addedVar = true;
+              if (DEBUG) errs() << "  indirectly returned " << varName(src) << " through " << varName(dst) << " store " << *in << "\n";
+            }
+          }
         }
       }
     }
   }
 }
 
+// this ignores derived/cast values
 static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
 
   for(Value::user_iterator ui = v->user_begin(), ue = v->user_end(); ui != ue; ++ui) {
@@ -106,6 +108,11 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
     if (ReturnInst::classof(u)) {
       if (DEBUG) errs() << "  callsite result is returned directly\n";
       return true;
+    }
+    if (GetElementPtrInst::classof(u) || BitCastInst::classof(u)) { // go through casts and (some) derived assignments
+      if (valueMayBeReturned(u, possiblyReturned)) {
+        return true;
+      }
     }
     if (StoreInst::classof(u)) {
       Value* storeValue = cast<StoreInst>(u)->getValueOperand();
