@@ -13,7 +13,7 @@ const bool DEBUG = false;
 // build closure over the callgraph of module m
 // each function from module m gets its FunctionInfo in the functionsMap
 
-void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths, FunctionsSetTy *onlyFunctions, CallEdgesMapTy *onlyEdges) {
+void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErrorPaths, FunctionsSetTy *onlyFunctions, CallEdgesMapTy *onlyEdges, Function* externalFunction) {
 
   FunctionsSetTy errorFunctions;
   if (ignoreErrorPaths) {
@@ -86,7 +86,11 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
 
       Function* targetFun = targetCGN->getFunction();
       if (!targetFun) {
-        continue;  // an external node
+        if (DEBUG) errs() << "   call to external function\n";
+        targetFun = externalFunction;
+      }
+      if (!targetFun) {
+        continue;
       }
 
       Instruction* callInst = cast<Instruction>(callVal);

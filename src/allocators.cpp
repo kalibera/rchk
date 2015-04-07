@@ -1,6 +1,7 @@
 
 #include "allocators.h"
 #include "exceptions.h"
+#include "patterns.h"
 
 using namespace llvm;
 
@@ -137,7 +138,8 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
       
   for(Function::iterator bb = f->begin(), bbe = f->end(); bb != bbe; ++bb) {
     for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
-      CallSite cs(cast<Value>(in));
+      Value *v = in;
+      CallSite cs(v);
       if (!cs) continue;
       Function *tgt = cs.getCalledFunction();
       if (tgt == gcFunction) {
@@ -147,12 +149,17 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
         wrappedAllocators.insert(tgt);
         continue;
       }
+      if (isCallThroughPointer(v) && valueMayBeReturned(v, possiblyReturnedVars)) {
+        if (DEBUG) errs() << "SEXP function " << funName(f) << " calls through a pointer, asserted to call gc function\n";
+        wrappedAllocators.insert(gcFunction);
+        continue;
+      }
       if (!tgt) continue;
       if (!isSEXP(tgt->getReturnType())) continue;
       if (isKnownNonAllocator(tgt)) continue;
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
-      if (valueMayBeReturned(cast<Value>(in), possiblyReturnedVars)) {
+      if (valueMayBeReturned(v, possiblyReturnedVars)) {
         if (DEBUG) errs() << "SEXP function " << funName(f) << " wraps functions " << funName(tgt) << "\n";
         wrappedAllocators.insert(tgt);
       }
@@ -181,7 +188,7 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   }
   
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, &onlyEdges);
+  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, &onlyEdges, gcFunction);
 
   for(CallEdgesMapTy::iterator cei = onlyEdges.begin(), cee = onlyEdges.end(); cei != cee; ++cei) {
     delete cei->second;
@@ -218,7 +225,7 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
 
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */);
+  buildCGClosure(m, functionsMap, true /* ignore error paths */, NULL, NULL, getGCFunction(m));
 
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 

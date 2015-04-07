@@ -89,3 +89,11 @@ bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) 
   var = cast<AllocaInst>(varv);
   return true;
 }
+
+bool isCallThroughPointer(Value *inst) {
+  if (CallInst* ci = dyn_cast<CallInst>(inst)) {
+    return LoadInst::classof(ci->getCalledValue());
+  } else {
+    return false;
+  }
+}

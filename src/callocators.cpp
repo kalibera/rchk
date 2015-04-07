@@ -7,6 +7,7 @@
 #include "state.h"
 #include "table.h"
 #include "exceptions.h"
+#include "patterns.h"
 
 #include <map>
 #include <stack>
@@ -27,17 +28,22 @@ const int MAX_STATES = CALLOCATORS_MAX_STATES;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "Rf_eval"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "GetPersistentName"; // only dump states in this function
 const bool ONLY_CHECK_ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "Rf_eval";
+const std::string ONLY_FUNCTION_NAME = "GetPersistentName";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
 const bool KEEP_CALLED_IN_STATE = false;
 
 std::string CalledFunctionTy::getNameSuffix() const {
+
   std::string suff;
   unsigned nKnown = 0;
+  
+  if (!argInfo) {
+    return std::string();
+  }
 
   for(ArgInfosVectorTy::const_iterator ai = argInfo->begin(), ae = argInfo->end(); ai != ae; ++ai) {
     const ArgInfoTy *a = *ai;
@@ -410,6 +416,8 @@ static void clearStates() { // FIXME: avoid copy paste (vs. bcheck)
 static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenger& msg, 
   CalledFunctionsOrderedSetTy& called, CalledFunctionsOrderedSetTy& wrapped) {
 
+  static const CalledFunctionTy* const externalFunctionMarker = new CalledFunctionTy(NULL, NULL, NULL);
+  
   if (!f->fun || !f->fun->size()) {
     return;
   }
@@ -478,6 +486,12 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
       clearStates();
       delete intGuardsChecker;
       delete sexpGuardsChecker;
+      
+      if (called.erase(externalFunctionMarker) > 0) {
+        // the functions calls an external function
+        // lets assume conservatively such function may allocate
+        called.insert(cm->getCalledGCFunction());
+      }      
         
       // NOTE: some callsites may have already been registered to more specific called functions
       bool originAllocating = cm->isAllocating(f->fun);
@@ -490,6 +504,15 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
         Instruction *in = &*ini;
           
         if (errorBasicBlocks.find(in->getParent()) != errorBasicBlocks.end()) {
+          continue;
+        }
+        if (isCallThroughPointer(in)) {
+          if (originAllocating) {
+            called.insert(cm->getCalledGCFunction());
+          }
+          if (originAllocator) {
+            wrapped.insert(cm->getCalledGCFunction());
+          }
           continue;
         }
         CallSite cs(in);
@@ -553,8 +576,20 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
               }
               continue;
             }
-            const CalledFunctionTy *tgt = cm->getCalledFunction(st->getValueOperand(), sexpGuardsChecker, &s.sexpGuards, true);
-            if (tgt && cm->isPossibleAllocator(tgt->fun)) {
+            
+            const CalledFunctionTy *tgt;
+            
+            if (isCallThroughPointer(st->getValueOperand()) && isSEXP(dst)) {
+              // a function called through a pointer may be e.g. a builtin function, and indeed may be an allocator
+              if (msg.debug()) msg.debug("call through a pointer, asserting it may be allocating (marking as call to gc function) - assigned to " + varName(dst), in);
+              tgt = cm->getCalledGCFunction();
+            } else {
+              tgt = cm->getCalledFunction(st->getValueOperand(), sexpGuardsChecker, &s.sexpGuards, true);
+              if (tgt && !cm->isPossibleAllocator(tgt->fun)) {
+                tgt = NULL;
+              }
+            }
+            if (tgt) {
               // storing a value gotten from a (possibly allocator) function
               if (msg.debug()) msg.debug("setting origin " + funName(tgt) + " of " + varName(dst), in); 
               CalledFunctionsOrderedSetTy newOrigins;
@@ -567,8 +602,19 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
       }
         
       // handle calls
-      const CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuardsChecker, &s.sexpGuards, true);
-      if (tgt && cm->isAllocating(tgt->fun)) {
+      const CalledFunctionTy *tgt;
+      
+      if (isCallThroughPointer(in)) {
+        if (msg.debug()) msg.debug("call through a pointer, using the external function marker", in);
+        tgt = externalFunctionMarker;
+      } else {
+        tgt = cm->getCalledFunction(in, sexpGuardsChecker, &s.sexpGuards, true);
+        if (tgt && !cm->isAllocating(tgt->fun)) {
+          tgt = NULL;
+        }
+      }
+      
+      if (tgt) {
         if (msg.debug()) msg.debug("recording call to " + funName(tgt), in);
           
         if (KEEP_CALLED_IN_STATE) {  
@@ -616,8 +662,18 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
             }
           }
         }
-        const CalledFunctionTy *tgt = cm->getCalledFunction(returnOperand, sexpGuardsChecker, &s.sexpGuards, true);
-        if (tgt && cm->isPossibleAllocator(tgt->fun)) { // return(foo())
+        const CalledFunctionTy *tgt;
+      
+        if (isCallThroughPointer(returnOperand)) {
+          if (msg.debug()) msg.debug("returning value from external function, asserting it is from gc function", t);
+          tgt = cm->getCalledGCFunction();
+        } else {
+          tgt = cm->getCalledFunction(returnOperand, sexpGuardsChecker, &s.sexpGuards, true);
+          if (tgt && !cm->isPossibleAllocator(tgt->fun)) {
+            tgt = NULL;
+          }
+        }
+        if (tgt) { // return(foo())
           if (msg.debug()) msg.debug("collecting immediate origin " + funName(tgt) + " at function return", t); 
           wrapped.insert(tgt);
         }   
@@ -652,6 +708,11 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     //   even though it does not return SEXP, any function that calls it and returns an SEXP is regarded as wrapping it
     //   (this is a heuristic)
     wrapped.insert(cm->getCalledGCFunction());
+  }
+  if (called.erase(externalFunctionMarker) > 0) {
+    // the functions calls an external function
+    // lets assume conservatively such function may allocate
+    called.insert(cm->getCalledGCFunction());
   }
 }
 
