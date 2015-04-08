@@ -117,7 +117,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
   Value* storePointerOp = cast<StoreInst>(in)->getPointerOperand();
   Value* storeValueOp = cast<StoreInst>(in)->getValueOperand();
 
-  if (!AllocaInst::classof(storePointerOp) || !storeValueOp->hasOneUse()) {
+  if (!AllocaInst::classof(storePointerOp)) {
     return;
   }
   AllocaInst *var = cast<AllocaInst>(storePointerOp);
@@ -128,7 +128,9 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
   }
   
   const CalledFunctionTy *srcFun = cm->getCalledFunction(storeValueOp, sexpGuards);
-  if (srcFun) {
+  if (srcFun && storeValueOp->hasOneUse()) { 
+    // only allowing single use, the other use can be and often is PROTECT
+    
     if (cm->isPossibleCAllocator(srcFun)) { // FIXME: this is very approximative -- we would rather need to know guaranteed allocators
       // the store (re-)creates a fresh variable
       freshVars.vars.insert(var);
