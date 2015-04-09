@@ -11,6 +11,26 @@ const bool REPORT_FRESH_ARGUMENTS = false;
 
 using namespace llvm;
 
+static void pruneFreshVars(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
+
+  // clean up freshVars -- remove information for dead variables
+  for (FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe;) {
+    AllocaInst *var = *fi;
+      
+    auto lsearch = liveVars.find(in);
+    assert(lsearch != liveVars.end());
+      
+    VarsSetTy& lvars = lsearch->second;
+    if (lvars.find(var) == lvars.end()) {
+      fi = freshVars.vars.erase(fi);
+      freshVars.condMsgs.erase(var);
+      continue;
+    }
+    ++fi;
+  }
+}
+
+
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
   
@@ -35,6 +55,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     }
   }
   
+  pruneFreshVars(in, freshVars, liveVars);
   if (freshVars.vars.size() > 0) {
   
     // compute all variables passed to the call
@@ -59,21 +80,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         // this fresh variable is in fact being passed to the function, so don't report it
         continue;
       }
-      auto lsearch = liveVars.find(in);
-      if (lsearch != liveVars.end()) {
-        VarsSetTy& lvars = lsearch->second;
-        if (lvars.find(var) == lvars.end()) {
-          if (msg.debug()) msg.debug("variable " + varName(var) + " is not live, not reporting a warning", in); 
-          errs() << "LV: var " << varName(var) << " NOT live at " << sourceLocation(in) << "\n";          
-          continue;
-        }
-//        errs() << "LV: var " << varName(var) << " LIVE at " << sourceLocation(in) << "\n";                  
 
-      } else {
-        // FIXME: can this happen?
-        errs() << "LV: NO LIVENESS INFO!!!";
-      }
-      
       std::string message = "unprotected variable " + varName(var) + " while calling allocating function " + funName(tgt);
     
       // prepare a conditional message
@@ -227,6 +234,12 @@ void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGu
   handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars);
   handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
   handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+}
+
+void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
+
+  // this does not pay off here (it is enough during handleCall)
+  //pruneFreshVars(in, freshVars, liveVars);
 }
 
 void StateWithFreshVarsTy::dump(bool verbose) {

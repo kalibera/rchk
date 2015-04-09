@@ -405,6 +405,10 @@ class FunctionChecker {
       
       TerminatorInst *t = s.bb->getTerminator();
 
+      if (freshVarsCheckingEnabled) {
+        handleFreshVarsForTerminator(t, s.freshVars, liveVars);
+      }
+
       if (balanceCheckingEnabled && handleBalanceForTerminator(t, s, m.gl, counterVarsCache, m.msg, refinableInfos)) {
         // ignore successors in case important errors were already found, and hence further
         // errors found will just confuse the user

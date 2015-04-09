@@ -34,10 +34,10 @@ LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
 
-#CXX := $(LLVM)/bin/clang++
+CXX := $(LLVM)/bin/clang++
 
 # switch to GCC (it still seems to generate a tiny bit faster code)
-CXX := g++
+#CXX := g++
 
 LINK.o = $(LINK.cc) # link with C++ compiler by default
 
