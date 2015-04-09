@@ -5,7 +5,7 @@ HOST := $(shell hostname -s)
 
 ifeq ($(HOST), prg)
   LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
-  BCHECK_MAX_STATES := 3000000
+  BCHECK_MAX_STATES := 1500000
   CALLOCATORS_MAX_STATES := 1000000
 else ifeq ($(HOST), r-lnx400)
   LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.5.0-x86_64-fedora20
@@ -34,10 +34,10 @@ LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
 
-CXX := $(LLVM)/bin/clang++
+#CXX := $(LLVM)/bin/clang++
 
 # switch to GCC (it still seems to generate a tiny bit faster code)
-#CXX := g++
+CXX := g++
 
 LINK.o = $(LINK.cc) # link with C++ compiler by default
 
@@ -59,7 +59,7 @@ csfpcheck: csfpcheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o
 
 maacheck: maacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
 
-bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cgclosure.o linemsg.o common.o patterns.o callocators.o patterns.o symbols.o exceptions.o
+bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cgclosure.o linemsg.o common.o patterns.o callocators.o patterns.o symbols.o exceptions.o liveness.o
 
 ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
 

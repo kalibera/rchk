@@ -12,7 +12,7 @@ const bool REPORT_FRESH_ARGUMENTS = false;
 using namespace llvm;
 
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
-    LineMessenger& msg, unsigned& refinableInfos) {
+    LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
   
   const CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuards);
   if (!tgt || !cm->isCAllocating(tgt)) {
@@ -59,6 +59,21 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         // this fresh variable is in fact being passed to the function, so don't report it
         continue;
       }
+      auto lsearch = liveVars.find(in);
+      if (lsearch != liveVars.end()) {
+        VarsSetTy& lvars = lsearch->second;
+        if (lvars.find(var) == lvars.end()) {
+          if (msg.debug()) msg.debug("variable " + varName(var) + " is not live, not reporting a warning", in); 
+          errs() << "LV: var " << varName(var) << " NOT live at " << sourceLocation(in) << "\n";          
+          continue;
+        }
+//        errs() << "LV: var " << varName(var) << " LIVE at " << sourceLocation(in) << "\n";                  
+
+      } else {
+        // FIXME: can this happen?
+        errs() << "LV: NO LIVENESS INFO!!!";
+      }
+      
       std::string message = "unprotected variable " + varName(var) + " while calling allocating function " + funName(tgt);
     
       // prepare a conditional message
@@ -207,9 +222,9 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
 }
 
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
-    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
 
-  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars);
   handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
   handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
 }

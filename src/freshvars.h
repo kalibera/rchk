@@ -6,6 +6,7 @@
 #include "linemsg.h"
 #include "state.h"
 #include "guards.h"
+#include "liveness.h"
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Instruction.h>
@@ -37,6 +38,6 @@ struct StateWithFreshVarsTy : virtual public StateBaseTy {
 };
 
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
-  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos);
+  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars);
 
 #endif

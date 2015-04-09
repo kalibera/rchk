@@ -39,6 +39,7 @@
 #include "linemsg.h"
 #include "symbols.h"
 #include "exceptions.h"
+#include "liveness.h"
 
 using namespace llvm;
 
@@ -328,6 +329,7 @@ class FunctionChecker {
   IntGuardsChecker intGuardsChecker;
   SEXPGuardsChecker sexpGuardsChecker;
   BasicBlocksSetTy errorBasicBlocks;
+  LiveVarsTy liveVars;
 
   ModuleCheckingStateTy& m;
 
@@ -379,7 +381,7 @@ class FunctionChecker {
         m.msg.trace("visiting", in);
    
         if (freshVarsCheckingEnabled) {
-          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos);
+          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos, liveVars);
           if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
         if (balanceCheckingEnabled) {
@@ -440,6 +442,7 @@ class FunctionChecker {
         errorBasicBlocks(), m(moduleState) {
         
       findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
+      liveVars = findLiveVariables(fun);
     }  
   
     // handles restarts
