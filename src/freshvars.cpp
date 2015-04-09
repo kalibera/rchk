@@ -35,21 +35,44 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     }
   }
   
-  for (FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
-    AllocaInst *var = *fi;
-    std::string message = "unprotected variable " + varName(var) + " while calling allocating function " + funName(tgt);
+  if (freshVars.vars.size() > 0) {
+  
+    // compute all variables passed to the call
+    //   (if a fresh variable is passed to a function, it is not to be reported here as error)
     
-    // prepare a conditional message
-    auto vsearch = freshVars.condMsgs.find(var);
-    if (vsearch == freshVars.condMsgs.end()) {
-      DelayedLineMessenger dmsg(&msg);
-      dmsg.info(message, in);
-      freshVars.condMsgs.insert({var, dmsg});
-      if (msg.debug()) msg.debug("created conditional message \"" + message + "\" first for variable " + varName(var), in);
-    } else {
-      DelayedLineMessenger& dmsg = vsearch->second;
-      dmsg.info(message, in);
-      if (msg.debug()) msg.debug("added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
+    VarsSetTy passedVars;
+    
+    for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
+      Value *arg = *ai;
+      
+      if (LoadInst *li = dyn_cast<LoadInst>(arg)) {
+        if (AllocaInst *lvar = dyn_cast<AllocaInst>(li->getPointerOperand())) {
+          passedVars.insert(lvar);
+        }
+      }
+    }
+  
+    for (FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
+      AllocaInst *var = *fi;
+      
+      if (passedVars.find(var) != passedVars.end()) {
+        // this fresh variable is in fact being passed to the function, so don't report it
+        continue;
+      }
+      std::string message = "unprotected variable " + varName(var) + " while calling allocating function " + funName(tgt);
+    
+      // prepare a conditional message
+      auto vsearch = freshVars.condMsgs.find(var);
+      if (vsearch == freshVars.condMsgs.end()) {
+        DelayedLineMessenger dmsg(&msg);
+        dmsg.info(message, in);
+        freshVars.condMsgs.insert({var, dmsg});
+        if (msg.debug()) msg.debug("created conditional message \"" + message + "\" first for variable " + varName(var), in);
+      } else {
+        DelayedLineMessenger& dmsg = vsearch->second;
+        dmsg.info(message, in);
+        if (msg.debug()) msg.debug("added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
+      }
     }
   }
 }
@@ -79,8 +102,45 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   }
   // a fresh variable is being loaded
 
-  if (msg.debug()) msg.debug("fresh variable " + varName(var) + " loaded and thus no longer fresh", in);
-  freshVars.vars.erase(var);
+  if (0) {
+    // this is rather restrictive, many loads are benign or, benign with a good probability
+    
+    if (msg.debug()) msg.debug("fresh variable " + varName(var) + " loaded and thus no longer fresh", in);
+    freshVars.vars.erase(var);
+  }
+  
+  for(Value::user_iterator ui = li->user_begin(), ue = li->user_end(); ui != ue; ++ui) {
+    User *u = *ui;
+    
+    CallSite cs(u);  // variable passed to a call as argument
+    if (cs) {
+      Function *tgt = cs.getCalledFunction();
+      if (tgt) {
+        // FIXME: could these and similar functions be discovered automatically?
+        if (tgt->getName() == "Rf_protect" || tgt->getName() == "R_ProtectWithIndex" || tgt->getName() == "R_PreserveObject") {
+          if (msg.debug()) msg.debug("fresh variable " + varName(var) + " passed to known protecting function " + funName(tgt) + " and thus no longer fresh" , in);  
+          freshVars.vars.erase(var);
+          break;
+        }
+      }
+      continue;
+    }
+    
+    if (StoreInst *sinst = dyn_cast<StoreInst>(u)) { // variable stored
+      if (sinst->getValueOperand() == u) {
+        if (!AllocaInst::classof(sinst->getPointerOperand())) {
+          // variable stored into a non-local variable (e.g. into a global or into a location derived from a local variable, e.g. setting an attribute
+          // of an SEXP in a local variable)
+          
+          // the heuristic is that these stores are usually implicitly protecting
+          if (msg.debug()) msg.debug("fresh variable " + varName(var) + " stored into a global or derived local, and thus no longer fresh" , in);
+          freshVars.vars.erase(var);
+          break;
+        }
+      }
+      continue;
+    }
+  }
 
   if (REPORT_FRESH_ARGUMENTS) {
     if (!li->hasOneUse()) { // too restrictive? should look at other uses too?
