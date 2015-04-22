@@ -1,12 +1,13 @@
 
 #include "freshvars.h"
 #include "guards.h"
+#include "exceptions.h"
 
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
 
-const bool REPORT_FRESH_ARGUMENTS = false;
+const bool REPORT_FRESH_ARGUMENTS = true;
  // now disabled as this is a common source of false alarms (many functions are callee-protect)
 
 using namespace llvm;
@@ -30,7 +31,6 @@ static void pruneFreshVars(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& 
   }
 }
 
-
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
   
@@ -43,7 +43,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   assert(cs);
   assert(cs.getCalledFunction());
 
-  if (REPORT_FRESH_ARGUMENTS) {
+  if (REPORT_FRESH_ARGUMENTS && !protectsArguments(tgt)) {
     for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
       Value *arg = *ai;
       const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
@@ -169,7 +169,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       return;
     }
     const CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
-    if (!tgt || !cm->isCAllocating(tgt)) {
+    if (!tgt || !cm->isCAllocating(tgt) || protectsArguments(tgt)) {
       return;
     }
   

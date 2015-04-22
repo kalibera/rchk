@@ -20,4 +20,7 @@ bool avoidSEXPGuardsFor(const CalledFunctionTy *f);
 bool avoidIntGuardsFor(Function *f);
 bool avoidIntGuardsFor(const CalledFunctionTy *f);
 
+bool protectsArguments(Function *f);
+bool protectsArguments(const CalledFunctionTy *f);
+
 #endif
