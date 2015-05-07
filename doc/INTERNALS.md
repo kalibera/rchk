@@ -403,34 +403,40 @@ call to an allocating function, but used afterwards. Currently the tool,
 however, can only check a small subset of this scenario.
 
 A *fresh* pointer is a pointer to a newly allocated object that has not been
-yet used in any way (has not been read or written). If a fresh pointer exists
-in a local variable during an allocating call, an error is reported, but,
-only if that pointer may be used later (is live). Note, if a pointer is
-passed to an allocating call, it is considered used before that call, and
-this tool does not report an error. Note also that a fresh pointer is
-necessarily unprotected, because protecting it would count as a use, and
-thus the pointer would be no longer fresh.
+ever passed to a known protecting function (`PROTECT`, `PROTECT_WITH_INDEX`,
+`R_PreserveObject`).  If a fresh pointer exists in a local variable during
+an allocating call and the variable is not passed to the call, an error is
+reported, but, only if that pointer may be used later (is live).  If a fresh
+pointer is copied into a global variable or into a location derived from a
+local variable (e.g.  `SETCAR(x, fresh)`), it ceases to be fresh, as this is
+usually an operation which implicitly protects an object.
 
 The tool uses the data flow and state checking algorithm described above,
 including the adaptive enabling of guards (currently the tool is integrated
-with the balance checking, but it could easily be made standalone). In the
-state, it remembers a set of fresh variables. A new fresh variable is
-introduced by a call to a (called) allocator. A variable ceases to be fresh
-when used in any way, so it is removed from the set in such a case. If there
-is a call to a (called) allocating function, conditional error messages are
-reported for all fresh variables.
+with the balance checking, but it could easily be made standalone).  In the
+state, it remembers a set of fresh variables.  A new fresh variable is
+introduced by a call to a (called) allocator.  A variable ceases to be fresh
+when protected the first time (passed to a protecting function), so it is
+removed from the set in such a case.  If there is a call to a (called)
+allocating function, conditional error messages are created and prepared
+(but not yet shown) for all fresh variables.
 
-*Conditional* messages are conditional on that a given variable will be ever
-used.  This is a form of live variable analysis implemented in a
+*Conditional* messages are conditional on that a given variable will ever be
+used later.  This is a form of live variable analysis implemented in a
 forward-flow checking tool.  Normally it would be natural to implement live
 variable analysis using backward flow, but it would be very complicated to
 do with the context sensitivity implemented now.  So, the current
 implementation remembers the conditional messages in the checking state.  It
 maintains a map of variables to messages.  If a variable is being used
 (read), it is looked up in this map, and if there are any conditional
-messages for it, they are printed and deleted from the state. If a variable
+messages for it, they are printed and deleted from the state.  If a variable
 is rewritten (killed), it is also looked up in this map, and any messages
 conditional on it are removed.
+
+The tool also reports when a fresh pointer is being passed to an allocation
+function that is not known to be safe (callee-protect). The list of
+callee-protect functions is hardcoded in the tool, but an approximation of
+it could probably be detected automatically.
 
 ### Multiple-Allocating Arguments
 

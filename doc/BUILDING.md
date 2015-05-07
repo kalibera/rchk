@@ -33,7 +33,7 @@ also switch the system to the `gold` linker (make `/usr/bin/ld` point to
 With Fedora 20, we built `binutils` from source and then we built LLVM 3.4.2
 against these binutils, getting also the LLVM gold plugin.  We have modified
 the `PATH` variable to switch to the `gold` linker, we did not have to
-modify it for the whole system.
+switch the whole system to `gold` linker.
 
 ### Building R, generating bitcode files
 
@@ -42,8 +42,8 @@ to generate LLVM bitcode in addition to the executables.  With LLVM 3.4, one
 can do this using `-Wl,-plugin-opt=also-emit-llvm` (passing option
 `also-emit-llvm` to the `LLVM gold plugin`).  This option has been removed
 as of `LLVM 3.6`.  So far we've been only generating the bitcode files using
-LLVM 3.4 and we haven't yet run into problems having the tools use more
-recent version of LLVM.
+LLVM 3.4 and we haven't yet run into problems with that the tools use LLVM
+3.5.
 
 ### More reading
 
