@@ -13,6 +13,18 @@ happen. This script puts a comment at the end of each such line:
 
 `cat lines | while read F L ; do echo "sed -i '$L,$L"'s/$/ \/* GC *\//g'\'" $F" ; done | bash`
 
+There is a shell script `gcannotate.sh` which generates annotations using `csfpcheck` for
+the core R and packages included in the R distribution. The script generates
+two textual files, a list of annotations and a script to annotate the
+sources:
+
+`gcannotate.sh path_to_R`
+
+where `path_to_R` includes the build three of R with the bitcode files, e.g.
+`path_to_R/src/main/R.bin.bc`. The generated script is just a sequence of
+sed in-place text insertions.
+
+
 The tool errs on the safe side, which is saying that a function may
 allocate.  It may be that in fact the function won't allocate for the given
 inputs.  The tool, however, takes some function arguments into account: e.g. 
@@ -54,6 +66,10 @@ protection bugs or when checking the reports of other bug finding tools, and
 perhaps also when diagnosing errors found by [runtime
 checking](http://cran.r-project.org/doc/manuals/r-release/R-exts.html#Checking-memory-access)
 (valgrind, gctorture, the barrier, etc).
+
+Note that sometimes the tool can give surprising annotations. A particular
+case is that it conservatively assumes that any call to external code may
+allocate from the R heap, which is often not the case.
 
 ## Detecting Multiple-Allocating-Arguments Bugs
 
@@ -186,7 +202,7 @@ are still some false alarms and bailouts for code that is still too
 complicated, and indeed there are not-useful reports for functions that have
 protection stack imbalance by design.
 
-To check the CRAN BMN package, run
+To check the CRAN `BMN` package, run
 
 ```
 bcheck ./src/main/R.bin.bc BMN.Rcheck/00_pkg_src/BMN/src/BMN.so.bc
@@ -252,18 +268,28 @@ SEXP runJTAlgSecMomVec(SEXP adjMat, SEXP thetaMat, SEXP varR, SEXP maxRuntime)
 ```
 
 It is easy to see that the tool is right, only 7 pointers have been
-protected, but 8 are being unprotected.  Currently the `bcheck` tool also
-checks for unprotected pointers at calls (described below). Even though
-these two kinds of bugs are unrelated, the underlying working of the tool is
-the same (interpreting the guards, conditions, etc).
+protected, but 8 are being unprotected.
+
+The tool gets confused by wrappers (functions) for the standard
+protection/unprotection functions, reporting then false alarms.  Also, the
+tools is confused when a `switch` statement handles all cases that can
+happen in practice (and part of that handling is pointer unprotection), but
+there is no `default` statement - the tool does not know that all cases have
+been handled. Also, some code uses patterns such as 
+`UNPROTECT(nprotect + 2)`, which are not supported by the tool.
+
+Currently the `bcheck` tool also checks for unprotected pointers at calls
+(described below).  Even though these two kinds of bugs are unrelated, the
+underlying working of the tool is the same (interpreting the guards,
+conditions, etc).
 
 ## Detecting Unprotected Objects At Allocating Calls
 
-The ultimate goal is to have a tool that could detect unprotect (live)
+The ultimate goal is to have a tool that could detect unprotected (live)
 objects at allocating calls in general.  Live objects means objects that
 will still be used after the call.  This is a hard problem in the general
 case, but the `bcheck` code can do this for objects that have not been
-touched in any way in between their allocation and the erroneous use, such as
+protected at all in between their allocation and the erroneous use, such as
 
 ```
 SEXP attribute_hidden do_gctorture2(SEXP call, SEXP op, SEXP args, SEXP rho)
@@ -284,19 +310,25 @@ SEXP attribute_hidden do_gctorture2(SEXP call, SEXP op, SEXP args, SEXP rho)
 
 the example has ''GC'' annotations created using `csfpcheck`. The `old`
 variable is the only pointer to a live, unprotected object.  At calls to
-`asInteger`, this object can be erroneously collected.  The tool also
-detects when an allocating function is called with an allocating argument,
-which is often an error (by convention, most R functions should be called
-with arguments protected by callers), but there are many exceptions -
-functions that protect their arguments.  The tool cannot yet detect this. 
-Another source of false alarms is when the tool thinks that some function
-returns a newly allocated object, but in fact it does not in the particular
-context.  The experience is that the tool finds many errors, but the false
-alarms rate is still rather high.  A common source of true errors is a
-failure to protect the result of `getAttrib` when retrieving an attribute
-that may be automatically generated/converted (e.g. `names`, `dimnames`).
+`asInteger`, this object can be erroneously collected. If an object is
+protected, then unprotected, and then erroneously used, the tool will not
+find out about this erroneous use.
 
-Sometimes, the errors are very unsophisticated. Checking the CRAN ccgarch
+The tool also detects when an allocating function is called with an
+allocating argument, which is often an error (by convention, most R
+functions should be called with arguments protected by callers), but there
+are many exceptions - functions that protect their arguments.  The tool
+cannot yet detect this, but it has a hard-coded list of such callee-protect
+functions from the R source code.  This is indeed error prone as the R code
+can change between versions.  One source of false alarms is when the tool
+thinks that some function returns a newly allocated object, but in fact it
+does not in the particular context.  The experience is that the tool finds
+many errors, but the false alarms rate is still rather high.  A common
+source of true errors is a failure to protect the result of `getAttrib` when
+retrieving an attribute that may be automatically generated/converted (e.g. 
+`names`, `dimnames`).
+
+Sometimes, the errors are very unsophisticated. Checking the CRAN `ccgarch`
 package also generates this report.
 
 ```
@@ -316,3 +348,22 @@ rh = REAL(h);
 This report is indeed a true error, the call to `allocVector` may trigger GC
 and kill the object pointed to by `el2`.
 
+## Bizarre False Alarms and Approximations at LLVM Bitcode Level
+
+Some false alarms, but in practice it seems very few, may seem rather
+bizarre.  This may be caused by approximation at the level of intepretting
+the LLVM bitcode - phi nodes are often not supported or their semantics is
+simplified.  Also values set in a basic block, but directly used in another,
+are not always handled correctly. In practice when using the tool, however,
+one does not care why the false alarm is there, but only whether a
+particular report is a true error or not.
+
+To reduce the risks of missing true errors due to these limitations
+of the tools, one can make all value transfers between basic blocks go
+through local variables ("memory") using LLVM's `opt` tool:
+
+`opt -reg2mem R.bin.bc > R.bin.reg2mem.bc`
+
+This also happens to reduce the number of phi nodes (or eliminates them). On
+the other hand, the resulting bitcode is harder to check as it has indeed
+more local variables, so one may need a lot of RAM for the checking.

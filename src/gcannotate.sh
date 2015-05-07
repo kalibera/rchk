@@ -33,4 +33,4 @@ cat $TMPFS | while read F L ; do
   echo "sed -i '$L,$L"'s/$/ \/* GC *\//g'\'" $F"
 done >$TMPFE
 
-echo "Generated annotations into $TMPFE and the script into $TMPFS."
+echo "Generated annotations into $TMPFS and the script into $TMPFE."
