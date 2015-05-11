@@ -216,6 +216,23 @@ bool isProtectingFunction(Function *f) {
     f->getName() == "R_PreserveObject" || f->getName() == "R_Reprotect");
 }
 
+bool isSetterFunction(Function *f) {
+  if (!f) return false;
+  if (f->getName() == "Rf_setAttrib") return true;
+  if (f->getName() == "SET_STRING_ELT") return true;
+  if (f->getName() == "SET_VECTOR_ELT") return true;
+  if (f->getName() == "SET_TAG") return true;
+  if (f->getName() == "SETCAR") return true;
+  if (f->getName() == "SETCDR") return true;
+  if (f->getName() == "SETCADR") return true;
+  if (f->getName() == "SETCADDR") return true;
+  if (f->getName() == "SETCADDDR") return true;  
+  if (f->getName() == "SETCAD4R") return true;
+  if (f->getName() == "SET_FORMALS") return true;
+  if (f->getName() == "SET_BODY") return true;
+  if (f->getName() == "SET_CLOENV") return true;  
+}
+
 bool isTypeTest(Function *f, const GlobalsTy* g) {
   return f == g->isNullFunction || f == g->isSymbolFunction || f == g->isLogicalFunction || f == g->isRealFunction ||
     f == g->isComplexFunction || f == g->isExpressionFunction || f == g->isEnvironmentFunction || f == g->isStringFunction;

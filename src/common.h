@@ -103,6 +103,10 @@ bool isSEXP(GlobalVariable *var);
 bool isInstall(Function *f);
 bool isProtectingFunction(Function *f);
 
+// functions like setAttrib(x, name, value) that protect their non-first argument if the first argument is protected
+// (by joining to the first argument)
+bool isSetterFunction(Function *f);
+
 bool isTypeTest(Function *f, const GlobalsTy* g);
   
 // from Boost

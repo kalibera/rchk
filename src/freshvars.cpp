@@ -144,6 +144,19 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
           freshVars.vars.erase(var);
           break;
         }
+        
+        // heuristic - handle functions usually protecting like setAttrib(x, ...) where x is protected (say, non-fresh, as approximation)
+        if (cs.arg_size() > 1 && isSetterFunction(tgt)) {
+          if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs.getArgument(0))) {
+            if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
+              if (freshVars.vars.find(firstArg) == freshVars.vars.end()) {
+                if (msg.debug()) msg.debug("fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);  
+                freshVars.vars.erase(var);
+                break;
+              }
+            }
+          }
+        }
       }
       continue;
     }
