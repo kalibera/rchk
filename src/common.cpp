@@ -211,6 +211,11 @@ bool isInstall(Function *f) {
     f->getName() == "Rf_installChar" || f->getName() == "Rf_installS3Signature");
 }
 
+bool isProtectingFunction(Function *f) {
+  return f && (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex" ||
+    f->getName() == "R_PreserveObject" || f->getName() == "R_Reprotect");
+}
+
 bool isTypeTest(Function *f, const GlobalsTy* g) {
   return f == g->isNullFunction || f == g->isSymbolFunction || f == g->isLogicalFunction || f == g->isRealFunction ||
     f == g->isComplexFunction || f == g->isExpressionFunction || f == g->isEnvironmentFunction || f == g->isStringFunction;

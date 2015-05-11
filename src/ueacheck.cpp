@@ -70,11 +70,8 @@ StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instru
       }
 
       CallSite pcs(u);
-      if (pcs && pcs.getCalledFunction()) {
-        std::string fname = pcs.getCalledFunction()->getName();
-        if (fname == "Rf_protect" || fname == "R_ProtectWithIndex") {
-          return s;
-        }
+      if (pcs && isProtectingFunction(pcs.getCalledFunction())) {
+        return s;
       }
     }
   }
@@ -102,8 +99,7 @@ Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instru
       if (!dominatorTree.dominates(allocStore, l)) {
         continue;
       }
-      std::string fname = cs.getCalledFunction()->getName();
-      if (fname != "Rf_protect" && fname != "R_ProtectWithIndex") {
+      if (!isProtectingFunction(cs.getCalledFunction())) {
         continue;
       }
       return cs.getInstruction();
@@ -123,8 +119,7 @@ Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instru
       if (!dominatorTree.dominates(cs.getInstruction(), useInst)) {
         continue;
       }
-      std::string fname = cs.getCalledFunction()->getName();
-      if (fname != "Rf_protect" && fname != "R_ProtectWithIndex") {
+      if (!isProtectingFunction(cs.getCalledFunction())) {
         continue;
       }
       return cs.getInstruction();

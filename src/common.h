@@ -101,6 +101,7 @@ bool isSEXP(Type* type);
 bool isSEXPPtr(Type *type);
 bool isSEXP(GlobalVariable *var);
 bool isInstall(Function *f);
+bool isProtectingFunction(Function *f);
 
 bool isTypeTest(Function *f, const GlobalsTy* g);
   

@@ -139,7 +139,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       Function *tgt = cs.getCalledFunction();
       if (tgt) {
         // FIXME: could these and similar functions be discovered automatically?
-        if (tgt->getName() == "Rf_protect" || tgt->getName() == "R_ProtectWithIndex" || tgt->getName() == "R_PreserveObject") {
+        if (isProtectingFunction(tgt)) {
           if (msg.debug()) msg.debug("fresh variable " + varName(var) + " passed to known protecting function " + funName(tgt) + " and thus no longer fresh" , in);  
           freshVars.vars.erase(var);
           break;
