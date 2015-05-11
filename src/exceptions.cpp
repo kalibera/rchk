@@ -17,6 +17,16 @@ bool isKnownNonAllocator(const CalledFunctionTy *f) {
   return isKnownNonAllocator(f->fun);
 }
 
+bool isAssertedNonAllocating(Function *f) {
+  if (f->getName() == "Rf_envlength") return true; // this impacts also length, xlength, inherits, nthcdr, is*, etc
+  return false;
+}
+
+bool isAssertedNonAllocating(const CalledFunctionTy *f) {
+  return isAssertedNonAllocating(f->fun);
+}
+
+
 bool avoidSEXPGuardsFor(Function *f) {
   if (f->getName() == "bcEval") return true;
   return false;

@@ -183,7 +183,7 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   onlyFunctions.insert(gcFunction);
   for(Module::iterator f = m->begin(), fe = m->end(); f != fe; ++f) {
 
-    if (isKnownNonAllocator(f)) {
+    if (isKnownNonAllocator(f) || isAssertedNonAllocating(f)) {
       continue;
     }
     FunctionsSetTy wrappedAllocators;
@@ -216,7 +216,7 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
 }
 
 bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
-  if (!fun) {
+  if (!fun || isAssertedNonAllocating(fun)) {
     return false;
   }
   auto fsearch = functionsMap.find(const_cast<Function*>(fun));
@@ -240,7 +240,7 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
     Function *f = const_cast<Function *>(fi->second.function);
     if (!f) continue;
 
-    if ((fi->second.callsFunctionMap)[gcFunctionIndex]) {
+    if ((fi->second.callsFunctionMap)[gcFunctionIndex] && !isAssertedNonAllocating(f)) {
       allocatingFunctions.insert(f);
     }
   }

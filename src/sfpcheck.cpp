@@ -19,6 +19,7 @@
 
 #include "allocators.h"
 #include "cgclosure.h"
+#include "exceptions.h"
 
 using namespace llvm;
 
@@ -53,7 +54,7 @@ int main(int argc, char* argv[])
       for(std::vector<FunctionInfo*>::const_iterator TFI = middleFinfo->calledFunctionsList.begin(), TFE = middleFinfo->calledFunctionsList.end(); TFI != TFE; ++TFI) {
         const FunctionInfo *targetFinfo = *TFI;
           
-        if ((targetFinfo->callsFunctionMap)[gcFunctionIndex]) {
+        if ((targetFinfo->callsFunctionMap)[gcFunctionIndex] && !isAssertedNonAllocating(const_cast<Function*>(targetFinfo->function))) {
           const DebugLoc &callDebug = cinfo.instruction->getDebugLoc();
           const MDNode* scope = callDebug.getScopeNode(context);
           DILocation loc(scope);
