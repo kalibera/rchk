@@ -19,6 +19,8 @@ bool isKnownNonAllocator(const CalledFunctionTy *f) {
 
 bool isAssertedNonAllocating(Function *f) {
   if (f->getName() == "Rf_envlength") return true; // this impacts also length, xlength, inherits, nthcdr, is*, etc
+  if (f->getName() == "R_AllocStringBuffer") return true; // perhaps the warning in R code could be turned to error?
+
   return false;
 }
 
