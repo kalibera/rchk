@@ -195,7 +195,7 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   }
   
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, &onlyEdges, gcFunction);
+  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, &onlyEdges, gcFunction /* assume external functions allocate */);
 
   for(CallEdgesMapTy::iterator cei = onlyEdges.begin(), cee = onlyEdges.end(); cei != cee; ++cei) {
     delete cei->second;
@@ -232,7 +232,7 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
 
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */, NULL, NULL, getGCFunction(m));
+  buildCGClosure(m, functionsMap, true /* ignore error paths */, NULL, NULL, getGCFunction(m) /* assume external functions allocate */);
 
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 
