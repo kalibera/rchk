@@ -229,7 +229,7 @@ static void handleLoad(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
   }
   LoadInst *li = cast<LoadInst>(in);
   if (li->getPointerOperand() == g.ppStackTopVariable) { // savestack = R_PPStackTop
-    if (li->hasOneUse()) {
+    if (li->hasOneUse()) { // this will hold whenever it turns out to be a store to topsave variable
       User* user = li->user_back();
       if (StoreInst::classof(user)) {
         StoreInst* topStoreInst = cast<StoreInst>(user);
