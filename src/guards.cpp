@@ -28,6 +28,8 @@ static bool isIntegerGuardVariable(AllocaInst* var) {
   
   unsigned nComparisons = 0;
   unsigned nConstantAssignments = 0;
+  unsigned nVariableAssignments = 0;
+  
   for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
     User *u = *ui;
 
@@ -62,12 +64,18 @@ static bool isIntegerGuardVariable(AllocaInst* var) {
         // guard = TRUE;
         nConstantAssignments++;
       }
+      if (LoadInst* li = dyn_cast<LoadInst>(v)) {
+        if (AllocaInst::classof(li->getPointerOperand())) {
+          // guard = variable
+          nVariableAssignments++; // FIXME: we don't really know if this was a guard variable
+        }
+      }
       continue;
     }
     // this can e.g. be a call (taking address of the variable, which we do not support)
     return false;
   } 
-  return nComparisons >= 2 || (nComparisons == 1 && nConstantAssignments > 0);
+  return nComparisons >= 2 || (nComparisons == 1 && (nConstantAssignments > 0 || nVariableAssignments > 0));
 }
 
 bool IntGuardsChecker::isGuard(AllocaInst* var) {
@@ -127,9 +135,18 @@ void IntGuardsChecker::handleForNonTerminator(Instruction *in, IntGuardsTy& intG
       if (msg->debug()) msg->debug("integer guard variable " + varName(storePointerVar) + " set to nonzero", store);
     }
   } else {
-    // FIXME: could add support for intguarda = intguardb, if needed
     newState = IGS_UNKNOWN;
-    if (msg->debug()) msg->debug("integer guard variable " + varName(storePointerVar) + " set to unknown", store);
+    
+    if (LoadInst* li = dyn_cast<LoadInst>(storeValueOp)) {
+      AllocaInst* srcVar = dyn_cast<AllocaInst>(li->getPointerOperand());
+      if (srcVar && isGuard(srcVar)) {
+        newState = getGuardState(intGuards, srcVar);
+        if (msg->debug()) msg->debug("integer guard variable " + varName(storePointerVar) + " set to the value of guard " + varName(srcVar), store);
+      }
+    }
+    if (newState == IGS_UNKNOWN) {
+      if (msg->debug()) msg->debug("integer guard variable " + varName(storePointerVar) + " (set to) unknown", store);
+    } 
   }
   intGuards[storePointerVar] = newState;
 }
