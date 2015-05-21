@@ -8,19 +8,36 @@
 #include "guards.h"
 #include "liveness.h"
 
+#include <vector>
+
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Instruction.h>
 
 using namespace llvm;
 
-typedef VarsOrderedSetTy FreshVarsVarsTy;
+const int MAX_PSTACK_SIZE = 64;
+
+typedef std::map<AllocaInst*, int> FreshVarsVarsTy;
 typedef std::map<AllocaInst*, DelayedLineMessenger> ConditionalMessagesTy;
+typedef std::vector<AllocaInst*> VarsVectorTy;
 
 struct FreshVarsTy {
   FreshVarsVarsTy vars;
     // variables known to hold newly allocated pointers (SEXPs)
     // attempts to include only reliably unprotected pointers,
-    // so as of now, any use of a variable removes it from the set
+
+    // the int is the number of protects of this variable
+    // 0 no protection
+    // 1 protected once
+    // ... 
+    //   (implicitly protected variables are treated as non-fresh, hence
+    //    they are not in this map)
+
+  VarsVectorTy pstack;
+    // protection stack
+    // contains variables passed to PROTECT
+    //   interprets UNPROTECT(const)
+    //   zeroed on unsupported unprotect  
 
   ConditionalMessagesTy condMsgs;
     // info messages to be printed if a particular variable (key) 

@@ -166,6 +166,7 @@ std::string funName(const Function *f) {
 typedef std::map<const AllocaInst*, std::string> VarNamesTy;
 
 std::string computeVarName(const AllocaInst *var) {
+  if (!var) return "NULL";
   std::string name = var->getName().str();
   if (!name.empty()) {
     return name;

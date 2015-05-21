@@ -47,9 +47,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "Rf_substituteList"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "listRemove"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "Rf_substituteList";
+const std::string ONLY_FUNCTION_NAME = "listRemove";
 const bool VERBOSE_DUMP = false;
 
 const bool PROGRESS_MARKS = false;
@@ -75,7 +75,7 @@ const bool USE_ALLOCATOR_DETECTION = true;
   //   have been better to have a specific analysis for nullability]
 
 // -------------------------
-const bool UNIQUE_MSG = true;
+const bool UNIQUE_MSG = !DEBUG && !TRACE && !DUMP_STATES;
   // Do not write more than one identical messages per source line of code. 
   // This should be enable unless debugging.  When enabled, messages are
   // delayed until the next function, possibly even dropped in case of some
@@ -134,8 +134,10 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
 
       hash_combine(res, freshVars.vars.size());
       for(FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
-        AllocaInst* in = *fi;
+        AllocaInst* in = fi->first;
+        int pcount = fi->second;
         hash_combine(res, (void *) in);
+        hash_combine(res, pcount);
       } // ordered set
 
       hash_combine(res, freshVars.condMsgs.size());
@@ -148,16 +150,25 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
           hash_combine(res, (const void *) l);
         }
       } // condMsgs is unordered
+
+      hash_combine(res, freshVars.pstack.size());
+      for(VarsVectorTy::iterator vi = freshVars.pstack.begin(), ve = freshVars.pstack.end(); vi != ve; ++vi) {
+        AllocaInst* var = *vi;
+        hash_combine(res, (void *) var);
+      }
     
       hashcode = res;
     }
 
     void dump() {
+      outs().flush();
+      errs() << " vvvvvvvvvvvvvvvvvvvvvv  " << std::to_string(hashcode) << " vvvvvvvvvvvvvvvvvvvvvv";
       StateBaseTy::dump(VERBOSE_DUMP);
       StateWithGuardsTy::dump(VERBOSE_DUMP);
       StateWithFreshVarsTy::dump(VERBOSE_DUMP);
       StateWithBalanceTy::dump(VERBOSE_DUMP);
-      errs() << " ######################            ######################\n";
+      errs() << " ^^^^^^^^^^^^^^^^^^^^^^  " << std::to_string(hashcode) << " ^^^^^^^^^^^^^^^^^^^^^^\n";
+      errs().flush();
     }
 
 };
@@ -188,7 +199,7 @@ struct StateTy_equal {
       lhs->balance.depth == rhs->balance.depth && lhs->balance.savedDepth == rhs->balance.savedDepth && lhs->balance.count == rhs->balance.count &&
       lhs->balance.countState == rhs->balance.countState && lhs->balance.counterVar == rhs->balance.counterVar &&
       lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
-      lhs->freshVars.vars == rhs->freshVars.vars && lhs->freshVars.condMsgs == rhs->freshVars.condMsgs;
+      lhs->freshVars.vars == rhs->freshVars.vars && lhs->freshVars.condMsgs == rhs->freshVars.condMsgs && lhs->freshVars.pstack == rhs->freshVars.pstack;
     }
     
     if (PROGRESS_MARKS) {
@@ -214,11 +225,12 @@ bool StateTy::add() {
   hash(); // precompute hashcode
   auto sinsert = doneSet.insert(this);
   if (sinsert.second) {
-    if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == bb->getParent()->getName())) {
-      errs() << " -- dumping a new state being added -- \n";
-      dump();
-    }
     workList.push(this);
+    if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == bb->getParent()->getName())) {
+      outs().flush();
+      errs() << "\n -- dumping a new state being added -- \n";
+      workList.top()->dump();
+    }
     return true;
   } else {
     delete this; // NOTE: state suicide
@@ -347,16 +359,21 @@ class FunctionChecker {
         clearStates();
         return;
       }
-      StateTy s(*workList.top());
-      workList.pop();
       
       if (ONLY_FUNCTION && ONLY_FUNCTION_NAME != fun->getName()) {
+        workList.pop();
         continue;
       }
+      
       if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == fun->getName())) {
-        m.msg.trace("going to work on this state:", s.bb->begin());
-        s.dump();
+        outs().flush();
+        errs() << "\n -- dumping a state being visited -- \n";
+        workList.top()->dump();
       }
+
+      StateTy s(*workList.top());
+      workList.pop();
+      m.msg.trace("going to work on this state:", s.bb->begin());
       
       if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
         m.msg.debug("ignoring basic block on error path", s.bb->begin());
