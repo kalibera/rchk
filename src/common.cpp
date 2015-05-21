@@ -163,13 +163,28 @@ std::string funName(const Function *f) {
   return demangle(f->getName());
 }
 
-std::string varName(const AllocaInst *var) {
+typedef std::map<const AllocaInst*, std::string> VarNamesTy;
+
+std::string computeVarName(const AllocaInst *var) {
   std::string name = var->getName().str();
   if (!name.empty()) {
     return name;
   }
   return "<unnamed var: " + instructionAsString(var) + ">";
+}
 
+std::string varName(const AllocaInst *var) {
+
+  static VarNamesTy cache;
+  
+  auto vsearch = cache.find(var);
+  if (vsearch != cache.end()) {
+    return vsearch->second;
+  }
+  
+  std::string name = computeVarName(var);
+  cache.insert({var, name});
+  return name;
 }
 
 bool isSEXP(Type* type) {
@@ -230,7 +245,8 @@ bool isSetterFunction(Function *f) {
   if (f->getName() == "SETCAD4R") return true;
   if (f->getName() == "SET_FORMALS") return true;
   if (f->getName() == "SET_BODY") return true;
-  if (f->getName() == "SET_CLOENV") return true;  
+  if (f->getName() == "SET_CLOENV") return true;
+  return false;
 }
 
 bool isTypeTest(Function *f, const GlobalsTy* g) {
