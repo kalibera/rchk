@@ -96,10 +96,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     return;
   }
   
-  if (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex") {
-    // note, we don't support REPROTECT
-    // it also does not have much sense as the checker is identifying protected objects by local variables
-    //   which is on its own imprecise
+  if (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex" || f->getName() == "R_Reprotect") {
     
     Value* arg = cs.getArgument(0);
     AllocaInst* var = NULL;
@@ -113,7 +110,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         User *u = *ui;
         if (StoreInst* si = dyn_cast<StoreInst>(u)) {
           var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug("indirect PROTECT of variable PROTECT(x = foo())" + varName(var), in); 
+          if (msg.debug()) msg.debug("indirect PROTECT of variable PROTECT(x = foo()) " + varName(var), in); 
           // FIXME: there could be multiple variables and not all of them fresh
           break; 
         }
@@ -124,12 +121,45 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         User *u = *ui;
         if (StoreInst* si = dyn_cast<StoreInst>(u)) {
           var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug("implied PROTECT of variable x = PROTECT(foo())" + varName(var), in); 
+          if (msg.debug()) msg.debug("implied PROTECT of variable x = PROTECT(foo()) " + varName(var), in); 
           // FIXME: there could be multiple uses, some possibly conflicting
           break; 
         }
       }
-    }  
+    }
+    
+    if (f->getName() == "R_Reprotect") {
+      if (!var) {
+        // but this perhaps should not happen
+        return;
+      }
+      
+      auto vsearch = freshVars.vars.find(var);
+      if (vsearch != freshVars.vars.end()) {
+        int nProtects = vsearch->second;
+        if (nProtects > 0) {
+          if (msg.debug()) msg.debug("left alone protect count of variable " + varName(var) + " on " + std::to_string(nProtects) + " at REPROTECT", in);
+        } else {
+          // usually this means a protected variable has been modified and then re-protected
+          // typically it was before protected just once, so lets set its protect count to 1
+          
+          nProtects = 1;
+          vsearch->second = nProtects;
+          if (msg.debug()) msg.debug("set protect count of variable " + varName(var) + " to 1 at REPROTECT (heuristic)", in);
+        }	
+      } else {
+        // this is rather strange
+        
+        // the variable is not currently fresh, but the fact that it is being reprotected actually means
+        //   that there is probably a reason to protect it
+        
+        // for some reasons (?), this makes the tool miss some errors; not sure why
+        
+        // freshVars.vars.insert({var, 1});
+        // if (msg.debug()) msg.debug("non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
+      }
+      return;  
+    }
 
     if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
       unprotectAll(freshVars);
@@ -435,7 +465,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
     // only allowing single use, the other use can be and often is PROTECT
     
     Function* sf = srcFun->fun;
-    if (sf->getName() == "Rf_protect" || sf->getName() == "Rf_protectWithIndex") {
+    if (sf->getName() == "Rf_protect" || sf->getName() == "Rf_protectWithIndex" || sf->getName() == "Rf_Reprotect") {
       // this case is being handled in handleCall
       return;
     }
@@ -450,13 +480,8 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
         CallSite cs(u);
         if (cs && cs.getCalledFunction()) {
           Function* otherFun = cs.getCalledFunction();
-          if (otherFun->getName() == "Rf_protect" || otherFun->getName() == "Rf_protectWithIndex") {
+          if (otherFun->getName() == "Rf_protect" || otherFun->getName() == "Rf_protectWithIndex" || otherFun->getName() == "R_Reprotect") {
             // this case is handled in handleCall
-            return;
-          }
-          if (otherFun->getName() == "R_Reprotect") {
-            // do nothing, assume the protectcount of the variable should not change
-            // and that is in freshvars
             return;
           }
         }
@@ -472,8 +497,6 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
       if (msg.debug()) msg.debug("initialized fresh SEXP variable " + varName(var) + " with protect count " + std::to_string(nProtects), in);
       return;
     }
-    
-    // FIXME: handle x = PROTECT(allocVector)
   }
   
   // the store turns a variable into non-fresh  
@@ -502,7 +525,7 @@ void StateWithFreshVarsTy::dump(bool verbose) {
   errs() << "=== fresh vars: " << &freshVars << "\n";
   for(FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = fi->first;
-    errs() << "   " << var->getName();
+    errs() << "   " << varName(var);
     if (verbose) {
       errs() << " " << *var;
     }
