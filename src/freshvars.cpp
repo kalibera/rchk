@@ -202,7 +202,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       
     } else {
       // unsupported forms of unprotect
-      if (msg.debug()) msg.debug("unsupported form of unprotect, unprotecting all variables", in);
+      // FIXME: this is not great
+      msg.info("unsupported form of unprotect, unprotecting all variables, results will be incorrect", in);
       unprotectAll(freshVars);
       return;
     }
@@ -339,9 +340,13 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         if (cs.arg_size() > 1 && isSetterFunction(tgt)) {
           if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs.getArgument(0))) {
             if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
-              if (freshVars.vars.find(firstArg) == freshVars.vars.end()) {
-                if (msg.debug()) msg.debug("fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);  
+            
+              auto vsearch = freshVars.vars.find(firstArg);
+              if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
+                // first argument of the setter is not fresh
                 
+                if (msg.debug()) msg.debug("fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);
+                freshVars.vars.erase(var);                
                 break;
               }
             }

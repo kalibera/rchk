@@ -553,6 +553,7 @@ int main(int argc, char* argv[])
   clearStates();
   delete m;
 
+  outs().flush();
   errs() << "Analyzed " << nAnalyzedFunctions << " functions, traversed " << totalStates << " states.\n";
   return 0;
 }
