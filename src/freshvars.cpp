@@ -188,7 +188,14 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
           int nProtects = vsearch->second;
           nProtects--;
           if (nProtects < 0) {
-            msg.info("protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
+            // this happens quite common without necessarily being an error, e.g.
+            // 
+            // PROTECT(x);
+            // x = foo(x);
+            // UNPROTECT(1);
+            // PROTECT(x);
+                                           
+            if (msg.debug()) msg.debug("protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
             nProtects = 0;
             refinableInfos++;
           } else {
