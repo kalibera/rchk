@@ -100,7 +100,8 @@ bool protectsArguments(Function *f) {
   if (f->getName() == "addS3Var") return true;
   if (f->getName() == "R_getS4DataSlot") return true;
   if (f->getName() == "R_RegisterCFinalizer") return true;
-  if (f->getName() == "Rf_installChar") return true;  
+  if (f->getName() == "Rf_installChar") return true;
+  if (f->getName() == "Rf_copyMostAttrib") return true;
   return false;
 }
 

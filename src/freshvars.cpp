@@ -49,13 +49,9 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   CallSite cs(cast<Value>(in));
   assert(cs);
   assert(cs.getCalledFunction());
-
+  Function *f = tgt->fun;
 
   // handle protect
-  
-  // TODO: handle PreserveObject(x = alloc())
-  
-  Function *f = tgt->fun;
   
     // FIXME: get rid of copy paste between PreserveObject and PROTECT handling
   if (f->getName() == "R_PreserveObject") {
@@ -93,7 +89,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       freshVars.vars.erase(var);
       if (msg.debug()) msg.debug("Variable " + varName(var) + " given to PreserveObject and thus no longer fresh", in);
     }
-    return;
+    // do not return, PreserveObject allocates
   }
   
   if (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex" || f->getName() == "R_Reprotect") {
@@ -153,10 +149,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         // the variable is not currently fresh, but the fact that it is being reprotected actually means
         //   that there is probably a reason to protect it
         
-        // for some reasons (?), this makes the tool miss some errors; not sure why
-        
-        // freshVars.vars.insert({var, 1});
-        // if (msg.debug()) msg.debug("non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
+        freshVars.vars.insert({var, 1});
+        if (msg.debug()) msg.debug("non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
       }
       return;  
     }
@@ -194,7 +188,6 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
 
     freshVars.pstack.push_back(NULL);
     if (msg.debug()) msg.debug("pushed anonymous value to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
-    return;
   }
   
   if (f->getName() == "Rf_unprotect") {
@@ -244,7 +237,6 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       unprotectAll(freshVars);
       return;
     }
-    return;
   }
   
   if (!cm->isCAllocating(tgt)) {
@@ -267,6 +259,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   
   pruneFreshVars(in, freshVars, liveVars);
   if (freshVars.vars.size() > 0) {
+  
+    if (msg.trace()) msg.trace("checking freshvars at allocating call to " + funName(tgt), in);
   
     // compute all variables passed to the call
     //   (if a fresh variable is passed to a function, it is not to be reported here as error)
@@ -311,10 +305,12 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       
       int nProtects = fi->second;
       if (nProtects > 0) { // the variable is not really currently fresh, it is protected
-        return;
+        if (msg.trace()) msg.trace("variable " + varName(var) + " has protect count " + std::to_string(nProtects) + " when passed to function " + funName(tgt) + " so not reported", in);
+        continue;
       }
       
       if (passedVars.find(var) != passedVars.end()) {
+        if (msg.trace()) msg.trace("fresh variable " + varName(var) + " is passed to function " + funName(tgt) + " so not reported", in);
         // this fresh variable is in fact being passed to the function, so don't report it
         continue;
       }
