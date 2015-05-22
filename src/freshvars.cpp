@@ -56,6 +56,46 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   // TODO: handle PreserveObject(x = alloc())
   
   Function *f = tgt->fun;
+  
+    // FIXME: get rid of copy paste between PreserveObject and PROTECT handling
+  if (f->getName() == "R_PreserveObject") {
+    Value* arg = cs.getArgument(0);
+    AllocaInst* var = NULL;
+    
+    if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PreserveObject(x)
+      var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
+      if (msg.debug()) msg.debug("PreserveObject of variable " + varName(var), in); 
+    }
+    if (!var) { // PreserveObject(x = foo())
+      for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
+        User *u = *ui;
+        if (StoreInst* si = dyn_cast<StoreInst>(u)) {
+          var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
+          if (msg.debug()) msg.debug("indirect PreserveObject of variable PreserveObject(x = foo())" + varName(var), in); 
+          // FIXME: there could be multiple variables and not all of them fresh
+          break; 
+        }
+      }
+    }
+    if (!var) { // x = PreserveObject(foo())
+      for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
+        User *u = *ui;
+        if (StoreInst* si = dyn_cast<StoreInst>(u)) {
+          var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
+          if (msg.debug()) msg.debug("implied PreserveObject of variable x = PreserveObject(foo())" + varName(var), in); 
+          // FIXME: there could be multiple uses, some possibly conflicting
+          break; 
+        }
+      }
+    }  
+
+    if (var) {
+      freshVars.vars.erase(var);
+      if (msg.debug()) msg.debug("Variable " + varName(var) + " given to PreserveObject and thus no longer fresh", in);
+    }
+    return;
+  }
+  
   if (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex") {
     // note, we don't support REPROTECT
     // it also does not have much sense as the checker is identifying protected objects by local variables
@@ -295,12 +335,6 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       Function *tgt = cs.getCalledFunction();
       if (tgt) {
 
-        if (tgt->getName() == "R_PreserveObject") {
-          if (msg.debug()) msg.debug("fresh variable " + varName(var) + " passed to PreserveObject and thus no longer fresh" , in);  
-          freshVars.vars.erase(var); // unsupported protection, remove from vars
-          break;
-        }
-        
         // heuristic - handle functions usually protecting like setAttrib(x, ...) where x is protected (say, non-fresh, as approximation)
         if (cs.arg_size() > 1 && isSetterFunction(tgt)) {
           if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs.getArgument(0))) {
