@@ -398,28 +398,121 @@ is only supported in the exact state (when exact depth is known).
 
 ### Unprotected Objects Checking
 
-The objective is to detect when a newly allocated object may be killed by a
-call to an allocating function, but used afterwards. Currently the tool,
-however, can only check a small subset of this scenario.
+The objective is to detect when an unprotected object may be killed by a
+call to an allocating function, but used afterwards. 
 
-A *fresh* pointer is a pointer to a newly allocated object that has not been
-ever passed to a known protecting function (`PROTECT`, `PROTECT_WITH_INDEX`,
-`R_PreserveObject`).  If a fresh pointer exists in a local variable during
-an allocating call and the variable is not passed to the call, an error is
-reported, but, only if that pointer may be used later (is live).  If a fresh
-pointer is copied into a global variable or into a location derived from a
-local variable (e.g.  `SETCAR(x, fresh)`), it ceases to be fresh, as this is
-usually an operation which implicitly protects an object.
+From the allocator detection we know (with certain error rate) which
+functions are allocators, and hence where unprotected objects are created;
+we also know which functions are allocating, and hence where unprotected
+objects may be killed.  Still, tracking state of individual objects as of
+whether they are "unprotected" or "protected" (~reachable from roots) is
+challenging for a static analysis tool, as objects can be linked together
+and then disconnected in various ways.
+
+When an object is returned by the allocator, it is still easy - the tool
+knows that the object is unprotected.  Then the tool can handle simple cases
+of `PROTECT` calls paired by `UNPROTECT` with constant arguments, when
+applied on isolated (unconnected) objects, which is relatively common.  In
+particular, the tool can thus handle a premature unprotection error of an
+isolated object, e.g.
+
+```
+UNPROTECT(1); /* ans */
+if(sorted) sortVector(ans, FALSE);
+return ans;
+```
+
+here `ans' is unprotected prematurely, because it can still be killed by
+`sortVector` (`sortVector` must be called with its argument protected). As
+the tool works only on isolated objects, it identifies objects by variables
+that hold pointers to them (or, that held the pointer at time of
+protection). All these cases are treated as protection of variable `x`
+
+```
+PROTECT(x = allocVector(VECSXP, 2));
+x = PROTECT(allocVector(VECSXP, 2));
+x = allocVector(VECSXP, 2); PROTECT(x);
+```
+
+The tool in fact `tracks` local pointer variables that hold unprotected
+objects or objects that have been protected by `PROTECT`, but may become
+unprotected again via `UNPROTECT`.  For each tracked variable, the tool
+keeps a counter how many times the variable has been protected (0 initially
+when freshly allocated).  Also, the tool maintains a pointer protection
+stack, each element of which is a local variable (or `NULL' when the
+protected value is anonymous -- not linked to a variable). An interesting
+and not completely uncommon case is when a protected variable is being
+overwritten. It's protection counter is then set to zero in order to detect
+bugs, an possibly subsequent `UNPROTECT` calls that would make the counter
+go below zero have no effect; legal code patterns like this are therefore
+supported without a false alarm:
+
+```
+PROTECT(x);  
+x = allocVector(VECSXP, 2);  
+UNPROTECT(1);
+PROTECT(x);
+```
+
+The tool also supports `ProtectWithIndex` and `REPROTECT`, to a level, on
+isolated objects (`ProtectWithIndex` is treated like `PROTECT` and
+`REPROTECT` keeps the original positive protect count, or if zero makes it
+as heuristics `1`). Whenever there is a `PROTECT` call on an untracked
+variable, the variable becomes tracked, assuming there was a reason to
+`PROTECT` it (but the the possibly didn't know). 
+
+The protection stack has a limited depth, so that the tool does not run
+indefinitely for C loops that increase the pointer protection stack depth in
+every iteration.  In this regard, this tool is less sophisticated than
+balance checking - it cannot handle the protection counter variable and
+direct manipulation with the protection stack top.  The `PreserveObject`
+call is supported in a trivial way, the variable passed to this call becomes
+untracked (the object will never be again treated as unprotected, even
+though if `ReleaseObject` was called on it).
+
+
+The tool assumes that usual function calls, other than various protect calls
+mentioned so far, do not cause their arguments to be protected after these
+calls return.  Hence, passing an unprotected object to a function does not
+protect it.  Less obvious exceptions handled explicitly are setter calls,
+e.g.
+
+```
+SEXP ans = PROTECT(allocVector(VECSXP, 2)); /* GC */
+SEXP nm = allocVector(STRSXP, 2); /* GC */
+setAttrib(ans, R_NamesSymbol, nm); /* GC */
+SET_STRING_ELT(nm, 0, mkChar("x")); /* GC */
+```
+
+here `setAttrib` (a setter call) links `nm` to `ans`, which is protected,
+and hence `nm` is also protected (the object `nm` points to is reachable
+from the root `ans` on the pointer protection stack).  Whenever an object is
+passed to a setter function, and the first argument of the setter function
+is protected (untracked or tracked with positive protection counter), then
+the argument being passed is made untracked (will forever be treated as
+protected).  In the example above, `nm` after the call to `setAttrib` will
+always be treated as protected, even though indeed in theory `ans` could be
+unprotected, hence indirectly unprotecting also `nm`. Currently the setter
+calls are hardcoded in the tool (various `SET*` and `SET_*` calls).
+
+Whenever a tracked variable is stored into a global (meaning a global object
+will then point to the object pointer by that tracked variable), the
+variable is untracked. The same happens whenever a tracked variable is
+stored into a memory location derived from a local variable (e.g. this can
+be an inlined setter call - and this is mostly a heuristics, indeed in fact
+such operation will not always mean protection). A simple assignment between
+local variables, such as `y = x`, will cause variable `y` to be untracked
+(assignment of an unknown thing), but the state of `x` will not change, if
+it is tracked it will remain so. These are all heuristics. It would have
+been perhaps better to detect inlined setters, yet it would be some more
+work.
 
 The tool uses the data flow and state checking algorithm described above,
 including the adaptive enabling of guards (currently the tool is integrated
 with the balance checking, but it could easily be made standalone).  In the
-state, it remembers a set of fresh variables.  A new fresh variable is
-introduced by a call to a (called) allocator.  A variable ceases to be fresh
-when protected the first time (passed to a protecting function), so it is
-removed from the set in such a case.  If there is a call to a (called)
-allocating function, conditional error messages are created and prepared
-(but not yet shown) for all fresh variables.
+state, it remembers a set of tracked variables, protection counters for
+these tracked variables, the protection stack model, and conditional error
+messages (possibly multiple for each variable).
 
 *Conditional* messages are conditional on that a given variable will ever be
 used later.  This is a form of live variable analysis implemented in a
@@ -433,10 +526,24 @@ messages for it, they are printed and deleted from the state.  If a variable
 is rewritten (killed), it is also looked up in this map, and any messages
 conditional on it are removed.
 
-The tool also reports when a fresh pointer is being passed to an allocation
-function that is not known to be safe (callee-protect). The list of
-callee-protect functions is hardcoded in the tool, but an approximation of
-it could probably be detected automatically.
+So, when the tool gets to an allocating function, it will create conditional
+error messages for unprotected variables (variables tracked with protect
+count zero).  The tool has a hardcoded list of callee-protect functions,
+which is functions that will on their own protect arguments passed to them
+and ensure they are protected through all possible allocations; hence, the
+tool does not produce falls alarms for unprotected variables being passed to
+callee-protect functions.  The tool also reports when a result of an
+allocator call is passed directly into a (non-callee-protect) allocation
+function.
+
+Possibly, callee-protect and maybe setter calls could be detected
+automatically by the tool, even though certainly with limited precision.  It
+would be more robust, less precise, and possibly could be combined: custom
+functions in packages can be callee-protect, but the tool will not know. 
+Sadly the unprotected objects checking currently produces a large number of
+false alarms.  It also fails on a number of functions which use the
+mentioned non-trivial protection features.  It is not immediately obvious
+how to extend the tool to support those.
 
 ### Multiple-Allocating Arguments
 
