@@ -285,11 +285,10 @@ conditions, etc).
 
 ## Detecting Unprotected Objects At Allocating Calls
 
-The ultimate goal is to have a tool that could detect unprotected (live)
-objects at allocating calls in general.  Live objects means objects that
-will still be used after the call.  This is a hard problem in the general
-case, but the `bcheck` code can do this for objects that have not been
-protected at all in between their allocation and the erroneous use, such as
+The tool attempts to detect unprotected (live) objects at allocating calls. 
+Live objects means objects that will still be used after the call.  This is
+a hard problem in the general case, but the `bcheck` code can do this in
+many common situations, such as
 
 ```
 SEXP attribute_hidden do_gctorture2(SEXP call, SEXP op, SEXP args, SEXP rho)
@@ -310,9 +309,12 @@ SEXP attribute_hidden do_gctorture2(SEXP call, SEXP op, SEXP args, SEXP rho)
 
 the example has ''GC'' annotations created using `csfpcheck`. The `old`
 variable is the only pointer to a live, unprotected object.  At calls to
-`asInteger`, this object can be erroneously collected. If an object is
-protected, then unprotected, and then erroneously used, the tool will not
-find out about this erroneous use.
+`asInteger`, this object can be erroneously collected.  The tool attempts to
+detect errors in more complicated cases, such as when an object is
+protected, later unprotected, then an allocation function is called, and
+later the object is used again.  But, with non-trivial uses of `UNPROTECT`
+the tool gets confused and produces false alarms.  The tool produces a
+warning when it gets confused. 
 
 The tool also detects when an allocating function is called with an
 allocating argument, which is often an error (by convention, most R
@@ -320,13 +322,30 @@ functions should be called with arguments protected by callers), but there
 are many exceptions - functions that protect their arguments.  The tool
 cannot yet detect this, but it has a hard-coded list of such callee-protect
 functions from the R source code.  This is indeed error prone as the R code
-can change between versions.  One source of false alarms is when the tool
-thinks that some function returns a newly allocated object, but in fact it
-does not in the particular context.  The experience is that the tool finds
-many errors, but the false alarms rate is still rather high.  A common
-source of true errors is a failure to protect the result of `getAttrib` when
-retrieving an attribute that may be automatically generated/converted (e.g. 
-`names`, `dimnames`).
+can change between versions.
+
+One source of false alarms is when the tool thinks that some function
+returns a newly allocated object, but in fact it does not in the particular
+context.  The experience is that the tool finds many errors, but the false
+alarms rate is rather high.  A common source of true errors is a failure to
+protect the result of `getAttrib` when retrieving an attribute that may be
+automatically generated/converted (e.g.  `names`, `dimnames`).
+
+The tool also tries to detect implicit protection, when a pointer is stored
+into an object already protected, such as
+
+```
+PROTECT(klass = allocVector(STRSXP, 2)); /* GC */
+SET_STRING_ELT(klass, 0, mkChar("POSIXlt")); /* GC */
+SET_STRING_ELT(klass, 1, mkChar("POSIXt")); /* GC */
+```
+
+where the strings allocated by `mkChar` are implicitly protected by
+`SET_STRING_ELT`, which connects them into the string vector `klass`, which
+is already protected (so, there is no protection error in the example).  In
+order to do this, the tool has a hard-coded set of implicitly protecting
+functions like `SET_STRING_ELT`.
+
 
 Sometimes, the errors are very unsophisticated. Checking the CRAN `ccgarch`
 package also generates this report.
@@ -350,13 +369,15 @@ and kill the object pointed to by `el2`.
 
 ## Bizarre False Alarms and Approximations at LLVM Bitcode Level
 
-Some false alarms, but in practice it seems very few, may seem rather
+Most false alarms are due to approximations sketched in this text so far. 
+But some false alarms, in practice it seems very few, may seem rather
 bizarre.  This may be caused by approximation at the level of intepretting
 the LLVM bitcode - phi nodes are often not supported or their semantics is
-simplified.  Also values set in a basic block, but directly used in another,
-are not always handled correctly. In practice when using the tool, however,
-one does not care why the false alarm is there, but only whether a
-particular report is a true error or not.
+simplified.  Also, the tool only maintains some state for local variables,
+but not for other LLVM bitcode registers; this can lead to errors when the
+compiler generates unusal code (e.g.  an outdated value of a local variable
+is read from an LLVM register); note the CLANG compiler has to be run with
+all optimizations disabled.
 
 To reduce the risks of missing true errors due to these limitations
 of the tools, one can make all value transfers between basic blocks go
@@ -366,4 +387,8 @@ through local variables ("memory") using LLVM's `opt` tool:
 
 This also happens to reduce the number of phi nodes (or eliminates them). On
 the other hand, the resulting bitcode is harder to check as it has indeed
-more local variables, so one may need a lot of RAM for the checking.
+more local variables, so one may need a lot of RAM for the checking.  Using
+the tool does not eliminate these errors entirely.  It may not remove all
+phi nodes (even in practice it seems to), and it will not remove unusual
+code (e.g.  the use of an oudated variable value) that happens within a
+single basic block.
