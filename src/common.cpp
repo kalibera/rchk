@@ -2,6 +2,7 @@
 #include "common.h"
 
 #include <cxxabi.h>
+#include <vector>
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/DebugInfo.h>
@@ -42,7 +43,7 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
     baseFname = argv[1];
   }
   
-  Module *base = ParseIRFile(baseFname, error, context);
+  Module* base = parseIRFile(baseFname, error, context).release();
   if (!base) {
     errs() << "ERROR: Cannot read base IR file " << baseFname << "\n";
     error.print(argv[0], errs());
@@ -59,7 +60,7 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   
   // have two input files
   std::string moduleFname = argv[2];
-  Module *module = ParseIRFile(moduleFname, error, context);
+  Module *module = parseIRFile(moduleFname, error, context).release();
   if (!module) {
     errs() << "ERROR: Cannot read module IR file " << moduleFname << "\n";
     error.print(argv[0], errs());
@@ -79,16 +80,24 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
     f->setLinkage(GlobalValue::WeakAnyLinkage); 
   }
   
-  if (Linker::LinkModules(base, module, Linker::PreserveSource, &errorMessage)) {
-    errs() << "Linking module " << moduleFname << " with base " << baseFname << " resulted in error " << errorMessage << ".\n";
-  }
+  std::vector<std::string> functionNames;
   for(Module::iterator f = module->begin(), fe = module->end(); f != fe; ++f) {
     if (!f->isDeclaration()) {
-      functionsOfInterest.insert(base->getFunction(f->getName()));
+      functionNames.push_back(f->getName().str());
     }
+  }  
+  
+  
+  if (Linker::LinkModules(base, module)) {
+    errs() << "Linking module " << moduleFname << " with base " << baseFname << " resulted in an error.\n";
   }
-  delete module;
+  
+  for(std::vector<std::string>::iterator ni = functionNames.begin(), ne = functionNames.end(); ni != ne; ++ni) {
+    std::string name = *ni;
+    functionsOfInterest.insert(base->getFunction(name));
+  }  
 
+  delete module;
   return base;
 }
 
@@ -116,12 +125,15 @@ bool sourceLocation(const Instruction *in, std::string& path, unsigned& line) {
   }
 
   line = debugLoc.getLine();  
-  DILocation loc(debugLoc.getScopeNode(in->getContext()));
-
-  if (sys::path::is_absolute(loc.getFilename())) {
-    path = loc.getFilename().str();
-  } else {
-    path = loc.getDirectory().str() + "/" + loc.getFilename().str();
+  
+  
+  DIScope scope(debugLoc. getScope());
+  if (scope) {
+    if (sys::path::is_absolute(scope.getFilename())) {
+      path = scope.getFilename().str();
+    } else {
+      path = scope.getDirectory().str() + "/" + scope.getFilename().str();
+    }
   }
   return true;
 }
