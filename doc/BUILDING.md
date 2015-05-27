@@ -42,7 +42,7 @@ As a result, one gets executable binaries (`R.bin', `stats.so') and bitcode
 versions of the object files (in `bitcode` directory). The binaries have
 encoded in their meta-data from which object files they have been linked. To
 get actually the bitcode version of the binaries, this meta-data is read and
-respective bitcode versions of the object files are linked (by `extract-bc').
+respective bitcode versions of the object files are linked (by `extract-bc`).
 
 ```
 export PATH=/home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu/bin:$PATH
