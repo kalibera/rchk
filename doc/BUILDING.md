@@ -39,7 +39,7 @@ make
 ```
 
 As a result, one gets executable binaries (`R.bin', `stats.so') and bitcode
-versions of the object files (in `bitcode' directory). The binaries have
+versions of the object files (in `bitcode` directory). The binaries have
 encoded in their meta-data from which object files they have been linked. To
 get actually the bitcode version of the binaries, this meta-data is read and
 respective bitcode versions of the object files are linked (by `extract-bc').
