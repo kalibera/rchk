@@ -10,6 +10,8 @@
 
 #include <llvm/Support/raw_ostream.h>
 
+const std::string MSG_PFX = "[PB] ";
+
 using namespace llvm;
 
 // protection stack top "save variable" is a local variable
@@ -156,7 +158,7 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
   }
   if (targetFunc == g.protectFunction || targetFunc == g.protectWithIndexFunction) { // PROTECT(x)
     b.depth++;
-    msg.debug("protect call", in);
+    msg.debug(MSG_PFX + "protect call", in);
     return;
   }
   if (targetFunc == g.unprotectFunction) {
@@ -164,9 +166,9 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
     if (ConstantInt::classof(unprotectValue)) { // e.g. UNPROTECT(3)
       uint64_t arg = (cast<ConstantInt>(unprotectValue))->getZExtValue();
       b.depth -= (int) arg;
-      msg.debug("unprotect call using constant", in);              
+      msg.debug(MSG_PFX + "unprotect call using constant", in);              
       if (b.countState != CS_DIFF && b.depth < 0) {
-        msg.info("has negative depth", in);
+        msg.info(MSG_PFX +"has negative depth", in);
         refinableInfos++;
       }
       return;
@@ -176,36 +178,36 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
       if (AllocaInst::classof(varValue)) {
         AllocaInst* var = cast<AllocaInst>(varValue);
         if (!isProtectionCounterVariable(var, g.unprotectFunction, counterVarsCache)) {
-          msg.info("has an unsupported form of unprotect with a variable (results will be incorrect)", in);
+          msg.info(MSG_PFX +"has an unsupported form of unprotect with a variable (results will be incorrect)", in);
           return;
         }
         if (!b.counterVar) {
           b.counterVar = var;
         } else if (b.counterVar != var) {
-          msg.info("has an unsupported form of unprotect with a variable - multiple counter variables (results will be incorrect)", in);
+          msg.info(MSG_PFX +"has an unsupported form of unprotect with a variable - multiple counter variables (results will be incorrect)", in);
           return;
         }
         if (b.countState == CS_NONE) {
-          msg.info("passes uninitialized counter of protects in a call to unprotect", in);
+          msg.info(MSG_PFX +"passes uninitialized counter of protects in a call to unprotect", in);
           refinableInfos++;
           return;
         }
         if (b.countState == CS_EXACT) {
           b.depth -= b.count;
-          msg.debug("unprotect call using counter in exact state", in);                
+          msg.debug(MSG_PFX + "unprotect call using counter in exact state", in);                
           if (b.depth < 0) {
-            msg.info("has negative depth", in);
+            msg.info(MSG_PFX +"has negative depth", in);
             refinableInfos++;
           }
           return;
         }
         // countState == CS_DIFF
         assert(b.countState == CS_DIFF);
-        msg.debug("unprotect call using counter in diff state", in);
+        msg.debug(MSG_PFX + "unprotect call using counter in diff state", in);
         b.countState = CS_NONE;
         // depth keeps its value - it now becomes exact depth again
         if (b.depth < 0) {
-          msg.info("has negative depth after UNPROTECT(<counter>)", in);
+          msg.info(MSG_PFX +"has negative depth after UNPROTECT(<counter>)", in);
           refinableInfos++;
         }
       }
@@ -213,10 +215,10 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
     return;
   }
   if (targetFunc == g.unprotectPtrFunction) {  // UNPROTECT_PTR(x)
-    msg.debug("unprotect_ptr call", in);
+    msg.debug(MSG_PFX + "unprotect_ptr call", in);
     b.depth--;
     if (b.countState != CS_DIFF && b.depth < 0) {
-      msg.info("has negative depth", in);
+      msg.info(MSG_PFX +"has negative depth", in);
       refinableInfos++;
     }
   }
@@ -239,12 +241,12 @@ static void handleLoad(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
             // topStore is the alloca instruction for the local variable where R_PPStack is saved to
             // e.g. %save = alloca i32, align 4
             if (b.countState == CS_DIFF) {
-              msg.info("saving value of PPStackTop while in differential count state (results will be incorrect)", in);
+              msg.info(MSG_PFX +"saving value of PPStackTop while in differential count state (results will be incorrect)", in);
               refinableInfos++;
               return;
             }
             b.savedDepth = b.depth;
-            msg.debug("saving value of PPStackTop", in);
+            msg.debug(MSG_PFX + "saving value of PPStackTop", in);
           }
         }
       }
@@ -268,12 +270,12 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
         isProtectionStackTopSaveVariable(cast<AllocaInst>(varValue), g.ppStackTopVariable, saveVarsCache)) {
 
         if (b.countState == CS_DIFF) {
-          msg.info("restoring value of PPStackTop while in differential count state (results will be incorrect)", in);
+          msg.info(MSG_PFX +"restoring value of PPStackTop while in differential count state (results will be incorrect)", in);
           return;
         }
-        msg.debug("restoring value of PPStackTop", in);
+        msg.debug(MSG_PFX + "restoring value of PPStackTop", in);
         if (b.savedDepth < 0) {
-          msg.info("restores PPStackTop from uninitialized local variable", in);
+          msg.info(MSG_PFX +"restores PPStackTop from uninitialized local variable", in);
           refinableInfos++;
         } else {
           b.depth = b.savedDepth;
@@ -281,7 +283,7 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
         return;
       }
     }
-    msg.info("manipulates PPStackTop directly (results will be incorrect)", in);
+    msg.info(MSG_PFX +"manipulates PPStackTop directly (results will be incorrect)", in);
     return;  
   }
   if (AllocaInst::classof(storePointerOp) && 
@@ -291,22 +293,22 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
     if (!b.counterVar) {
       b.counterVar = storePointerVar;
     } else if (b.counterVar != storePointerVar) {
-      msg.info("uses multiple pointer protection counters (results will be incorrect)", in);
+      msg.info(MSG_PFX +"uses multiple pointer protection counters (results will be incorrect)", in);
       return;
     }
     if (ConstantInt::classof(storeValueOp)) {
       // nprotect = 3
       if (b.countState == CS_DIFF) {
-        msg.info("setting counter value while in differential mode (forgetting protects)?", in);
+        msg.info(MSG_PFX +"setting counter value while in differential mode (forgetting protects)?", in);
         refinableInfos++;
         return;
       }
       int64_t arg = (cast<ConstantInt>(storeValueOp))->getSExtValue();
       b.count = arg;
       b.countState = CS_EXACT;
-      msg.debug("setting counter to a constant", in);              
+      msg.debug(MSG_PFX + "setting counter to a constant", in);              
       if (b.count < 0) {
-        msg.info("protection counter set to a negative value", in);
+        msg.info(MSG_PFX +"protection counter set to a negative value", in);
       }
       return;
     }
@@ -329,16 +331,16 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
           constOp && ConstantInt::classof(constOp)) {
                   
           if (b.countState == CS_NONE) {
-            msg.info("adds a constant to an uninitialized counter variable", in);
+            msg.info(MSG_PFX +"adds a constant to an uninitialized counter variable", in);
             refinableInfos++;
             return;
           }
           int64_t arg = (cast<ConstantInt>(constOp))->getSExtValue();
-          msg.debug("adding a constant to counter", in);
+          msg.debug(MSG_PFX + "adding a constant to counter", in);
           if (b.countState == CS_EXACT) {
             b.count += arg;
             if (b.count < 0) {
-              msg.info("protection counter went negative after add", in);
+              msg.info(MSG_PFX +"protection counter went negative after add", in);
               refinableInfos++;
             }
             return;
@@ -365,7 +367,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
 
   if (ReturnInst::classof(t)) {
     if (s.balance.countState == CS_DIFF || s.balance.depth != 0) {
-      msg.info("has possible protection stack imbalance", t);
+      msg.info(MSG_PFX +"has possible protection stack imbalance", t);
       refinableInfos++;
     }
     return true; // no successors
@@ -380,7 +382,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   }
       
   if (s.balance.depth > MAX_DEPTH) {
-    msg.info("has too high protection stack depth", t);
+    msg.info(MSG_PFX +"has too high protection stack depth", t);
     refinableInfos++;
     return true; // stop generating more states at this point
   }
@@ -429,12 +431,12 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   if (!s.balance.counterVar) {
     s.balance.counterVar = var;
   } else if (s.balance.counterVar != var) {
-    msg.info("uses multiple pointer protection counters (results will be incorrect)", t);
+    msg.info(MSG_PFX +"uses multiple pointer protection counters (results will be incorrect)", t);
     refinableInfos++;
     return false;
   }
   if (s.balance.countState == CS_NONE) {
-    msg.info("branches based on an uninitialized value of the protection counter variable", t);
+    msg.info(MSG_PFX +"branches based on an uninitialized value of the protection counter variable", t);
     refinableInfos++;
     return false;
   }
@@ -449,7 +451,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
     assert(ConstantInt::classof(res));
                 
     // add only the relevant successor
-    msg.debug("folding out branch on counter value", t);                
+    msg.debug(MSG_PFX + "folding out branch on counter value", t);                
     BasicBlock *succ;
     if (!res->isZeroValue()) {
       succ = br->getSuccessor(0);
@@ -459,7 +461,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
     {
       StateWithBalanceTy *state = s.clone(succ);
       if (state->add()) {
-        msg.trace("added folded successor of", t);
+        msg.trace(MSG_PFX + "added folded successor of", t);
       }
     }
     return true;
@@ -521,10 +523,10 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   // FIXME: could there instead be returns in both branches?
                             
   // interpret UNPROTECT(nprotect)
-  msg.debug("simplifying unprotect conditional on counter value (diff state)", t);                
+  msg.debug(MSG_PFX + "simplifying unprotect conditional on counter value (diff state)", t);                
   s.balance.countState = CS_NONE;
   if (s.balance.depth < 0) {
-    msg.info("has negative depth after UNPROTECT(<counter>)", t);
+    msg.info(MSG_PFX +"has negative depth after UNPROTECT(<counter>)", t);
     refinableInfos++;
     return false;
   }
@@ -532,7 +534,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   {
     StateWithBalanceTy* state = s.clone(joinSucc);
     if (state->add()) {
-      msg.trace("added folded successor (diff counter state) of", t);
+      msg.trace(MSG_PFX + "added folded successor (diff counter state) of", t);
     }
   }
   return true;

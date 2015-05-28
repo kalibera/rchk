@@ -9,7 +9,8 @@
 #include <llvm/IR/Instruction.h>
 
 const bool REPORT_FRESH_ARGUMENTS = true;
- // now disabled as this is a common source of false alarms (many functions are callee-protect)
+
+const std::string MSG_PFX = "[UP] ";
 
 using namespace llvm;
 
@@ -60,14 +61,14 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     
     if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PreserveObject(x)
       var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
-      if (msg.debug()) msg.debug("PreserveObject of variable " + varName(var), in); 
+      if (msg.debug()) msg.debug(MSG_PFX + "PreserveObject of variable " + varName(var), in); 
     }
     if (!var) { // PreserveObject(x = foo())
       for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
         User *u = *ui;
         if (StoreInst* si = dyn_cast<StoreInst>(u)) {
           var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug("indirect PreserveObject of variable PreserveObject(x = foo())" + varName(var), in); 
+          if (msg.debug()) msg.debug(MSG_PFX + "indirect PreserveObject of variable PreserveObject(x = foo())" + varName(var), in); 
           // FIXME: there could be multiple variables and not all of them fresh
           break; 
         }
@@ -78,7 +79,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         User *u = *ui;
         if (StoreInst* si = dyn_cast<StoreInst>(u)) {
           var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug("implied PreserveObject of variable x = PreserveObject(foo())" + varName(var), in); 
+          if (msg.debug()) msg.debug(MSG_PFX + "implied PreserveObject of variable x = PreserveObject(foo())" + varName(var), in); 
           // FIXME: there could be multiple uses, some possibly conflicting
           break; 
         }
@@ -87,7 +88,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
 
     if (var) {
       freshVars.vars.erase(var);
-      if (msg.debug()) msg.debug("Variable " + varName(var) + " given to PreserveObject and thus no longer fresh", in);
+      if (msg.debug()) msg.debug(MSG_PFX + "Variable " + varName(var) + " given to PreserveObject and thus no longer fresh", in);
     }
     // do not return, PreserveObject allocates
   }
@@ -99,14 +100,14 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     
     if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PROTECT(x)
       var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
-      if (msg.debug()) msg.debug("PROTECT of variable " + varName(var), in); 
+      if (msg.debug()) msg.debug(MSG_PFX + "PROTECT of variable " + varName(var), in); 
     }
     if (!var) { // PROTECT(x = foo())
       for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
         User *u = *ui;
         if (StoreInst* si = dyn_cast<StoreInst>(u)) {
           var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug("indirect PROTECT of variable PROTECT(x = foo()) " + varName(var), in); 
+          if (msg.debug()) msg.debug(MSG_PFX + "indirect PROTECT of variable PROTECT(x = foo()) " + varName(var), in); 
           // FIXME: there could be multiple variables and not all of them fresh
           break; 
         }
@@ -117,7 +118,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         User *u = *ui;
         if (StoreInst* si = dyn_cast<StoreInst>(u)) {
           var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug("implied PROTECT of variable x = PROTECT(foo()) " + varName(var), in); 
+          if (msg.debug()) msg.debug(MSG_PFX + "implied PROTECT of variable x = PROTECT(foo()) " + varName(var), in); 
           // FIXME: there could be multiple uses, some possibly conflicting
           break; 
         }
@@ -134,14 +135,14 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (vsearch != freshVars.vars.end()) {
         int nProtects = vsearch->second;
         if (nProtects > 0) {
-          if (msg.debug()) msg.debug("left alone protect count of variable " + varName(var) + " on " + std::to_string(nProtects) + " at REPROTECT", in);
+          if (msg.debug()) msg.debug(MSG_PFX + "left alone protect count of variable " + varName(var) + " on " + std::to_string(nProtects) + " at REPROTECT", in);
         } else {
           // usually this means a protected variable has been modified and then re-protected
           // typically it was before protected just once, so lets set its protect count to 1
           
           nProtects = 1;
           vsearch->second = nProtects;
-          if (msg.debug()) msg.debug("set protect count of variable " + varName(var) + " to 1 at REPROTECT (heuristic)", in);
+          if (msg.debug()) msg.debug(MSG_PFX + "set protect count of variable " + varName(var) + " to 1 at REPROTECT (heuristic)", in);
         }	
       } else {
         // this is rather strange
@@ -150,7 +151,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         //   that there is probably a reason to protect it
         
         freshVars.vars.insert({var, 1});
-        if (msg.debug()) msg.debug("non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
+        if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
       }
       return;  
     }
@@ -158,13 +159,13 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
       unprotectAll(freshVars);
       refinableInfos++;
-      msg.info("protect stack is too deep, unprotecting all variables", in);
+      msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables", in);
       return;
     }
     
     if (var) {
       freshVars.pstack.push_back(var);
-      if (msg.debug()) msg.debug("pushed variable " + varName(var) + " to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
+      if (msg.debug()) msg.debug(MSG_PFX + "pushed variable " + varName(var) + " to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
 
       // NOTE: the handling of PROTECT(x = foo()) only will increment x's protectcount correctly
       // if the store x = %tmpvalue is done _before_ the call PROTECT(%tmpvalue)
@@ -174,20 +175,20 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (vsearch != freshVars.vars.end()) {
         int nProtects = vsearch->second;
         vsearch->second = ++nProtects;
-        if (msg.debug()) msg.debug("incremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in); 
+        if (msg.debug()) msg.debug(MSG_PFX + "incremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in); 
       } else {
         // the variable is not currently fresh, but the fact that it is being protected actually means
         //   that there is probably a reason to protect it, so when unprotected, it should be then treated
         //   as fresh again... so lets add it with protect count of 1
         
         freshVars.vars.insert({var, 1});
-        if (msg.debug()) msg.debug("non-fresh variable " + varName(var) + " is being protected, inserting it as fresh with protectcount 1", in); 
+        if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being protected, inserting it as fresh with protectcount 1", in); 
       }
       return;
     }
 
     freshVars.pstack.push_back(NULL);
-    if (msg.debug()) msg.debug("pushed anonymous value to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
+    if (msg.debug()) msg.debug(MSG_PFX + "pushed anonymous value to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
   }
   
   if (f->getName() == "Rf_unprotect") {
@@ -195,7 +196,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     if (ConstantInt* ci = dyn_cast<ConstantInt>(arg)) {
       uint64_t val = ci->getZExtValue();
       if (val > freshVars.pstack.size()) {
-        msg.info("attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
+        msg.info(MSG_PFX +"attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
           + std::to_string(freshVars.pstack.size()) + "), results will be incorrect", in);
           
         refinableInfos++;
@@ -218,22 +219,22 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
             // UNPROTECT(1);
             // PROTECT(x);
                                            
-            if (msg.debug()) msg.debug("protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
+            if (msg.debug()) msg.debug(MSG_PFX + "protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
             nProtects = 0;
             refinableInfos++;
           } else {
-            if (msg.debug()) msg.debug("decremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in);
+            if (msg.debug()) msg.debug(MSG_PFX + "decremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in);
           }
           vsearch->second = nProtects;
         }
-        if (msg.debug()) msg.debug("unprotected variable " + varName(var), in);
+        if (msg.debug()) msg.debug(MSG_PFX + "unprotected variable " + varName(var), in);
         freshVars.pstack.pop_back();
       }
       
     } else {
       // unsupported forms of unprotect
       // FIXME: this is not great
-      msg.info("unsupported form of unprotect, unprotecting all variables, results will be incorrect", in);
+      msg.info(MSG_PFX +"unsupported form of unprotect, unprotecting all variables, results will be incorrect", in);
       unprotectAll(freshVars);
       return;
     }
@@ -252,7 +253,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (!src || !cm->isPossibleCAllocator(src)) {
         continue;
       }
-      msg.info("calling allocating function " + funName(tgt) + " with argument allocated using " + funName(src), in);
+      msg.info(MSG_PFX +"calling allocating function " + funName(tgt) + " with argument allocated using " + funName(src), in);
       refinableInfos++;
     }
   }
@@ -260,7 +261,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   pruneFreshVars(in, freshVars, liveVars);
   if (freshVars.vars.size() > 0) {
   
-    if (msg.trace()) msg.trace("checking freshvars at allocating call to " + funName(tgt), in);
+    if (msg.trace()) msg.trace(MSG_PFX + "checking freshvars at allocating call to " + funName(tgt), in);
   
     // compute all variables passed to the call
     //   (if a fresh variable is passed to a function, it is not to be reported here as error)
@@ -305,12 +306,12 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       
       int nProtects = fi->second;
       if (nProtects > 0) { // the variable is not really currently fresh, it is protected
-        if (msg.trace()) msg.trace("variable " + varName(var) + " has protect count " + std::to_string(nProtects) + " when passed to function " + funName(tgt) + " so not reported", in);
+        if (msg.trace()) msg.trace(MSG_PFX + "variable " + varName(var) + " has protect count " + std::to_string(nProtects) + " when passed to function " + funName(tgt) + " so not reported", in);
         continue;
       }
       
       if (passedVars.find(var) != passedVars.end()) {
-        if (msg.trace()) msg.trace("fresh variable " + varName(var) + " is passed to function " + funName(tgt) + " so not reported", in);
+        if (msg.trace()) msg.trace(MSG_PFX + "fresh variable " + varName(var) + " is passed to function " + funName(tgt) + " so not reported", in);
         // this fresh variable is in fact being passed to the function, so don't report it
         continue;
       }
@@ -321,13 +322,13 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       auto vsearch = freshVars.condMsgs.find(var);
       if (vsearch == freshVars.condMsgs.end()) {
         DelayedLineMessenger dmsg(&msg);
-        dmsg.info(message, in);
+        dmsg.info(MSG_PFX + message, in);
         freshVars.condMsgs.insert({var, dmsg});
-        if (msg.debug()) msg.debug("created conditional message \"" + message + "\" first for variable " + varName(var), in);
+        if (msg.debug()) msg.debug(MSG_PFX + "created conditional message \"" + message + "\" first for variable " + varName(var), in);
       } else {
         DelayedLineMessenger& dmsg = vsearch->second;
-        dmsg.info(message, in);
-        if (msg.debug()) msg.debug("added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
+        dmsg.info(MSG_PFX + message, in);
+        if (msg.debug()) msg.debug(MSG_PFX + "added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
       }
     }
   }
@@ -350,7 +351,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     msearch->second.flush();
     refinableInfos++;
     freshVars.condMsgs.erase(msearch);
-    if (msg.debug()) msg.debug("printed conditional messages on use of variable " + varName(var), in);
+    if (msg.debug()) msg.debug(MSG_PFX + "printed conditional messages on use of variable " + varName(var), in);
   }
   
   auto vsearch = freshVars.vars.find(var);
@@ -378,7 +379,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
               if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
                 // first argument of the setter is not fresh
                 
-                if (msg.debug()) msg.debug("fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);
+                if (msg.debug()) msg.debug(MSG_PFX + "fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);
                 freshVars.vars.erase(var);                
                 break;
               }
@@ -396,7 +397,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
           // of an SEXP in a local variable)
           
           // the heuristic is that these stores are usually implicitly protecting
-          if (msg.debug()) msg.debug("fresh variable " + varName(var) + " stored into a global or derived local, and thus no longer fresh" , in);
+          if (msg.debug()) msg.debug(MSG_PFX + "fresh variable " + varName(var) + " stored into a global or derived local, and thus no longer fresh" , in);
           freshVars.vars.erase(var); // implicit protection, remove from map
           break;
         }
@@ -434,7 +435,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         }
       }
     }
-    msg.info("calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
+    msg.info(MSG_PFX +"calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
     refinableInfos++;
   }
 }
@@ -453,7 +454,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
   
   // a variable is being killed by the store, erase conditional messages if any
   if (freshVars.condMsgs.erase(var)) {
-    if (msg.debug()) msg.debug("removed conditional messages as variable " + varName(var) + " is rewritten.", in);
+    if (msg.debug()) msg.debug(MSG_PFX + "removed conditional messages as variable " + varName(var) + " is rewritten.", in);
   }
   
   const CalledFunctionTy *srcFun = cm->getCalledFunction(storeValueOp, sexpGuards);
@@ -490,7 +491,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
       } else {
         vsearch->second = nProtects;
       }
-      if (msg.debug()) msg.debug("initialized fresh SEXP variable " + varName(var) + " with protect count " + std::to_string(nProtects), in);
+      if (msg.debug()) msg.debug(MSG_PFX + "initialized fresh SEXP variable " + varName(var) + " with protect count " + std::to_string(nProtects), in);
       return;
     }
   }
@@ -498,7 +499,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
   // the store turns a variable into non-fresh  
   if (freshVars.vars.find(var) != freshVars.vars.end()) {
     freshVars.vars.erase(var);
-    if (msg.debug()) msg.debug("fresh variable " + varName(var) + " rewritten and thus no longer fresh", in);
+    if (msg.debug()) msg.debug(MSG_PFX + "fresh variable " + varName(var) + " rewritten and thus no longer fresh", in);
   }
 }
 
