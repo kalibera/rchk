@@ -8,7 +8,7 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
 
-const bool QUIET_WHEN_CONFUSED = false;
+const bool QUIET_WHEN_CONFUSED = true;
   // do not report any messages and don't do any check once confused by the code
   // in such case, in practice, the messages are almost always false alarms
 
@@ -45,6 +45,8 @@ static void unprotectAll(FreshVarsTy& freshVars) {
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
   
+  bool confused = QUIET_WHEN_CONFUSED && freshVars.confused;
+
   const CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuards);
   if (!tgt) {
     return;
@@ -56,192 +58,194 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
 
   // handle protect
   
-    // FIXME: get rid of copy paste between PreserveObject and PROTECT handling
-  if (f->getName() == "R_PreserveObject") {
-    Value* arg = cs.getArgument(0);
-    AllocaInst* var = NULL;
+  if (!confused) {
+      // FIXME: get rid of copy paste between PreserveObject and PROTECT handling
+    if (f->getName() == "R_PreserveObject") {
+      Value* arg = cs.getArgument(0);
+      AllocaInst* var = NULL;
     
-    if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PreserveObject(x)
-      var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
-      if (msg.debug()) msg.debug(MSG_PFX + "PreserveObject of variable " + varName(var), in); 
-    }
-    if (!var) { // PreserveObject(x = foo())
-      for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
-        User *u = *ui;
-        if (StoreInst* si = dyn_cast<StoreInst>(u)) {
-          var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug(MSG_PFX + "indirect PreserveObject of variable PreserveObject(x = foo())" + varName(var), in); 
-          // FIXME: there could be multiple variables and not all of them fresh
-          break; 
+      if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PreserveObject(x)
+        var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
+        if (msg.debug()) msg.debug(MSG_PFX + "PreserveObject of variable " + varName(var), in); 
+      }
+      if (!var) { // PreserveObject(x = foo())
+        for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
+          User *u = *ui;
+          if (StoreInst* si = dyn_cast<StoreInst>(u)) {
+            var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
+            if (msg.debug()) msg.debug(MSG_PFX + "indirect PreserveObject of variable PreserveObject(x = foo())" + varName(var), in); 
+            // FIXME: there could be multiple variables and not all of them fresh
+            break; 
+          }
         }
       }
-    }
-    if (!var) { // x = PreserveObject(foo())
-      for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
-        User *u = *ui;
-        if (StoreInst* si = dyn_cast<StoreInst>(u)) {
-          var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug(MSG_PFX + "implied PreserveObject of variable x = PreserveObject(foo())" + varName(var), in); 
-          // FIXME: there could be multiple uses, some possibly conflicting
-          break; 
+      if (!var) { // x = PreserveObject(foo())
+        for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
+          User *u = *ui;
+          if (StoreInst* si = dyn_cast<StoreInst>(u)) {
+            var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
+            if (msg.debug()) msg.debug(MSG_PFX + "implied PreserveObject of variable x = PreserveObject(foo())" + varName(var), in); 
+            // FIXME: there could be multiple uses, some possibly conflicting
+            break; 
+          }
         }
-      }
-    }  
+      }  
 
-    if (var) {
-      freshVars.vars.erase(var);
-      if (msg.debug()) msg.debug(MSG_PFX + "Variable " + varName(var) + " given to PreserveObject and thus no longer fresh", in);
+      if (var) {
+        freshVars.vars.erase(var);
+        if (msg.debug()) msg.debug(MSG_PFX + "Variable " + varName(var) + " given to PreserveObject and thus no longer fresh", in);
+      }
+      // do not return, PreserveObject allocates
     }
-    // do not return, PreserveObject allocates
-  }
   
-  if (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex" || f->getName() == "R_Reprotect") {
+    if (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex" || f->getName() == "R_Reprotect") {
     
-    Value* arg = cs.getArgument(0);
-    AllocaInst* var = NULL;
+      Value* arg = cs.getArgument(0);
+      AllocaInst* var = NULL;
     
-    if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PROTECT(x)
-      var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
-      if (msg.debug()) msg.debug(MSG_PFX + "PROTECT of variable " + varName(var), in); 
-    }
-    if (!var) { // PROTECT(x = foo())
-      for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
-        User *u = *ui;
-        if (StoreInst* si = dyn_cast<StoreInst>(u)) {
-          var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug(MSG_PFX + "indirect PROTECT of variable PROTECT(x = foo()) " + varName(var), in); 
-          // FIXME: there could be multiple variables and not all of them fresh
-          break; 
+      if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PROTECT(x)
+        var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
+        if (msg.debug()) msg.debug(MSG_PFX + "PROTECT of variable " + varName(var), in); 
+      }
+      if (!var) { // PROTECT(x = foo())
+        for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
+          User *u = *ui;
+          if (StoreInst* si = dyn_cast<StoreInst>(u)) {
+            var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
+            if (msg.debug()) msg.debug(MSG_PFX + "indirect PROTECT of variable PROTECT(x = foo()) " + varName(var), in); 
+            // FIXME: there could be multiple variables and not all of them fresh
+            break; 
+          }
         }
       }
-    }
-    if (!var) { // x = PROTECT(foo())
-      for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
-        User *u = *ui;
-        if (StoreInst* si = dyn_cast<StoreInst>(u)) {
-          var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
-          if (msg.debug()) msg.debug(MSG_PFX + "implied PROTECT of variable x = PROTECT(foo()) " + varName(var), in); 
-          // FIXME: there could be multiple uses, some possibly conflicting
-          break; 
+      if (!var) { // x = PROTECT(foo())
+        for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
+          User *u = *ui;
+          if (StoreInst* si = dyn_cast<StoreInst>(u)) {
+            var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
+            if (msg.debug()) msg.debug(MSG_PFX + "implied PROTECT of variable x = PROTECT(foo()) " + varName(var), in); 
+            // FIXME: there could be multiple uses, some possibly conflicting
+            break; 
+          }
         }
       }
-    }
     
-    if (f->getName() == "R_Reprotect") {
-      if (!var) {
-        // but this perhaps should not happen
-        return;
-      }
+      if (f->getName() == "R_Reprotect") {
+        if (!var) {
+          // but this perhaps should not happen
+          return;
+        }
       
-      auto vsearch = freshVars.vars.find(var);
-      if (vsearch != freshVars.vars.end()) {
-        int nProtects = vsearch->second;
-        if (nProtects > 0) {
-          if (msg.debug()) msg.debug(MSG_PFX + "left alone protect count of variable " + varName(var) + " on " + std::to_string(nProtects) + " at REPROTECT", in);
+        auto vsearch = freshVars.vars.find(var);
+        if (vsearch != freshVars.vars.end()) {
+          int nProtects = vsearch->second;
+          if (nProtects > 0) {
+            if (msg.debug()) msg.debug(MSG_PFX + "left alone protect count of variable " + varName(var) + " on " + std::to_string(nProtects) + " at REPROTECT", in);
+          } else {
+            // usually this means a protected variable has been modified and then re-protected
+            // typically it was before protected just once, so lets set its protect count to 1
+          
+            nProtects = 1;
+            vsearch->second = nProtects;
+            if (msg.debug()) msg.debug(MSG_PFX + "set protect count of variable " + varName(var) + " to 1 at REPROTECT (heuristic)", in);
+          }	
         } else {
-          // usually this means a protected variable has been modified and then re-protected
-          // typically it was before protected just once, so lets set its protect count to 1
-          
-          nProtects = 1;
-          vsearch->second = nProtects;
-          if (msg.debug()) msg.debug(MSG_PFX + "set protect count of variable " + varName(var) + " to 1 at REPROTECT (heuristic)", in);
-        }	
-      } else {
-        // this is rather strange
+          // this is rather strange
+      
+          // the variable is not currently fresh, but the fact that it is being reprotected actually means
+          //   that there is probably a reason to protect it
         
-        // the variable is not currently fresh, but the fact that it is being reprotected actually means
-        //   that there is probably a reason to protect it
-        
-        freshVars.vars.insert({var, 1});
-        if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
+          freshVars.vars.insert({var, 1});
+          if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
+        }
+        return;  
       }
-      return;  
-    }
 
-    if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
-      unprotectAll(freshVars);
-      refinableInfos++;
-      msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, results will be incorrect", in);
-      freshVars.confused = true;
-      return;
-    }
-    
-    if (var) {
-      freshVars.pstack.push_back(var);
-      if (msg.debug()) msg.debug(MSG_PFX + "pushed variable " + varName(var) + " to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
-
-      // NOTE: the handling of PROTECT(x = foo()) only will increment x's protectcount correctly
-      // if the store x = %tmpvalue is done _before_ the call PROTECT(%tmpvalue)
-      //   (otherwise the store would normally set the protectcount to zero)
-        
-      auto vsearch = freshVars.vars.find(var);
-      if (vsearch != freshVars.vars.end()) {
-        int nProtects = vsearch->second;
-        vsearch->second = ++nProtects;
-        if (msg.debug()) msg.debug(MSG_PFX + "incremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in); 
-      } else {
-        // the variable is not currently fresh, but the fact that it is being protected actually means
-        //   that there is probably a reason to protect it, so when unprotected, it should be then treated
-        //   as fresh again... so lets add it with protect count of 1
-        
-        freshVars.vars.insert({var, 1});
-        if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being protected, inserting it as fresh with protectcount 1", in); 
-      }
-      return;
-    }
-
-    freshVars.pstack.push_back(NULL);
-    if (msg.debug()) msg.debug(MSG_PFX + "pushed anonymous value to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
-  }
-  
-  if (f->getName() == "Rf_unprotect") {
-    Value* arg = cs.getArgument(0);
-    if (ConstantInt* ci = dyn_cast<ConstantInt>(arg)) {
-      uint64_t val = ci->getZExtValue();
-      if (val > freshVars.pstack.size()) {
-        msg.info(MSG_PFX +"attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
-          + std::to_string(freshVars.pstack.size()) + "), results will be incorrect", in);
-          
+      if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
+        unprotectAll(freshVars);
         refinableInfos++;
+        msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, results will be incorrect", in);
         freshVars.confused = true;
         return;
       }
-      while(val-- > 0) {
-        AllocaInst* var = freshVars.pstack.back();
-        if (!var) {
-          continue;
-        }
+    
+      if (var) {
+        freshVars.pstack.push_back(var);
+        if (msg.debug()) msg.debug(MSG_PFX + "pushed variable " + varName(var) + " to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
+
+        // NOTE: the handling of PROTECT(x = foo()) only will increment x's protectcount correctly
+        // if the store x = %tmpvalue is done _before_ the call PROTECT(%tmpvalue)
+        //   (otherwise the store would normally set the protectcount to zero)
+        
         auto vsearch = freshVars.vars.find(var);
-        if (vsearch != freshVars.vars.end()) {  // decrement protect count of a possibly fresh variable
+        if (vsearch != freshVars.vars.end()) {
           int nProtects = vsearch->second;
-          nProtects--;
-          if (nProtects < 0) {
-            // this happens quite common without necessarily being an error, e.g.
-            // 
-            // PROTECT(x);
-            // x = foo(x);
-            // UNPROTECT(1);
-            // PROTECT(x);
-                                           
-            if (msg.debug()) msg.debug(MSG_PFX + "protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
-            nProtects = 0;
-            refinableInfos++;
-          } else {
-            if (msg.debug()) msg.debug(MSG_PFX + "decremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in);
-          }
-          vsearch->second = nProtects;
+          vsearch->second = ++nProtects;
+          if (msg.debug()) msg.debug(MSG_PFX + "incremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in); 
+        } else {
+          // the variable is not currently fresh, but the fact that it is being protected actually means
+          //   that there is probably a reason to protect it, so when unprotected, it should be then treated
+          //   as fresh again... so lets add it with protect count of 1
+        
+          freshVars.vars.insert({var, 1});
+          if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being protected, inserting it as fresh with protectcount 1", in); 
         }
-        if (msg.debug()) msg.debug(MSG_PFX + "unprotected variable " + varName(var), in);
-        freshVars.pstack.pop_back();
+        return;
       }
+
+      freshVars.pstack.push_back(NULL);
+      if (msg.debug()) msg.debug(MSG_PFX + "pushed anonymous value to the protect stack (size " + std::to_string(freshVars.pstack.size()) + ")", in);
+    }
+  
+    if (f->getName() == "Rf_unprotect") {
+      Value* arg = cs.getArgument(0);
+      if (ConstantInt* ci = dyn_cast<ConstantInt>(arg)) {
+        uint64_t val = ci->getZExtValue();
+        if (val > freshVars.pstack.size()) {
+          msg.info(MSG_PFX +"attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
+            + std::to_string(freshVars.pstack.size()) + "), results will be incorrect", in);
+          
+          refinableInfos++;
+          freshVars.confused = true;
+          return;
+        }
+        while(val-- > 0) {
+          AllocaInst* var = freshVars.pstack.back();
+          if (!var) {
+            continue;
+          }
+          auto vsearch = freshVars.vars.find(var);
+          if (vsearch != freshVars.vars.end()) {  // decrement protect count of a possibly fresh variable
+            int nProtects = vsearch->second;
+            nProtects--;
+            if (nProtects < 0) {
+              // this happens quite common without necessarily being an error, e.g.
+              // 
+              // PROTECT(x);
+              // x = foo(x);
+              // UNPROTECT(1);
+              // PROTECT(x);
+                                           
+              if (msg.debug()) msg.debug(MSG_PFX + "protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
+              nProtects = 0;
+              refinableInfos++;
+            } else {
+              if (msg.debug()) msg.debug(MSG_PFX + "decremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in);
+            }
+            vsearch->second = nProtects;
+          }
+          if (msg.debug()) msg.debug(MSG_PFX + "unprotected variable " + varName(var), in);
+          freshVars.pstack.pop_back();
+        }
       
-    } else {
-      // unsupported forms of unprotect
-      // FIXME: this is not great
-      msg.info(MSG_PFX +"unsupported form of unprotect, unprotecting all variables, results will be incorrect", in);
-      unprotectAll(freshVars);
-      freshVars.confused = true;
-      return;
+      } else {
+        // unsupported forms of unprotect
+        // FIXME: this is not great
+        msg.info(MSG_PFX +"unsupported form of unprotect, unprotecting all variables, results will be incorrect", in);
+        unprotectAll(freshVars);
+        freshVars.confused = true;
+        return;
+      }
     }
   }
   
@@ -252,6 +256,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   // calling an allocating function
   
   if (!protectsArguments(tgt)) {
+    // this check can be done even when the tool is confused
     for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
       Value *arg = *ai;
       const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
@@ -261,6 +266,10 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       msg.info(MSG_PFX +"calling allocating function " + funName(tgt) + " with argument allocated using " + funName(src), in);
       refinableInfos++;
     }
+  }
+ 
+  if (confused) {
+    return;
   }
   
   pruneFreshVars(in, freshVars, liveVars);
@@ -340,6 +349,9 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
 }
 
 static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+  if (QUIET_WHEN_CONFUSED && freshVars.confused) {
+    return;
+  }
   if (!LoadInst::classof(in)) {
     return;
   }
@@ -444,6 +456,9 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
 }
 
 static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+  if (QUIET_WHEN_CONFUSED && freshVars.confused) {
+    return;
+  }
   if (!StoreInst::classof(in)) {
     return;
   }
@@ -509,9 +524,9 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
     FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
 
-  if (!QUIET_WHEN_CONFUSED || !freshVars.confused)  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars);
-  if (!QUIET_WHEN_CONFUSED || !freshVars.confused)  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
-  if (!QUIET_WHEN_CONFUSED || !freshVars.confused)  handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars);
+  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
 }
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
