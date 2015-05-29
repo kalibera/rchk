@@ -166,7 +166,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
         unprotectAll(freshVars);
         refinableInfos++;
-        msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, " + CONFUSION_DISCLAIMER, in);
+        msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, " + CONFUSION_DISCLAIMER, NULL);
         freshVars.confused = true;
         return;
       }

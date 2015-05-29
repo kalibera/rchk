@@ -53,7 +53,11 @@ void LineInfoTy::print() const {
   if (!kind.empty()) {
     outs()  << kind << ": ";
   }
-  outs() << message << " " << path << ":" << line << "\n";
+  if (path.empty()) {
+    outs() << message << "\n";
+  } else {
+    outs() << message << " " << path << ":" << line << "\n";
+  }
 }
 
 bool LineInfoTyPtr_compare::operator() (const LineInfoTy* lhs, const LineInfoTy* rhs) const {
