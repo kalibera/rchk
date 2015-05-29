@@ -8,8 +8,6 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
 
-const bool REPORT_FRESH_ARGUMENTS = true;
-
 const bool QUIET_WHEN_CONFUSED = false;
   // do not report any messages and don't do any check once confused by the code
   // in such case, in practice, the messages are almost always false alarms
@@ -253,7 +251,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   
   // calling an allocating function
   
-  if (REPORT_FRESH_ARGUMENTS && !protectsArguments(tgt)) {
+  if (!protectsArguments(tgt)) {
     for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
       Value *arg = *ai;
       const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
@@ -413,38 +411,36 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     }
   }
 
-  if (REPORT_FRESH_ARGUMENTS) {
-    if (!li->hasOneUse()) { // too restrictive? should look at other uses too?
-      return;
-    }
+  if (!li->hasOneUse()) { // too restrictive? should look at other uses too?
+    return;
+  }
 
-    // fresh variable passed to an allocating function - but this may be ok if it is callee-protect function
-    //   or if the function allocates only after the fresh argument is no longer needed    
+  // fresh variable passed to an allocating function - but this may be ok if it is callee-protect function
+  //   or if the function allocates only after the fresh argument is no longer needed    
     
-    const CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
-    if (!tgt || !cm->isCAllocating(tgt) || protectsArguments(tgt)) {
-      return;
-    }
+  const CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
+  if (!tgt || !cm->isCAllocating(tgt) || protectsArguments(tgt)) {
+    return;
+  }
   
-    if (nProtects > 0) { // the variable is not really fresh now, it is protected
-      return;
-    }    
+  if (nProtects > 0) { // the variable is not really fresh now, it is protected
+    return;
+  }    
 
-    std::string nameSuffix = "";
-    if (var->getName().str().empty()) {
-      unsigned i;
-      CallSite cs(cast<Value>(li->user_back()));
-      assert(cs);
-      for(i = 0; i < cs.arg_size(); i++) {
-        if (cs.getArgument(i) == li) {
-          nameSuffix = " <arg " + std::to_string(i+1) + ">";
-          break;
-        }
+  std::string nameSuffix = "";
+  if (var->getName().str().empty()) {
+    unsigned i;
+    CallSite cs(cast<Value>(li->user_back()));
+    assert(cs);
+    for(i = 0; i < cs.arg_size(); i++) {
+      if (cs.getArgument(i) == li) {
+        nameSuffix = " <arg " + std::to_string(i+1) + ">";
+        break;
       }
     }
-    msg.info(MSG_PFX +"calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
-    refinableInfos++;
   }
+  msg.info(MSG_PFX +"calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
+  refinableInfos++;
 }
 
 static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
