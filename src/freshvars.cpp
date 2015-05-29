@@ -12,6 +12,8 @@ const bool QUIET_WHEN_CONFUSED = true;
   // do not report any messages and don't do any check once confused by the code
   // in such case, in practice, the messages are almost always false alarms
 
+const std::string CONFUSION_DISCLAIMER = QUIET_WHEN_CONFUSED ? "results will be incomplete" : "results will be incorrect";
+
 const std::string MSG_PFX = "[UP] ";
 
 using namespace llvm;
@@ -164,7 +166,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
         unprotectAll(freshVars);
         refinableInfos++;
-        msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, results will be incorrect", in);
+        msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, " + CONFUSION_DISCLAIMER, in);
         freshVars.confused = true;
         return;
       }
@@ -203,7 +205,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
         uint64_t val = ci->getZExtValue();
         if (val > freshVars.pstack.size()) {
           msg.info(MSG_PFX +"attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
-            + std::to_string(freshVars.pstack.size()) + "), results will be incorrect", in);
+            + std::to_string(freshVars.pstack.size()) + "), " + CONFUSION_DISCLAIMER, in);
           
           refinableInfos++;
           freshVars.confused = true;
@@ -241,7 +243,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       } else {
         // unsupported forms of unprotect
         // FIXME: this is not great
-        msg.info(MSG_PFX +"unsupported form of unprotect, unprotecting all variables, results will be incorrect", in);
+        msg.info(MSG_PFX +"unsupported form of unprotect, unprotecting all variables, " + CONFUSION_DISCLAIMER, in);
         unprotectAll(freshVars);
         freshVars.confused = true;
         return;
