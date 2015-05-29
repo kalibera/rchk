@@ -55,26 +55,7 @@ find . -name *.so -exec /opt/whole-program-llvm/extract-bc {} \;
 
 The wrapper script works with the binary distribution of
 [CLANG+LLVM](http://llvm.org/releases/download.html#3.6.1), so one does not
-have to build LLVM on the supported platforms. The same binary distribution
-of LLVM can be used to build `rchk`. On Fedora 20, we built LLVM this way:
-
-```
-wget http://llvm.org/releases/3.6.1/cfe-3.6.1.src.tar.xz
-wget http://llvm.org/releases/3.6.1/llvm-3.6.1.src.tar.xz
-wget http://llvm.org/releases/3.6.1/compiler-rt-3.6.1.src.tar.xz
-
-tar xf llvm-3.6.1.src.tar.xz
-cd llvm-3.6.1.src/tools/
-tar xf ../../cfe-3.6.1.src.tar.xz
-mv cfe-3.6.1.src clang
-tar xf ../../compiler-rt-3.6.1.src.tar.xz
-mv compiler-rt-3.6.1.src compiler-rt
-
-cd ../../
-./configure --prefix=/var/scratch/tomas/opt/llvm/inst3.6.1 --enable-bindings=none
-make
-make install
-```
+have to build LLVM on the supported platforms. 
 
 ## Using LTO and bitcode object files
 
