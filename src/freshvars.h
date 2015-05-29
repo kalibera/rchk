@@ -37,10 +37,15 @@ struct FreshVarsTy {
     // protection stack
     // contains variables passed to PROTECT
     //   interprets UNPROTECT(const)
-    //   zeroed on unsupported unprotect  
+    //   zeroed on unsupported unprotect
 
   ConditionalMessagesTy condMsgs;
-    // info messages to be printed if a particular variable (key) 
+    // info messages to be printed if a particular variable (key)
+
+  bool confused = false;
+    // true when the tool is confused by the code and the results
+    // from now on are only very very approximative
+    //   (e.g. when there is an UNPROTECT(nprotect)
 };
 
 struct StateWithFreshVarsTy : virtual public StateBaseTy {

@@ -6,6 +6,7 @@ HOST := $(shell hostname -s)
 ifeq ($(HOST), prg)
   #LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
   LLVM := /home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu
+  #LLVM := /home/tomas/work/opt/inst3.6.1
   BCHECK_MAX_STATES := 1500000
   CALLOCATORS_MAX_STATES := 1000000
 else ifeq ($(HOST), r-lnx400)

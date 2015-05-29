@@ -10,6 +10,10 @@
 
 const bool REPORT_FRESH_ARGUMENTS = true;
 
+const bool QUIET_WHEN_CONFUSED = false;
+  // do not report any messages and don't do any check once confused by the code
+  // in such case, in practice, the messages are almost always false alarms
+
 const std::string MSG_PFX = "[UP] ";
 
 using namespace llvm;
@@ -159,7 +163,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
       unprotectAll(freshVars);
       refinableInfos++;
-      msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables", in);
+      msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, results will be incorrect", in);
+      freshVars.confused = true;
       return;
     }
     
@@ -200,6 +205,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
           + std::to_string(freshVars.pstack.size()) + "), results will be incorrect", in);
           
         refinableInfos++;
+        freshVars.confused = true;
         return;
       }
       while(val-- > 0) {
@@ -236,6 +242,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       // FIXME: this is not great
       msg.info(MSG_PFX +"unsupported form of unprotect, unprotecting all variables, results will be incorrect", in);
       unprotectAll(freshVars);
+      freshVars.confused = true;
       return;
     }
   }
@@ -506,20 +513,20 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
     FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
 
-  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars);
-  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
-  handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  if (!QUIET_WHEN_CONFUSED || !freshVars.confused)  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars);
+  if (!QUIET_WHEN_CONFUSED || !freshVars.confused)  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  if (!QUIET_WHEN_CONFUSED || !freshVars.confused)  handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
 }
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
 
-  // this does not pay off here (it is enough during handleCall)
-  //pruneFreshVars(in, freshVars, liveVars);
+  // pruneFreshVars(in, freshVars, liveVars);
+  //   this does not pay off here (it is enough during handleCall)
 }
 
 void StateWithFreshVarsTy::dump(bool verbose) {
 
-  errs() << "=== fresh vars: " << &freshVars << "\n";
+  errs() << "=== fresh vars: " << &freshVars << " confused: " << freshVars.confused << "\n";
   for(FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe; ++fi) {
     AllocaInst *var = fi->first;
     errs() << "   " << varName(var);
