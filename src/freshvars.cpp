@@ -467,6 +467,11 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
   Value* storePointerOp = cast<StoreInst>(in)->getPointerOperand();
   Value* storeValueOp = cast<StoreInst>(in)->getValueOperand();
 
+  if (storePointerOp == cm->getGlobals()->ppStackTopVariable) {
+    msg.info(MSG_PFX + "manipulates PPStackTop directly, " + CONFUSION_DISCLAIMER, in);
+    if (QUIET_WHEN_CONFUSED) freshVars.confused = true;
+    return;
+  }
   if (!AllocaInst::classof(storePointerOp)) {
     return;
   }
