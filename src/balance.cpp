@@ -12,6 +12,12 @@
 
 const std::string MSG_PFX = "[PB] ";
 
+const bool QUIET_WHEN_CONFUSED = true;
+  // do not report any messages and don't do any check once confused by the code
+  // in such case, in practice, the messages are almost always false alarms
+
+const std::string CONFUSION_DISCLAIMER = QUIET_WHEN_CONFUSED ? "results will be incomplete" : "results will be incorrect";
+
 using namespace llvm;
 
 // protection stack top "save variable" is a local variable
@@ -157,8 +163,17 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
     return;
   }
   if (targetFunc == g.protectFunction || targetFunc == g.protectWithIndexFunction) { // PROTECT(x)
-    b.depth++;
-    msg.debug(MSG_PFX + "protect call", in);
+    if (msg.debug()) msg.debug(MSG_PFX + "protect call", in);
+    refinableInfos++;
+    if (b.depth > MAX_DEPTH) {
+      msg.info(MSG_PFX + "has too high protection stack depth " + CONFUSION_DISCLAIMER, NULL);
+      if (QUIET_WHEN_CONFUSED) {
+        b.confused = true;
+        if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+      }
+    } else {
+      b.depth++;
+    }
     return;
   }
   if (targetFunc == g.unprotectFunction) {
@@ -166,9 +181,9 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
     if (ConstantInt::classof(unprotectValue)) { // e.g. UNPROTECT(3)
       uint64_t arg = (cast<ConstantInt>(unprotectValue))->getZExtValue();
       b.depth -= (int) arg;
-      msg.debug(MSG_PFX + "unprotect call using constant", in);              
+      if (msg.debug()) msg.debug(MSG_PFX + "unprotect call using constant", in);
       if (b.countState != CS_DIFF && b.depth < 0) {
-        msg.info(MSG_PFX +"has negative depth", in);
+        msg.info(MSG_PFX + "has negative depth", in);
         refinableInfos++;
       }
       return;
@@ -178,36 +193,44 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
       if (AllocaInst::classof(varValue)) {
         AllocaInst* var = cast<AllocaInst>(varValue);
         if (!isProtectionCounterVariable(var, g.unprotectFunction, counterVarsCache)) {
-          msg.info(MSG_PFX +"has an unsupported form of unprotect with a variable (results will be incorrect)", in);
+          msg.info(MSG_PFX + "has an unsupported form of unprotect with a variable " + CONFUSION_DISCLAIMER, in);
+          if (QUIET_WHEN_CONFUSED) {
+            b.confused = true;
+            if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+          }
           return;
         }
         if (!b.counterVar) {
           b.counterVar = var;
         } else if (b.counterVar != var) {
-          msg.info(MSG_PFX +"has an unsupported form of unprotect with a variable - multiple counter variables (results will be incorrect)", in);
+          msg.info(MSG_PFX + "has an unsupported form of unprotect with a variable - multiple counter variables " + CONFUSION_DISCLAIMER, in);
+          if (QUIET_WHEN_CONFUSED) {
+            b.confused = true;
+            if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+          }
           return;
         }
         if (b.countState == CS_NONE) {
-          msg.info(MSG_PFX +"passes uninitialized counter of protects in a call to unprotect", in);
+          msg.info(MSG_PFX + "passes uninitialized counter of protects in a call to unprotect", in);
           refinableInfos++;
           return;
         }
         if (b.countState == CS_EXACT) {
           b.depth -= b.count;
-          msg.debug(MSG_PFX + "unprotect call using counter in exact state", in);                
+          if (msg.debug()) msg.debug(MSG_PFX + "unprotect call using counter in exact state", in);
           if (b.depth < 0) {
-            msg.info(MSG_PFX +"has negative depth", in);
+            msg.info(MSG_PFX + "has negative depth", in);
             refinableInfos++;
           }
           return;
         }
         // countState == CS_DIFF
         assert(b.countState == CS_DIFF);
-        msg.debug(MSG_PFX + "unprotect call using counter in diff state", in);
+        if (msg.debug()) msg.debug(MSG_PFX + "unprotect call using counter in diff state", in);
         b.countState = CS_NONE;
         // depth keeps its value - it now becomes exact depth again
         if (b.depth < 0) {
-          msg.info(MSG_PFX +"has negative depth after UNPROTECT(<counter>)", in);
+          msg.info(MSG_PFX + "has negative depth after UNPROTECT(<counter>)", in);
           refinableInfos++;
         }
       }
@@ -215,10 +238,10 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
     return;
   }
   if (targetFunc == g.unprotectPtrFunction) {  // UNPROTECT_PTR(x)
-    msg.debug(MSG_PFX + "unprotect_ptr call", in);
+    if (msg.debug()) msg.debug(MSG_PFX + "unprotect_ptr call", in);
     b.depth--;
     if (b.countState != CS_DIFF && b.depth < 0) {
-      msg.info(MSG_PFX +"has negative depth", in);
+      msg.info(MSG_PFX + "has negative depth", in);
       refinableInfos++;
     }
   }
@@ -241,12 +264,16 @@ static void handleLoad(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
             // topStore is the alloca instruction for the local variable where R_PPStack is saved to
             // e.g. %save = alloca i32, align 4
             if (b.countState == CS_DIFF) {
-              msg.info(MSG_PFX +"saving value of PPStackTop while in differential count state (results will be incorrect)", in);
+              msg.info(MSG_PFX + "saving value of PPStackTop while in differential count state " + CONFUSION_DISCLAIMER, in);
+              if (QUIET_WHEN_CONFUSED) {
+                b.confused = true;
+                if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+              }
               refinableInfos++;
               return;
             }
             b.savedDepth = b.depth;
-            msg.debug(MSG_PFX + "saving value of PPStackTop", in);
+            if (msg.debug()) msg.debug(MSG_PFX + "saving value of PPStackTop", in);
           }
         }
       }
@@ -270,12 +297,16 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
         isProtectionStackTopSaveVariable(cast<AllocaInst>(varValue), g.ppStackTopVariable, saveVarsCache)) {
 
         if (b.countState == CS_DIFF) {
-          msg.info(MSG_PFX +"restoring value of PPStackTop while in differential count state (results will be incorrect)", in);
+          msg.info(MSG_PFX + "restoring value of PPStackTop while in differential count state " + CONFUSION_DISCLAIMER, in);
+          if (QUIET_WHEN_CONFUSED) {
+            b.confused = true;
+            if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+          }
           return;
         }
-        msg.debug(MSG_PFX + "restoring value of PPStackTop", in);
+        if (msg.debug()) msg.debug(MSG_PFX + "restoring value of PPStackTop", in);
         if (b.savedDepth < 0) {
-          msg.info(MSG_PFX +"restores PPStackTop from uninitialized local variable", in);
+          msg.info(MSG_PFX + "restores PPStackTop from uninitialized local variable", in);
           refinableInfos++;
         } else {
           b.depth = b.savedDepth;
@@ -283,7 +314,11 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
         return;
       }
     }
-    msg.info(MSG_PFX +"manipulates PPStackTop directly (results will be incorrect)", in);
+    msg.info(MSG_PFX + "manipulates PPStackTop directly " + CONFUSION_DISCLAIMER, in);
+    if (QUIET_WHEN_CONFUSED) {
+      b.confused = true;
+      if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+    }
     return;  
   }
   if (AllocaInst::classof(storePointerOp) && 
@@ -293,22 +328,35 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
     if (!b.counterVar) {
       b.counterVar = storePointerVar;
     } else if (b.counterVar != storePointerVar) {
-      msg.info(MSG_PFX +"uses multiple pointer protection counters (results will be incorrect)", in);
+      msg.info(MSG_PFX + "uses multiple pointer protection counters " + CONFUSION_DISCLAIMER, NULL);
+      if (QUIET_WHEN_CONFUSED) {
+        b.confused = true;
+        if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+      }
       return;
     }
     if (ConstantInt::classof(storeValueOp)) {
       // nprotect = 3
       if (b.countState == CS_DIFF) {
-        msg.info(MSG_PFX +"setting counter value while in differential mode (forgetting protects)?", in);
+        msg.info(MSG_PFX + "setting counter value while in differential mode (forgetting protects)?", in);
         refinableInfos++;
         return;
       }
       int64_t arg = (cast<ConstantInt>(storeValueOp))->getSExtValue();
       b.count = arg;
-      b.countState = CS_EXACT;
-      msg.debug(MSG_PFX + "setting counter to a constant", in);              
-      if (b.count < 0) {
-        msg.info(MSG_PFX +"protection counter set to a negative value", in);
+      if (b.count > MAX_COUNT) {
+        // turn the counter to differential state
+        if (msg.debug()) msg.debug(MSG_PFX + "setting counter to a large constant, switching to differential state", in);
+        assert(s.balance.countState == CS_EXACT);
+        b.countState = CS_DIFF;
+        b.depth -= b.count;
+        b.count = -1;
+      } else {
+        b.countState = CS_EXACT;
+        if (msg.debug()) msg.debug(MSG_PFX + "setting counter to a constant", in);
+        if (b.count < 0) {
+          msg.info(MSG_PFX + "protection counter set to a negative value", in);
+        }
       }
       return;
     }
@@ -331,17 +379,22 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
           constOp && ConstantInt::classof(constOp)) {
                   
           if (b.countState == CS_NONE) {
-            msg.info(MSG_PFX +"adds a constant to an uninitialized counter variable", in);
+            msg.info(MSG_PFX + "adds a constant to an uninitialized counter variable", in);
             refinableInfos++;
             return;
           }
           int64_t arg = (cast<ConstantInt>(constOp))->getSExtValue();
-          msg.debug(MSG_PFX + "adding a constant to counter", in);
+          if (msg.debug()) msg.debug(MSG_PFX + "adding a constant to counter", in);
           if (b.countState == CS_EXACT) {
             b.count += arg;
             if (b.count < 0) {
-              msg.info(MSG_PFX +"protection counter went negative after add", in);
+              msg.info(MSG_PFX + "protection counter went negative after add", in);
               refinableInfos++;
+            } else if (b.count > MAX_COUNT) {
+              // turn the counter to differential state
+              b.countState = CS_DIFF;
+              b.depth -= b.count;
+              b.count = -1;
             }
             return;
           }
@@ -357,40 +410,48 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
 void handleBalanceForNonTerminator(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoolCacheTy& counterVarsCache, VarBoolCacheTy& saveVarsCache,
     LineMessenger& msg, unsigned& refinableInfos) {
 
-  handleCall(in, b, g, counterVarsCache, msg, refinableInfos);
-  handleLoad(in, b, g, saveVarsCache, msg, refinableInfos);
-  handleStore(in, b, g, saveVarsCache, counterVarsCache, msg, refinableInfos);
+  if (b.countState != CS_DIFF && b.depth < 0) {
+    if (msg.trace()) msg.trace(MSG_PFX + "skipping instruction as depth is already negative in non-diff state", in);
+    return;
+      // do not print more errors that caused by a problem already reported
+  }
+
+  if (!QUIET_WHEN_CONFUSED || !b.confused) {
+    handleCall(in, b, g, counterVarsCache, msg, refinableInfos);
+  } else {
+    if (msg.trace()) msg.trace(MSG_PFX + "not handling instruction as (already) confused", in);
+    return;
+  }
+
+  if (!QUIET_WHEN_CONFUSED || !b.confused) {
+    handleLoad(in, b, g, saveVarsCache, msg, refinableInfos);
+  } else {
+    if (msg.trace()) msg.trace(MSG_PFX + "not handling instruction as (already) confused", in);
+    return;
+  }
+
+  if (!QUIET_WHEN_CONFUSED || !b.confused) {
+    handleStore(in, b, g, saveVarsCache, counterVarsCache, msg, refinableInfos);
+  } else {
+    if (msg.trace()) msg.trace(MSG_PFX + "not handling instruction as (already) confused", in);
+    return;
+  }
 }
 
 bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, GlobalsTy& g, VarBoolCacheTy& counterVarsCache, 
     LineMessenger& msg, unsigned& refinableInfos) {
 
+  if (QUIET_WHEN_CONFUSED && s.balance.confused) {
+    if (msg.trace()) msg.trace(MSG_PFX + "not interpreting terminator because (already) confused", t);
+    return false; // generate more states - other currently used tools may not be all confused
+  }
+
   if (ReturnInst::classof(t)) {
     if (s.balance.countState == CS_DIFF || s.balance.depth != 0) {
-      msg.info(MSG_PFX +"has possible protection stack imbalance", t);
+      msg.info(MSG_PFX + "has possible protection stack imbalance", t);
       refinableInfos++;
     }
     return true; // no successors
-  }
-      
-  if (s.balance.count > MAX_COUNT) {
-    // turn the counter to differential state
-    assert(s.balance.countState == CS_EXACT);
-    s.balance.countState = CS_DIFF;
-    s.balance.depth -= s.balance.count;
-    s.balance.count = -1;
-  }
-      
-  if (s.balance.depth > MAX_DEPTH) {
-    msg.info(MSG_PFX +"has too high protection stack depth", t);
-    refinableInfos++;
-    return true; // stop generating more states at this point
-  }
-      
-  if (s.balance.countState != CS_DIFF && s.balance.depth < 0) {
-    return true; 
-        // do not propagate negative depth to successors
-        // can't do this for count, because -1 means count not initialized
   }
       
   if (!BranchInst::classof(t)) {
@@ -431,12 +492,16 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   if (!s.balance.counterVar) {
     s.balance.counterVar = var;
   } else if (s.balance.counterVar != var) {
-    msg.info(MSG_PFX +"uses multiple pointer protection counters (results will be incorrect)", t);
+    msg.info(MSG_PFX + "uses multiple pointer protection counters " + CONFUSION_DISCLAIMER, NULL);
+    if (QUIET_WHEN_CONFUSED) {
+      s.balance.confused = true;
+      if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", t);
+    }
     refinableInfos++;
     return false;
   }
   if (s.balance.countState == CS_NONE) {
-    msg.info(MSG_PFX +"branches based on an uninitialized value of the protection counter variable", t);
+    msg.info(MSG_PFX + "branches based on an uninitialized value of the protection counter variable", t);
     refinableInfos++;
     return false;
   }
@@ -451,7 +516,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
     assert(ConstantInt::classof(res));
                 
     // add only the relevant successor
-    msg.debug(MSG_PFX + "folding out branch on counter value", t);                
+    if (msg.debug()) msg.debug(MSG_PFX + "folding out branch on counter value", t);
     BasicBlock *succ;
     if (!res->isZeroValue()) {
       succ = br->getSuccessor(0);
@@ -461,7 +526,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
     {
       StateWithBalanceTy *state = s.clone(succ);
       if (state->add()) {
-        msg.trace(MSG_PFX + "added folded successor of", t);
+        if (msg.trace()) msg.trace(MSG_PFX + "added folded successor of", t);
       }
     }
     return true;
@@ -523,10 +588,10 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   // FIXME: could there instead be returns in both branches?
                             
   // interpret UNPROTECT(nprotect)
-  msg.debug(MSG_PFX + "simplifying unprotect conditional on counter value (diff state)", t);                
+  if (msg.debug()) msg.debug(MSG_PFX + "simplifying unprotect conditional on counter value (diff state)", t);
   s.balance.countState = CS_NONE;
   if (s.balance.depth < 0) {
-    msg.info(MSG_PFX +"has negative depth after UNPROTECT(<counter>)", t);
+    msg.info(MSG_PFX + "has negative depth after UNPROTECT(<counter>)", t);
     refinableInfos++;
     return false;
   }
@@ -534,7 +599,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   {
     StateWithBalanceTy* state = s.clone(joinSucc);
     if (state->add()) {
-      msg.trace(MSG_PFX + "added folded successor (diff counter state) of", t);
+      if (msg.trace()) msg.trace(MSG_PFX + "added folded successor (diff counter state) of", t);
     }
   }
   return true;
@@ -550,6 +615,7 @@ std::string cs_name(CountState cs) {
 
 void StateWithBalanceTy::dump(bool verbose) {
 
+  errs() << "=== balance confused: " << balance.confused << "\n";
   errs() << "=== depth: " << balance.depth << "\n";
   if (balance.savedDepth != -1) {
     errs() << "=== savedDepth: " << balance.savedDepth << "\n";

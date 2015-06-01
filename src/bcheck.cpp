@@ -47,9 +47,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "do_cum"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "Rf_protect"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "do_cum";
+const std::string ONLY_FUNCTION_NAME = "Rf_protect";
 const bool VERBOSE_DUMP = false;
 
 const bool PROGRESS_MARKS = false;
@@ -196,7 +196,7 @@ struct StateTy_equal {
     } else {
       res = lhs->bb == rhs->bb && 
       lhs->balance.depth == rhs->balance.depth && lhs->balance.savedDepth == rhs->balance.savedDepth && lhs->balance.count == rhs->balance.count &&
-      lhs->balance.countState == rhs->balance.countState && lhs->balance.counterVar == rhs->balance.counterVar &&
+      lhs->balance.countState == rhs->balance.countState && lhs->balance.counterVar == rhs->balance.counterVar && lhs->balance.confused == rhs->balance.confused &&
       lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
       lhs->freshVars.vars == rhs->freshVars.vars && lhs->freshVars.condMsgs == rhs->freshVars.condMsgs && lhs->freshVars.pstack == rhs->freshVars.pstack
          && lhs->freshVars.confused == rhs->freshVars.confused;

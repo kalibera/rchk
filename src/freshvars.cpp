@@ -166,8 +166,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (freshVars.pstack.size() == MAX_PSTACK_SIZE) {
         unprotectAll(freshVars);
         refinableInfos++;
-        msg.info(MSG_PFX +"protect stack is too deep, unprotecting all variables, " + CONFUSION_DISCLAIMER, NULL);
-        freshVars.confused = true;
+        msg.info(MSG_PFX + "protect stack is too deep, unprotecting all variables, " + CONFUSION_DISCLAIMER, NULL);
+        if (QUIET_WHEN_CONFUSED) freshVars.confused = true;
         return;
       }
     
@@ -204,11 +204,11 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (ConstantInt* ci = dyn_cast<ConstantInt>(arg)) {
         uint64_t val = ci->getZExtValue();
         if (val > freshVars.pstack.size()) {
-          msg.info(MSG_PFX +"attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
+          msg.info(MSG_PFX + "attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
             + std::to_string(freshVars.pstack.size()) + "), " + CONFUSION_DISCLAIMER, in);
           
           refinableInfos++;
-          freshVars.confused = true;
+          if (QUIET_WHEN_CONFUSED) freshVars.confused = true;
           return;
         }
         while(val-- > 0) {
@@ -243,9 +243,9 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       } else {
         // unsupported forms of unprotect
         // FIXME: this is not great
-        msg.info(MSG_PFX +"unsupported form of unprotect, unprotecting all variables, " + CONFUSION_DISCLAIMER, in);
+        msg.info(MSG_PFX + "unsupported form of unprotect, unprotecting all variables, " + CONFUSION_DISCLAIMER, in);
         unprotectAll(freshVars);
-        freshVars.confused = true;
+        if (QUIET_WHEN_CONFUSED) freshVars.confused = true;
         return;
       }
     }
@@ -265,7 +265,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (!src || !cm->isPossibleCAllocator(src)) {
         continue;
       }
-      msg.info(MSG_PFX +"calling allocating function " + funName(tgt) + " with argument allocated using " + funName(src), in);
+      msg.info(MSG_PFX + "calling allocating function " + funName(tgt) + " with argument allocated using " + funName(src), in);
       refinableInfos++;
     }
   }
@@ -453,7 +453,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       }
     }
   }
-  msg.info(MSG_PFX +"calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
+  msg.info(MSG_PFX + "calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
   refinableInfos++;
 }
 

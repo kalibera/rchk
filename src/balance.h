@@ -31,16 +31,17 @@ struct BalanceStateTy {
   int count;		// value of a local counter for the number of protected pointers (or -1 when not used) (e.g. nprotect)
   CountState countState;
   AllocaInst* counterVar;
+  bool confused; 	// the tool is confused an additional messages in the function will be incorrect/incomplete
   
-  BalanceStateTy(int depth, int savedDepth, int count, CountState countState, AllocaInst* counterVar):
-    depth(depth), savedDepth(savedDepth), count(count), countState(countState), counterVar(counterVar) {};
+  BalanceStateTy(int depth, int savedDepth, int count, CountState countState, AllocaInst* counterVar, bool confused):
+    depth(depth), savedDepth(savedDepth), count(count), countState(countState), counterVar(counterVar), confused(confused) {};
 };
 
 struct StateWithBalanceTy : virtual public StateBaseTy {
   BalanceStateTy balance;
   
   StateWithBalanceTy(BasicBlock *bb, BalanceStateTy& balance): StateBaseTy(bb), balance(balance) {};
-  StateWithBalanceTy(BasicBlock *bb): StateBaseTy(bb), balance(0, -1, -1, CS_NONE, NULL) {};
+  StateWithBalanceTy(BasicBlock *bb): StateBaseTy(bb), balance(0, -1, -1, CS_NONE, NULL, false) {};
   
   virtual StateWithBalanceTy* clone(BasicBlock *newBB) = 0;
   

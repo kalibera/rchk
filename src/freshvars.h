@@ -42,7 +42,7 @@ struct FreshVarsTy {
   ConditionalMessagesTy condMsgs;
     // info messages to be printed if a particular variable (key)
 
-  bool confused = false;
+  bool confused = false; // the initialization should be implicit
     // true when the tool is confused by the code and the results
     // from now on are only very very approximative
     //   (e.g. when there is an UNPROTECT(nprotect)
