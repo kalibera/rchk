@@ -543,8 +543,9 @@ int main(int argc, char* argv[])
     FunctionChecker fchk(fun, mstate);
 
     if (SEPARATE_CHECKING) {
-      fchk.checkFunction(true, false, " [balance]");
-      fchk.checkFunction(false, true, " [fresh SEXPs]");
+        // FIXME: it would make more sense to only print prefixes [BP] and [UP] with join checking
+      fchk.checkFunction(true, false, " [protection balance]");
+      fchk.checkFunction(false, true, " [unprotected pointers]");
     } else {
       fchk.checkFunction(true, true, "");  
     }
