@@ -154,4 +154,5 @@ while with `rchk` built using LLVM 3.5, and it worked fine.
 ### More reading
 
 [LLVM Gold Plugin](http://llvm.org/docs/GoldPlugin.html)
+
 [LLVM Release Process](http://llvm.org/docs/ReleaseProcess.html)
