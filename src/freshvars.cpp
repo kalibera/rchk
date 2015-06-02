@@ -18,20 +18,32 @@ const std::string MSG_PFX = "[UP] ";
 
 using namespace llvm;
 
-static void pruneFreshVars(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
+static void pruneFreshVars(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars, LineMessenger& msg, unsigned& refinableInfos) {
 
-  // clean up freshVars -- remove entries and conditional messages for dead variables
+  // clean up freshVars
+  //   remove entries and conditional messages for dead variables
+  //   also print conditional messages for variables that are now definitely going to be used
+    
   for (FreshVarsVarsTy::iterator fi = freshVars.vars.begin(), fe = freshVars.vars.end(); fi != fe;) {
     AllocaInst *var = fi->first;
       
     auto lsearch = liveVars.find(in);
     assert(lsearch != liveVars.end());
       
-    VarsSetTy& lvars = lsearch->second;
-    if (lvars.find(var) == lvars.end()) {
+    VarsLiveness& lvars = lsearch->second;
+    if (!lvars.isPossiblyUsed(var)) {
       fi = freshVars.vars.erase(fi);
       freshVars.condMsgs.erase(var);
       continue;
+
+    } else if (!lvars.isPossiblyKilled(var)) {
+      auto msearch = freshVars.condMsgs.find(var);
+      if (msearch != freshVars.condMsgs.end()) {
+        msearch->second.flush();
+        refinableInfos++;
+        freshVars.condMsgs.erase(msearch);
+        if (msg.debug()) msg.debug(MSG_PFX + "printed conditional messages as variable " + varName(var) + " is now definitely going to be used", in);
+      }
     }
     ++fi;
   }
@@ -274,7 +286,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     return;
   }
   
-  pruneFreshVars(in, freshVars, liveVars);
+  pruneFreshVars(in, freshVars, liveVars, msg, refinableInfos); // make sure messages are not emitted for (obviously) dead variables
   if (freshVars.vars.size() > 0) {
   
     if (msg.trace()) msg.trace(MSG_PFX + "checking freshvars at allocating call to " + funName(tgt), in);
@@ -333,8 +345,19 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       }
       
       std::string message = "unprotected variable " + varName(var) + " while calling allocating function " + funName(tgt);
+
+      auto lsearch = liveVars.find(in);
+      if (lsearch != liveVars.end()) {
+        // there should be a record for all instructions
+        VarsLiveness& vlive = lsearch->second;
+        if (vlive.isDefinitelyUsed(var)) {
+          msg.info(MSG_PFX + message, in);
+          if (msg.trace()) msg.trace("issued an info directly because variable \"" + varName(var) + "\" is definitely live", in);
+          continue;
+        }
+      } 
     
-      // prepare a conditional message
+      // prepare a conditional message - the variable may be live, but we don't know
       auto vsearch = freshVars.condMsgs.find(var);
       if (vsearch == freshVars.condMsgs.end()) {
         DelayedLineMessenger dmsg(&msg);
@@ -537,9 +560,6 @@ void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGu
 }
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
-
-  // pruneFreshVars(in, freshVars, liveVars);
-  //   this does not pay off here (it is enough during handleCall)
 }
 
 void StateWithFreshVarsTy::dump(bool verbose) {

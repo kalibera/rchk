@@ -23,23 +23,32 @@ static VarIndexTy indexVariables(Function *f) {
   
   return varIndex;
 }
-
 typedef std::vector<bool> VarMapTy;
-typedef std::unordered_map<BasicBlock*, VarMapTy> UsedAfterTy;
+
+struct BlockStateTy {
+  VarMapTy usedAfter;
+  VarMapTy killedAfter;
+  
+  BlockStateTy(VarMapTy usedAfter, VarMapTy killedAfter): usedAfter(usedAfter), killedAfter(killedAfter) {};
+};
+
+typedef std::unordered_map<BasicBlock*, BlockStateTy> BlockStatesTy;
 typedef std::unordered_set<BasicBlock*> BlockSetTy;
 
-static void applyInstruction(Instruction *in, VarMapTy& used, VarIndexTy& varIndex) {
+static void applyInstruction(Instruction *in, VarMapTy& used, VarMapTy& killed, VarIndexTy& varIndex) {
 
   if (StoreInst* si = dyn_cast<StoreInst>(in)) {
     if (AllocaInst* var = dyn_cast<AllocaInst>(si->getPointerOperand())) { // variable is killed
       unsigned vi = varIndex.indexOf(var);
       used[vi] = false;
+      killed[vi] = true;
     }
   }
   if (LoadInst* li = dyn_cast<LoadInst>(in)) {
     if (AllocaInst* var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // variable is used
       unsigned vi = varIndex.indexOf(var);
       used[vi] = true;
+      killed[vi] = false;
     }
   }
 }
@@ -49,7 +58,7 @@ LiveVarsTy findLiveVariables(Function *f) {
   VarIndexTy varIndex = indexVariables(f);
   size_t nvars = varIndex.size();
   
-  UsedAfterTy usedAfter;
+  BlockStatesTy blockStates;
   BlockSetTy changed;
   
   // add basic blocks with return statement
@@ -58,39 +67,58 @@ LiveVarsTy findLiveVariables(Function *f) {
     
     // note: ignoring "error blocks" (unreachable terminators)
     if (ReturnInst *ri = dyn_cast<ReturnInst>(bb->getTerminator())) {
-      usedAfter.insert({bb, VarMapTy(nvars)});
+      VarMapTy usedAfter = VarMapTy(nvars, false);
+      VarMapTy killedAfter = VarMapTy(nvars, true);
+      blockStates.insert({bb, BlockStateTy(usedAfter, killedAfter)});
       changed.insert(bb);
     }
   }
   
-  // find variables possibly used after each block
+  // find variables possibly used/killed after each block
   while(!changed.empty()) {
     BlockSetTy::iterator bi = changed.begin();
     BasicBlock* bb = *bi;
     changed.erase(bi);
     
     assert(usedAfter.find(bb) != usedAfter.end());
-    VarMapTy used = usedAfter.find(bb)->second;
+    
+    auto bsearch = blockStates.find(bb);
+    assert(bsearch != blockStates.end());
+    BlockStateTy& s = bsearch->second;
+    
+    VarMapTy used = s.usedAfter; // copy
+    VarMapTy killed = s.killedAfter; // copy
     
     // compute variables live at block start
     for(BasicBlock::reverse_iterator ii = bb->rbegin(), ie = bb->rend();  ii != ie; ++ii) {
       Instruction *in = &*ii;
-      applyInstruction(in, used, varIndex);     
+      applyInstruction(in, used, killed, varIndex);     
     }
     
     // merge into block predecessors
     for(pred_iterator pi = pred_begin(bb), pe = pred_end(bb); pi != pe; ++pi) {
       BasicBlock* pb = *pi;
-      
-      auto usearch = usedAfter.find(pb);
-      if (usearch == usedAfter.end()) {
-        usedAfter.insert({pb, used});
+
+      auto bsearch = blockStates.find(pb);
+      if (bsearch == blockStates.end()) {
+        blockStates.insert({pb, BlockStateTy(used, killed)});
         changed.insert(pb);
       } else {
-        VarMapTy& prevUsed = usearch->second;
-        for(unsigned vi = 0; vi < nvars; vi++) { // union of used variables
-          if (used[vi] && !prevUsed[vi]) {
+        BlockStateTy& ps = bsearch->second;
+        VarMapTy& prevUsed = ps.usedAfter;
+        VarMapTy& prevKilled = ps.killedAfter;
+        
+        for(unsigned vi = 0; vi < nvars; vi++) {
+          bool change = false;
+          if (used[vi] && !prevUsed[vi]) { // union of used variables
             prevUsed[vi] = true;
+            change = true;
+          }
+          if (killed[vi] && !prevKilled[vi]) { // union of killed variables
+            prevKilled[vi] = true;
+            change = true;
+          }          
+          if (change) {
             changed.insert(pb);
           }
         }
@@ -101,24 +129,30 @@ LiveVarsTy findLiveVariables(Function *f) {
   // convert results, and compute for each instruction
   LiveVarsTy live;
   
-  for(UsedAfterTy::iterator ui = usedAfter.begin(), ue = usedAfter.end(); ui != ue; ++ui) {
-    BasicBlock* bb = ui->first;
-    VarMapTy& used = ui->second;
+  for(BlockStatesTy::iterator si = blockStates.begin(), se = blockStates.end(); si != se; ++si) {
+    BasicBlock* bb = si->first;
+    BlockStateTy& s = si->second;
+    VarMapTy used = s.usedAfter;
+    VarMapTy killed = s.killedAfter;
     
     for(BasicBlock::reverse_iterator ii = bb->rbegin(), ie = bb->rend();  ii != ie; ++ii) {
       Instruction *in = &*ii;
       
       // record used vars for instruction
       //   (result liveness info is relevant "after this instruction executes")
-      VarsSetTy vars;
+      
+      VarsLiveness vars;
       for(unsigned vi = 0; vi < nvars; vi++) {
         if (used[vi]) {
-          vars.insert(varIndex.at(vi));
+          vars.possiblyUsed.insert(varIndex.at(vi));
+        }
+        if (killed[vi]) {
+          vars.possiblyKilled.insert(varIndex.at(vi));
         }
       }
       live.insert({in, vars});
       
-      applyInstruction(in, used, varIndex);
+      applyInstruction(in, used, killed, varIndex);
     }
   }
   return live;
