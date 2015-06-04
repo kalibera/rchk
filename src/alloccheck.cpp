@@ -18,6 +18,7 @@
 #include "allocators.h"
 #include "callocators.h"
 #include "errors.h"
+#include "cprotect.h"
 
 using namespace llvm;
 
@@ -27,6 +28,7 @@ int main(int argc, char* argv[])
 
   FunctionsOrderedSetTy functionsOfInterest;
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  FunctionsSetTy calleeProtectFunctions = findCalleeProtectFunctions(m);
   CalledModuleTy *cm = CalledModuleTy::create(m);
 
   FunctionsSetTy *possibleAllocators = cm->getPossibleAllocators();

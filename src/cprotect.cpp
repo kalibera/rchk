@@ -3,9 +3,11 @@
 #include "table.h"
 #include "allocators.h"
 
-#include <llvm/IR/InstIterator.h>
-#include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/CallSite.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/InstIterator.h>
+
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -15,15 +17,28 @@ typedef IndexedTable<Argument> ArgIndexTy;
 
 const unsigned MAX_DEPTH = 64;
 
+// the function takes at least one SEXP variable as argument
+static bool hasSEXPArg(Function *fun) {
+  FunctionType* ftype = fun->getFunctionType();
+  for(FunctionType::param_iterator pi = ftype->param_begin(), pe = ftype->param_end(); pi != pe; ++pi) {
+    Type* type = *pi;
+    if (isSEXP(type)) {
+      return true; 
+    }
+  }
+  return false;
+}
+
 struct FunctionState {
-  bool dirty; // needs to be re-analyzed
-  ArgsTy exposed;
-  ArgsTy exposedAndUsed;
+
+  bool dirty; 			// needs to be re-analyzed
+  ArgsTy exposed;		// true for arguments that are (possibly) not protected explicitly at an allocating call
+  ArgsTy usedAfterExposure;	// true for arguments that are (possibly) used after being exposed [approximation, due to merge the order of events is not fixed]
   Function *fun;
-  VarIndexTy varIndex;
-  ArgIndexTy argIndex;
+  VarIndexTy varIndex;		// variable numbering
+  ArgIndexTy argIndex;		// argument numbering
   
-  FunctionState(Function *fun): fun(fun), exposed(fun->arg_size(), false), exposedAndUsed(fun->arg_size(), false), dirty(false) {
+  FunctionState(Function *fun): fun(fun), exposed(fun->arg_size(), false), usedAfterExposure(fun->arg_size(), false), dirty(false), varIndex(), argIndex() {
 
     // index variables
     for(inst_iterator ii = inst_begin(*fun), ie = inst_end(*fun); ii != ie; ++ii) {
@@ -35,12 +50,12 @@ struct FunctionState {
     
     // index arguments
     for(Function::arg_iterator ai = fun->arg_begin(), ae = fun->arg_end(); ai != ae; ++ai) {
-      Argument *a;
+      Argument *a = &*ai;
       argIndex.indexOf(a);
     }
   }
   
-  bool merge(ArgsTy _exposed, ArgsTy _exposedAndUsed) {
+  bool merge(ArgsTy _exposed, ArgsTy _usedAfterExposure) {
 
     unsigned nargs = _exposed.size();
     bool updated = false;
@@ -50,8 +65,8 @@ struct FunctionState {
         exposed[i] = true;
         updated = true;
       }
-      if (!exposedAndUsed[i] && _exposedAndUsed[i]) {
-        exposedAndUsed[i] = true;
+      if (!usedAfterExposure[i] && _usedAfterExposure[i]) {
+        usedAfterExposure[i] = true;
         updated = true;
       }
     }
@@ -59,6 +74,7 @@ struct FunctionState {
   }
   
   bool isCalleeProtect() {
+
     unsigned nargs = exposed.size();
     for(unsigned i = 0; i < nargs; i++) {
       if (exposed[i]) return false;
@@ -67,27 +83,22 @@ struct FunctionState {
   }
   
   bool isNonTriviallyCalleeProtect(FunctionsSetTy& allocatingFunctions) {
+
     if (!isCalleeProtect()) {
       return false;
     }
     if (allocatingFunctions.find(fun) == allocatingFunctions.end()) { // the functions allocates
       return false;
     }
-    FunctionType* ftype = fun->getFunctionType();
-    for(FunctionType::param_iterator pi = ftype->param_begin(), pe = ftype->param_end(); pi != pe; ++pi) {
-      Type* type = *pi;
-      if (isSEXP(type)) {
-        return true; // the function takes at least one SEXP variable as argument
-      }
-    }
-    return false;
+    return hasSEXPArg(fun);
   }
 };
 
 typedef std::unordered_map<Function*, FunctionState> FunctionTableTy;
 typedef std::vector<FunctionState*> FunctionListTy;
 
-static void addToWorkList(FunctionListTy& workList, FunctionState *fstate) {
+static void addToFunctionWorkList(FunctionListTy& workList, FunctionState *fstate) {
+
   if (!fstate->dirty) {
     fstate->dirty = true;
     workList.push_back(fstate);
@@ -98,59 +109,65 @@ typedef std::vector<int> ProtectStackTy;
 typedef std::vector<int> VarsTy;
 
 struct BlockState {
-  ProtectStackTy pstack;
+
+  ProtectStackTy pstack; 	// argument index (>=0) or -1, when not (surely) an argument value
   ArgsTy exposed;
-  ArgsTy exposedAndUsed;
-  VarsTy vars;
-  bool dirty;
+  ArgsTy usedAfterExposure;
+  VarsTy vars;			// argument index (>=0) or -1, when not (surely) an argument value
+  bool dirty;			// block is in worklist, to be processed again
   
   BlockState(unsigned nargs, unsigned nvars):
-    pstack(), exposed(nargs, false), exposedAndUsed(nargs, false), vars(nvars, -1), dirty(false) {}
+    pstack(), exposed(nargs, false), usedAfterExposure(nargs, false), vars(nvars, -1), dirty(false) {}
   
-  BlockState(ProtectStackTy pstack, ArgsTy exposed, ArgsTy exposedAndUsed, VarsTy vars, bool dirty):
-    pstack(pstack), exposed(exposed), exposedAndUsed(exposedAndUsed), vars(vars), dirty(dirty) {}
+  BlockState(ProtectStackTy pstack, ArgsTy exposed, ArgsTy usedAfterExposure, VarsTy vars, bool dirty):
+    pstack(pstack), exposed(exposed), usedAfterExposure(usedAfterExposure), vars(vars), dirty(dirty) {}
     
-  void merge(BlockState s) {
-    dirty = false;
+  bool merge(BlockState s) {
+    bool updated = false;
 
     unsigned depth = pstack.size();
     if (depth != s.pstack.size()) {
       errs() << "stack sizes mismatch at merge";
-      return;
+      return updated;
     }
     for(unsigned i = 0; i < depth; i++) {
       if (pstack[i] != -1 && s.pstack[i] == -1) {
         pstack[i] = -1;
-        dirty = true;
+        updated = true;
       }
     }
     
     unsigned nargs = exposed.size();
-    assert(nargs == exposedAndUnused.size());
+    assert(nargs == usedAfterExposure.size());
+    assert(nargs == s.exposed.size());
+    assert(nargs == s.usedAfterExposure.size());
+    
     for(unsigned i = 0; i < nargs; i++) {
       if (!exposed[i] && s.exposed[i]) {
         exposed[i] = true;
-        dirty = true;
+        updated = true;
       }
-      if (!exposedAndUsed[i] && s.exposedAndUsed[i]) {
-        exposedAndUsed[i] = true;
-        dirty = true;
+      if (!usedAfterExposure[i] && s.usedAfterExposure[i]) {
+        usedAfterExposure[i] = true;
+        updated = true;
       }
     }
     
     unsigned nvars = vars.size();
     for (unsigned i = 0; i < nvars; i++) {
-      if (vars[i] != s.vars[i]) {
+      if (vars[i] != s.vars[i] && vars[i] != -1) {
         vars[i] = -1;
-        dirty = true;
+        updated = true;
       }
     }
+    return updated;
   }
 };
 
 typedef std::unordered_map<BasicBlock*, BlockState> BlocksTy;
 typedef std::vector<BasicBlock*> BlockWorkListTy;
 
+// calculates which arguments are currently (definitely) protected
 static ArgsTy protectedArgs(ProtectStackTy pstack, unsigned nargs) {
 
   ArgsTy protects(nargs, false);
@@ -165,7 +182,8 @@ static ArgsTy protectedArgs(ProtectStackTy pstack, unsigned nargs) {
   return protects;
 }
 
-static bool isExposed(Function *fun, FunctionTableTy& functions, unsigned aidx) {
+// note: the case may not be interesting (e.g. non-SEXP argument, not allocating function, that has to be checked extra)
+static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned aidx) {
 
   auto fsearch = functions.find(fun);
   assert(fsearch != functions.end());
@@ -178,12 +196,16 @@ static bool isExposed(Function *fun, FunctionTableTy& functions, unsigned aidx) 
 static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
 
   Function *fun = fstate->fun;
+
+  if (!hasSEXPArg(fun) || allocatingFunctions.find(fun) == allocatingFunctions.end()) {
+    return; // trivially nothing exposed
+  }
+
+  errs() << "analyzing function " << funName(fstate->fun) << " worklist size " << std::to_string(functionsWorkList.size()) << "\n";
+
   unsigned nvars = fstate->varIndex.size();
   unsigned nargs = fstate->argIndex.size();
   bool updated = false;
-  
-  ArgsTy exposed(nargs, false);
-  ArgsTy exposedAndUsed(nargs, false);
   
   BlocksTy blocks;
   BlockWorkListTy workList;
@@ -198,7 +220,9 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
     
     auto bsearch = blocks.find(bb);
     assert(bsearch != blocks.end());
+    bsearch->second.dirty = false;
     BlockState s = bsearch->second; // copy
+    
     
     for(BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie; ++ii) {
       Instruction *in = ii;
@@ -225,7 +249,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
         continue;
       }
       
-      if (LoadInst *li = dyn_cast<LoadInst>(li)) {
+      if (LoadInst *li = dyn_cast<LoadInst>(in)) {
         if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // load of var
           unsigned vidx = fstate->varIndex.indexOf(var);
           int varState = s.vars[vidx];
@@ -233,7 +257,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
             // variable holds a value from an argument
             unsigned aidx = varState;
             if (s.exposed[aidx]) {
-              s.exposedAndUsed[aidx] = true;
+              s.usedAfterExposure[aidx] = true;
             }
           }
         }
@@ -243,11 +267,11 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
       CallSite cs(in);
       if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) {
         ArgsTy protects = protectedArgs(s.pstack, nargs);
-        for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg.end(); ai != ae; ++ai) {
+        for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
           Value* val = *ai;
           if (Argument *arg = dyn_cast<Argument>(val)) {
             unsigned aidx = fstate->argIndex.indexOf(arg);
-            if (isSEXP(arg.getType()) && !protects[aidx] && isExposed(cs.getCalledFunction(), functions, aidx)) { // passing an unprotected argument directly
+            if (isSEXP(arg->getType()) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, aidx)) { // passing an unprotected argument directly
               s.exposed[aidx] = true;
             }
             continue;
@@ -258,7 +282,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
               int varState = s.vars[vidx];
               if (varState >= 0) {
                 unsigned aidx = varState;
-                if (isSEXP(arg.getType()) && !protects[aidx] && isExposed(cs.getCalledFunction(), functions, aidx)) {
+                if (isSEXP(var) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, aidx)) {
                   s.exposed[aidx] = true;
                 }
               }
@@ -272,7 +296,12 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
       // FIXME: should somehow record that the tool did not understand some protection features (confusion)
       //   functions with confusion should be treated specially
       
-      if (cs && cs.getCalledFunction() && cs.getCalledFunction()->getName() == "Rf_protect" || cs.getCalledFunction()->getName() == "R_ProtectWithIndex") {
+      std::string cfname = "";
+      if (cs && cs.getCalledFunction()) {
+        cfname = cs.getCalledFunction()->getName();
+      }
+      
+      if (cfname == "Rf_protect" || cfname == "R_ProtectWithIndex") {
         // FIXME: should interpret the index in protectWithIndex
         Value* val = cs.getArgument(0);
         int protValue = -1; // by default, -1 means non-argument
@@ -297,15 +326,16 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
       }
       
       // FIXME: what about unprotect_ptr ?
-      if (cs && cs.getCalledFunction() && cs.getCalledFunction()->getName() == "Rf_unprotect") {
+      if (cfname == "Rf_unprotect") {
         Value *val = cs.getArgument(0);
-        if (ConstantInt* ci = dyn_cast<ConstantInt>(arg)) {
-          uint64_t val = ci->getZExtValue();
-          while(val--) {
+        if (ConstantInt* ci = dyn_cast<ConstantInt>(val)) {
+          uint64_t ival = ci->getZExtValue();
+          while(ival--) {
             s.pstack.pop_back();
           }
-          if (val) {
+          if (ival) {
             // FIXME: report some warning/confused
+            errs() << "   confusion: unsupported form of unprotect\n";
           }
         }
       }
@@ -313,24 +343,27 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
     TerminatorInst *t = bb->getTerminator();
     for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
       BasicBlock *succ = t->getSuccessor(i);
-      ssearch = blocks.find(succ);
+      auto ssearch = blocks.find(succ);
       if (ssearch == blocks.end()) {
       
         // not yet explored block
-        BlockState sstate(s.pstack, s.exposed, s.exposedAndUsed, s.vars, true);
-        blocks.insert(sstate);
-        workList.push_back({succ, sstate});
+        BlockState sstate(s.pstack, s.exposed, s.usedAfterExposure, s.vars, true /* dirty */);
+        blocks.insert({succ, sstate});
+        workList.push_back(succ);
+
       } else {
         BlockState& pstate = ssearch->second;
         
         // merge
-        pstate.merge(s);
-        workList.push_back({succ, pstate});
+        if (pstate.merge(s) && !pstate.dirty) {
+          pstate.dirty = true;
+          workList.push_back(succ);
+        }
       }
     }
     
     if (ReturnInst::classof(t)) {
-      updated = updated || fstate->merge(s.exposed, s.exposedAndUsed);
+      updated = updated || fstate->merge(s.exposed, s.usedAfterExposure);
     }
   }
   
@@ -339,14 +372,16 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
       User *u = *ui;
 
-      if (BasicBlock *bb = dyn_cast<BasicBlock>(u->getParent())) {
-        Function *pf = bb->getParent();
-        auto fsearch = functions.find(pf);
-        assert(fsearch != functions.end());
-        FunctionState *pinfo = fsearch->second;
-        if (!pinfo->dirty) {
-          pinfo->dirty = true;
-          functionsWorkList.insert(pinfo);
+      if (Instruction *in = dyn_cast<Instruction>(u)) {
+        if (BasicBlock *bb = dyn_cast<BasicBlock>(in->getParent())) {
+          Function *pf = bb->getParent();
+          auto fsearch = functions.find(pf);
+          assert(fsearch != functions.end());
+          FunctionState& pinfo = fsearch->second;
+          if (!pinfo.dirty) {
+            pinfo.dirty = true;
+            functionsWorkList.push_back(&pinfo);
+          }
         }
       }
     }
@@ -359,18 +394,20 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
   FunctionTableTy functions; // function envelopes
   FunctionListTy workList; // functions to be re-analyzed
   
+  errs() << "adding functions..\n";
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-    Function *f = *fi;
-    auto finsert = functions.insert({f, fstate(f)});
-    assert(finsert->second)
-    addToWorkList(&*finsert->first);
+    Function *f = fi;
+    auto finsert = functions.insert({f, FunctionState(f)});
+    assert(finsert.second);
+    addToFunctionWorkList(workList, &finsert.first->second); // FIXME: is this correct?
   }
   
   FunctionsSetTy allocatingFunctions;
-  findAllocatingFunctions(allocatingFunctions);
+  findAllocatingFunctions(m, allocatingFunctions);
   
   while(!workList.empty()) {
-    FunctionState* fstate = workList.pop_back();
+    FunctionState* fstate = workList.back();
+    workList.pop_back();
 
     analyzeFunction(fstate, functions, workList, allocatingFunctions);
     fstate->dirty = false;
@@ -382,22 +419,13 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
   FunctionsSetTy cprotect;
   for(FunctionTableTy::iterator fi = functions.begin(), fe = functions.end(); fi != fe; ++fi) {
     Function* fun = fi->first;
-    FunctionState *fstate = fi->second;
+    FunctionState& fstate = fi->second;
     
-    if (isNonTriviallyCalleeProtect(fun)) {
+    if (fstate.isNonTriviallyCalleeProtect(allocatingFunctions)) {
       errs() << "Function " << fun << " is callee-protect.\n";
       cprotect.insert(fun);
     }
   }
-}
-
-
-// get the maximum number of arguments accepted by any function (ignoring ellipsis)
-
-unsigned maxNumberOfArguments(Module *m) {
-
-  unsigned max = 0;
   
-  for(Module::
-
+  return cprotect;
 }

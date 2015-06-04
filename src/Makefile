@@ -15,8 +15,8 @@ else ifeq ($(HOST), r-lnx400)
   CALLOCATORS_MAX_STATES := 1000000
 else
   # ------  CUSTOMIZE HERE --------- 
-  $(error Please customize your Makefile here. Please set the home directory for LLVM 3.5.0)
-  #LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
+  $(error Please customize your Makefile here. Please set the home directory for LLVM 3.6.1)
+  #LLVM := /home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu
   
   # please update the "MAX_STATES", these defaults seem to work fine for 8G RAM laptop
   BCHECK_MAX_STATES := 3000000
@@ -30,16 +30,15 @@ LLVMC := $(LLVM)/bin/llvm-config
 HOSTFLAGS := -DBCHECK_MAX_STATES=$(BCHECK_MAX_STATES) -DCALLOCATORS_MAX_STATES=$(CALLOCATORS_MAX_STATES)
 
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
+
 CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
 #CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS)
+
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
-
-CXX := $(LLVM)/bin/clang++
-
-# switch to GCC (it still seems to generate a tiny bit faster code)
-#CXX := g++
+#CXX := $(LLVM)/bin/clang++
+CXX := g++
 
 LINK.o = $(LINK.cc) # link with C++ compiler by default
 
@@ -51,7 +50,7 @@ TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck allocchec
 
 all: $(TOOLS)
 
-alloccheck: alloccheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o
+alloccheck: alloccheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o cprotect.o
 
 errcheck: errcheck.o errors.o common.o
 
