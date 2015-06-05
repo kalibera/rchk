@@ -9,6 +9,9 @@
 
 #include <llvm/Support/raw_ostream.h>
 
+#undef NDEBUG
+#include <assert.h>
+
 using namespace llvm;
 
 typedef std::vector<bool> ArgsTy;
@@ -212,7 +215,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
   
   BasicBlock *entryb = &fun->getEntryBlock();
   blocks.insert({entryb, BlockState(nargs, nvars)}); 
-  workList.push_back(&fun->getEntryBlock()); 
+  workList.push_back(entryb); 
   
   while(!workList.empty()) {
     BasicBlock *bb = workList.back();
@@ -366,7 +369,6 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
       updated = updated || fstate->merge(s.exposed, s.usedAfterExposure);
     }
   }
-  
   if (updated) {
     // mark dirty all functions calling this function
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
@@ -422,7 +424,7 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
     FunctionState& fstate = fi->second;
     
     if (fstate.isNonTriviallyCalleeProtect(allocatingFunctions)) {
-      errs() << "Function " << fun << " is callee-protect.\n";
+      errs() << "Function " << funName(fun) << " is callee-protect.\n";
       cprotect.insert(fun);
     }
   }
