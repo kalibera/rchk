@@ -192,6 +192,7 @@ static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned 
   assert(fsearch != functions.end());
   
   FunctionState& fstate = fsearch->second;
+  errs() << "aidx=" << aidx << " exposed.size=" << fstate.exposed.size() << "\n";
   assert(aidx < fstate.exposed.size());
   return fstate.exposed[aidx];
 }
@@ -243,7 +244,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
           if (LoadInst *li = dyn_cast<LoadInst>(si->getValueOperand())) {
             if (AllocaInst *srcVar = dyn_cast<AllocaInst>(li->getPointerOperand())) { // var = srcVar
               unsigned vidx = fstate->varIndex.indexOf(var);
-              unsigned svidx = vidx = fstate->varIndex.indexOf(srcVar);
+              unsigned svidx = fstate->varIndex.indexOf(srcVar);
               s.vars[vidx] = s.vars[svidx];
               continue;
             }
@@ -259,6 +260,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
           if (varState >= 0) {
             // variable holds a value from an argument
             unsigned aidx = varState;
+            assert(aidx < s.exposed.size() && aidx < s.usedAfterExposure.size());
             if (s.exposed[aidx]) {
               s.usedAfterExposure[aidx] = true;
             }
@@ -270,11 +272,12 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
       CallSite cs(in);
       if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) {
         ArgsTy protects = protectedArgs(s.pstack, nargs);
-        for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
+        unsigned tgtAidx = 0;
+        for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++tgtAidx) {
           Value* val = *ai;
           if (Argument *arg = dyn_cast<Argument>(val)) {
             unsigned aidx = fstate->argIndex.indexOf(arg);
-            if (isSEXP(arg->getType()) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, aidx)) { // passing an unprotected argument directly
+            if (isSEXP(arg->getType()) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) { // passing an unprotected argument directly
               s.exposed[aidx] = true;
             }
             continue;
@@ -285,7 +288,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
               int varState = s.vars[vidx];
               if (varState >= 0) {
                 unsigned aidx = varState;
-                if (isSEXP(var) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, aidx)) {
+                if (isSEXP(var) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) {
                   s.exposed[aidx] = true;
                 }
               }
