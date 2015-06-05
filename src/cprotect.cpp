@@ -3,6 +3,9 @@
 #include "table.h"
 #include "allocators.h"
 
+#include <unordered_map>
+#include <vector>
+
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/InstIterator.h>
@@ -64,12 +67,12 @@ struct FunctionState {
     bool updated = false;
     
     for(unsigned i = 0; i < nargs; i++) {
-      if (!exposed[i] && _exposed[i]) {
-        exposed[i] = true;
+      if (!exposed.at(i) && _exposed.at(i)) {
+        exposed.at(i) = true;
         updated = true;
       }
-      if (!usedAfterExposure[i] && _usedAfterExposure[i]) {
-        usedAfterExposure[i] = true;
+      if (!usedAfterExposure.at(i) && _usedAfterExposure.at(i)) {
+        usedAfterExposure.at(i) = true;
         updated = true;
       }
     }
@@ -80,7 +83,7 @@ struct FunctionState {
 
     unsigned nargs = exposed.size();
     for(unsigned i = 0; i < nargs; i++) {
-      if (exposed[i]) return false;
+      if (exposed.at(i)) return false;
     }
     return true;
   }
@@ -98,13 +101,13 @@ struct FunctionState {
 };
 
 typedef std::unordered_map<Function*, FunctionState> FunctionTableTy;
-typedef std::vector<FunctionState*> FunctionListTy;
+typedef std::vector<Function*> FunctionListTy;
 
-static void addToFunctionWorkList(FunctionListTy& workList, FunctionState *fstate) {
+static void addToFunctionWorkList(FunctionListTy& workList, FunctionState& fstate) {
 
-  if (!fstate->dirty) {
-    fstate->dirty = true;
-    workList.push_back(fstate);
+  if (!fstate.dirty) {
+    fstate.dirty = true;
+    workList.push_back(fstate.fun);
   }
 }
 
@@ -134,8 +137,8 @@ struct BlockState {
       return updated;
     }
     for(unsigned i = 0; i < depth; i++) {
-      if (pstack[i] != -1 && s.pstack[i] == -1) {
-        pstack[i] = -1;
+      if (pstack.at(i) != -1 && s.pstack.at(i) == -1) {
+        pstack.at(i) = -1;
         updated = true;
       }
     }
@@ -146,20 +149,20 @@ struct BlockState {
     assert(nargs == s.usedAfterExposure.size());
     
     for(unsigned i = 0; i < nargs; i++) {
-      if (!exposed[i] && s.exposed[i]) {
-        exposed[i] = true;
+      if (!exposed.at(i) && s.exposed.at(i)) {
+        exposed.at(i) = true;
         updated = true;
       }
-      if (!usedAfterExposure[i] && s.usedAfterExposure[i]) {
-        usedAfterExposure[i] = true;
+      if (!usedAfterExposure.at(i) && s.usedAfterExposure.at(i)) {
+        usedAfterExposure.at(i) = true;
         updated = true;
       }
     }
     
     unsigned nvars = vars.size();
     for (unsigned i = 0; i < nvars; i++) {
-      if (vars[i] != s.vars[i] && vars[i] != -1) {
-        vars[i] = -1;
+      if (vars.at(i) != s.vars.at(i) && vars.at(i) != -1) {
+        vars.at(i) = -1;
         updated = true;
       }
     }
@@ -178,7 +181,7 @@ static ArgsTy protectedArgs(ProtectStackTy pstack, unsigned nargs) {
     int pvalue = *pi;
     
     if (pvalue >= 0) {
-      protects[pvalue] = true;
+      protects.at(pvalue) = true;
     }
   }
   
@@ -194,21 +197,27 @@ static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned 
   FunctionState& fstate = fsearch->second;
   errs() << "aidx=" << aidx << " exposed.size=" << fstate.exposed.size() << "\n";
   assert(aidx < fstate.exposed.size());
-  return fstate.exposed[aidx];
+  return fstate.exposed.at(aidx);
 }
 
-static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
+static FunctionState& getFunctionState(FunctionTableTy& functions, Function *f) {
+  auto fsearch = functions.find(f);
+  assert(fsearch != functions.end());
+  return fsearch->second;
+}
 
-  Function *fun = fstate->fun;
+static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
+
+  Function *fun = fstate.fun;
 
   if (!hasSEXPArg(fun) || allocatingFunctions.find(fun) == allocatingFunctions.end()) {
     return; // trivially nothing exposed
   }
 
-  errs() << "analyzing function " << funName(fstate->fun) << " worklist size " << std::to_string(functionsWorkList.size()) << "\n";
+  errs() << "analyzing function " << funName(fun) << " worklist size " << std::to_string(functionsWorkList.size()) << "\n";
 
-  unsigned nvars = fstate->varIndex.size();
-  unsigned nargs = fstate->argIndex.size();
+  unsigned nvars = fstate.varIndex.size();
+  unsigned nargs = fstate.argIndex.size();
   bool updated = false;
   
   BlocksTy blocks;
@@ -235,17 +244,17 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
         if (AllocaInst *var = dyn_cast<AllocaInst>(si->getPointerOperand())) {
         
           if (Argument *arg = dyn_cast<Argument>(si->getValueOperand())) {  // var = arg
-            unsigned aidx = fstate->argIndex.indexOf(arg);
-            unsigned vidx = fstate->varIndex.indexOf(var);
-            s.vars[vidx] = aidx;
+            unsigned aidx = fstate.argIndex.indexOf(arg);
+            unsigned vidx = fstate.varIndex.indexOf(var);
+            s.vars.at(vidx) = aidx;
             continue;
           }
           
           if (LoadInst *li = dyn_cast<LoadInst>(si->getValueOperand())) {
             if (AllocaInst *srcVar = dyn_cast<AllocaInst>(li->getPointerOperand())) { // var = srcVar
-              unsigned vidx = fstate->varIndex.indexOf(var);
-              unsigned svidx = fstate->varIndex.indexOf(srcVar);
-              s.vars[vidx] = s.vars[svidx];
+              unsigned vidx = fstate.varIndex.indexOf(var);
+              unsigned svidx = fstate.varIndex.indexOf(srcVar);
+              s.vars.at(vidx) = s.vars.at(svidx);
               continue;
             }
           }
@@ -255,14 +264,14 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
       
       if (LoadInst *li = dyn_cast<LoadInst>(in)) {
         if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // load of var
-          unsigned vidx = fstate->varIndex.indexOf(var);
-          int varState = s.vars[vidx];
+          unsigned vidx = fstate.varIndex.indexOf(var);
+          int varState = s.vars.at(vidx);
           if (varState >= 0) {
             // variable holds a value from an argument
             unsigned aidx = varState;
             assert(aidx < s.exposed.size() && aidx < s.usedAfterExposure.size());
-            if (s.exposed[aidx]) {
-              s.usedAfterExposure[aidx] = true;
+            if (s.exposed.at(aidx)) {
+              s.usedAfterExposure.at(aidx) = true;
             }
           }
         }
@@ -276,20 +285,20 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
         for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++tgtAidx) {
           Value* val = *ai;
           if (Argument *arg = dyn_cast<Argument>(val)) {
-            unsigned aidx = fstate->argIndex.indexOf(arg);
-            if (isSEXP(arg->getType()) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) { // passing an unprotected argument directly
-              s.exposed[aidx] = true;
+            unsigned aidx = fstate.argIndex.indexOf(arg);
+            if (isSEXP(arg->getType()) && !protects.at(aidx) && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) { // passing an unprotected argument directly
+              s.exposed.at(aidx) = true;
             }
             continue;
           }
           if (LoadInst *li = dyn_cast<LoadInst>(val)) {
             if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // passing a variable
-              unsigned vidx = fstate->varIndex.indexOf(var);
-              int varState = s.vars[vidx];
+              unsigned vidx = fstate.varIndex.indexOf(var);
+              int varState = s.vars.at(vidx);
               if (varState >= 0) {
                 unsigned aidx = varState;
-                if (isSEXP(var) && !protects[aidx] && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) {
-                  s.exposed[aidx] = true;
+                if (isSEXP(var) && !protects.at(aidx) && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) {
+                  s.exposed.at(aidx) = true;
                 }
               }
             }
@@ -313,13 +322,13 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
         int protValue = -1; // by default, -1 means non-argument
         
         if (Argument *arg = dyn_cast<Argument>(val)) { // PROTECT(arg)
-          unsigned aidx = fstate->argIndex.indexOf(arg);
+          unsigned aidx = fstate.argIndex.indexOf(arg);
           protValue = aidx;  
         }
         if (LoadInst *li = dyn_cast<LoadInst>(val)) {
           if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // PROTECT(var)
-            unsigned vidx = fstate->varIndex.indexOf(var);
-            int varState = s.vars[vidx];
+            unsigned vidx = fstate.varIndex.indexOf(var);
+            int varState = s.vars.at(vidx);
             protValue = varState;
           }
         }
@@ -369,7 +378,7 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
     }
     
     if (ReturnInst::classof(t)) {
-      updated = updated || fstate->merge(s.exposed, s.usedAfterExposure);
+      updated = updated || fstate.merge(s.exposed, s.usedAfterExposure);
     }
   }
   if (updated) {
@@ -380,19 +389,13 @@ static void analyzeFunction(FunctionState *fstate, FunctionTableTy& functions, F
       if (Instruction *in = dyn_cast<Instruction>(u)) {
         if (BasicBlock *bb = dyn_cast<BasicBlock>(in->getParent())) {
           Function *pf = bb->getParent();
-          auto fsearch = functions.find(pf);
-          assert(fsearch != functions.end());
-          FunctionState& pinfo = fsearch->second;
-          if (!pinfo.dirty) {
-            pinfo.dirty = true;
-            functionsWorkList.push_back(&pinfo);
-          }
+          FunctionState& pstate = getFunctionState(functions, pf);
+          addToFunctionWorkList(functionsWorkList, pstate);
         }
       }
     }
   }
 }
-
 
 FunctionsSetTy findCalleeProtectFunctions(Module *m) {
 
@@ -402,20 +405,21 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
   errs() << "adding functions..\n";
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *f = fi;
-    auto finsert = functions.insert({f, FunctionState(f)});
+    FunctionState fstate(f);
+    auto finsert = functions.insert({f, fstate});
     assert(finsert.second);
-    addToFunctionWorkList(workList, &finsert.first->second); // FIXME: is this correct?
+    addToFunctionWorkList(workList, fstate);
   }
   
   FunctionsSetTy allocatingFunctions;
   findAllocatingFunctions(m, allocatingFunctions);
   
   while(!workList.empty()) {
-    FunctionState* fstate = workList.back();
+    FunctionState& fstate = getFunctionState(functions, workList.back());
     workList.pop_back();
 
     analyzeFunction(fstate, functions, workList, allocatingFunctions);
-    fstate->dirty = false;
+    fstate.dirty = false;
       // a function may be recursive
       //   but then it does not have to be re-analyzed just because of 
       //   that it has been re-analyzed
