@@ -21,6 +21,7 @@ typedef std::vector<bool> ArgsTy;
 typedef IndexedTable<AllocaInst> VarIndexTy;
 typedef IndexedTable<Argument> ArgIndexTy;
 
+const bool DEBUG = false;
 const unsigned MAX_DEPTH = 64;
 
 // the function takes at least one SEXP variable as argument
@@ -35,6 +36,14 @@ static bool hasSEXPArg(Function *fun) {
   return false;
 }
 
+static bool isSEXPParam(Function *fun, unsigned pidx) {
+  FunctionType* ftype = fun->getFunctionType();
+  if (pidx >= ftype->getNumParams()) {
+    return false;
+  }
+  return isSEXP(ftype->getParamType(pidx));
+}
+
 struct FunctionState {
 
   bool dirty; 			// needs to be re-analyzed
@@ -43,8 +52,9 @@ struct FunctionState {
   Function *fun;
   VarIndexTy varIndex;		// variable numbering
   ArgIndexTy argIndex;		// argument numbering
+  bool confused;
   
-  FunctionState(Function *fun): fun(fun), exposed(fun->arg_size(), false), usedAfterExposure(fun->arg_size(), false), dirty(false), varIndex(), argIndex() {
+  FunctionState(Function *fun): fun(fun), exposed(fun->arg_size(), false), usedAfterExposure(fun->arg_size(), false), dirty(false), varIndex(), argIndex(), confused(false) {
 
     // index variables
     for(inst_iterator ii = inst_begin(*fun), ie = inst_end(*fun); ii != ie; ++ii) {
@@ -98,6 +108,19 @@ struct FunctionState {
     }
     return hasSEXPArg(fun);
   }
+  
+  void markConfused() {
+    if (confused) {
+      return;
+    }
+    confused = true;
+    unsigned nargs = exposed.size();
+    for(unsigned i = 0; i < nargs; i++) { // conservatively mark all args exposed
+      // this also marks non-SEXP args
+      exposed.at(i) = true;
+      usedAfterExposure.at(i) = true;
+    }
+  }
 };
 
 typedef std::unordered_map<Function*, FunctionState> FunctionTableTy;
@@ -128,12 +151,13 @@ struct BlockState {
   BlockState(ProtectStackTy pstack, ArgsTy exposed, ArgsTy usedAfterExposure, VarsTy vars, bool dirty):
     pstack(pstack), exposed(exposed), usedAfterExposure(usedAfterExposure), vars(vars), dirty(dirty) {}
     
-  bool merge(BlockState s) {
+  bool merge(BlockState& s, FunctionState& fstate) {
     bool updated = false;
 
     unsigned depth = pstack.size();
     if (depth != s.pstack.size()) {
-      errs() << "stack sizes mismatch at merge";
+      errs() << "confused, stack sizes mismatch at merge, not merging\n";
+      fstate.markConfused();
       return updated;
     }
     for(unsigned i = 0; i < depth; i++) {
@@ -195,8 +219,6 @@ static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned 
   assert(fsearch != functions.end());
   
   FunctionState& fstate = fsearch->second;
-  errs() << "aidx=" << aidx << " exposed.size=" << fstate.exposed.size() << "\n";
-  assert(aidx < fstate.exposed.size());
   return fstate.exposed.at(aidx);
 }
 
@@ -206,6 +228,17 @@ static FunctionState& getFunctionState(FunctionTableTy& functions, Function *f) 
   return fsearch->second;
 }
 
+// in a call to function fun, is the aidx'th argument matched to a function parameter of type SEXP?
+//   (e.g. if passed through ..., it is not)
+
+static bool matchedToSEXPArg(unsigned aidx, Function* fun) {
+
+  if (aidx >= fun->arg_size()) {
+    return false;
+  }
+  return isSEXPParam(fun, aidx);
+} 
+
 static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
 
   Function *fun = fstate.fun;
@@ -213,8 +246,12 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   if (!hasSEXPArg(fun) || allocatingFunctions.find(fun) == allocatingFunctions.end()) {
     return; // trivially nothing exposed
   }
+  
+  if (fstate.confused) {
+    return; // the functions is too complicated for the tool
+  }
 
-  errs() << "analyzing function " << funName(fun) << " worklist size " << std::to_string(functionsWorkList.size()) << "\n";
+  if (DEBUG) errs() << "analyzing function " << funName(fun) << " worklist size " << std::to_string(functionsWorkList.size()) << "\n";
 
   unsigned nvars = fstate.varIndex.size();
   unsigned nargs = fstate.argIndex.size();
@@ -230,6 +267,8 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   while(!workList.empty()) {
     BasicBlock *bb = workList.back();
     workList.pop_back();
+    
+    //errs() << "   blocks:" << blocks.size() << " worklist: " << workList.size() << "\n";
     
     auto bsearch = blocks.find(bb);
     assert(bsearch != blocks.end());
@@ -281,35 +320,40 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
       CallSite cs(in);
       if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) {
         ArgsTy protects = protectedArgs(s.pstack, nargs);
+        Function *tgtFun = cs.getCalledFunction();
         unsigned tgtAidx = 0;
         for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++tgtAidx) {
           Value* val = *ai;
+          unsigned aidx;
+          bool passingArg = false;
+          
           if (Argument *arg = dyn_cast<Argument>(val)) {
-            unsigned aidx = fstate.argIndex.indexOf(arg);
-            if (isSEXP(arg->getType()) && !protects.at(aidx) && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) { // passing an unprotected argument directly
-              s.exposed.at(aidx) = true;
-            }
-            continue;
-          }
-          if (LoadInst *li = dyn_cast<LoadInst>(val)) {
+            aidx = fstate.argIndex.indexOf(arg);
+            passingArg = isSEXP(arg->getType());
+          } else if (LoadInst *li = dyn_cast<LoadInst>(val)) {
             if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // passing a variable
               unsigned vidx = fstate.varIndex.indexOf(var);
               int varState = s.vars.at(vidx);
               if (varState >= 0) {
-                unsigned aidx = varState;
-                if (isSEXP(var) && !protects.at(aidx) && isExposedBitSet(cs.getCalledFunction(), functions, tgtAidx)) {
-                  s.exposed.at(aidx) = true;
-                }
+                aidx = varState;
+                passingArg = isSEXP(var);
               }
             }
+          }
+          
+          if (!passingArg) {
             continue;
+          }
+          
+          // the subtle part: an argument may match to ... parameter
+          //   the tool does not handle it, so to be safe, we treat the argument as exposed
+          //   also if there was e.g. a void* parameter this conservativeness would apply      
+          if (!protects.at(aidx) && (!matchedToSEXPArg(tgtAidx, tgtFun) || isExposedBitSet(tgtFun, functions, tgtAidx))) {
+            s.exposed.at(aidx) = true;
           }
         }
         continue;
       }
-      
-      // FIXME: should somehow record that the tool did not understand some protection features (confusion)
-      //   functions with confusion should be treated specially
       
       std::string cfname = "";
       if (cs && cs.getCalledFunction()) {
@@ -345,14 +389,19 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         Value *val = cs.getArgument(0);
         if (ConstantInt* ci = dyn_cast<ConstantInt>(val)) {
           uint64_t ival = ci->getZExtValue();
-          while(ival--) {
+          while(ival-- && !s.pstack.empty()) {
             s.pstack.pop_back();
           }
           if (ival) {
-            // FIXME: report some warning/confused
-            errs() << "   confusion: unsupported form of unprotect\n";
+            errs() << "   confusion: unprotecting more value than protected\n";
+            fstate.markConfused();
+            return;
           }
         }
+      } else {
+        errs() << "   confusion: unsupported form of unprotect\n";
+        fstate.markConfused();
+        return;
       }
     }
     TerminatorInst *t = bb->getTerminator();
@@ -370,13 +419,16 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         BlockState& pstate = ssearch->second;
         
         // merge
-        if (pstate.merge(s) && !pstate.dirty) {
+        if (pstate.merge(s, fstate) && !pstate.dirty) {
+          if (fstate.confused) {
+            return;
+          }
           pstate.dirty = true;
           workList.push_back(succ);
         }
       }
     }
-    
+  
     if (ReturnInst::classof(t)) {
       updated = updated || fstate.merge(s.exposed, s.usedAfterExposure);
     }
@@ -402,7 +454,7 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
   FunctionTableTy functions; // function envelopes
   FunctionListTy workList; // functions to be re-analyzed
   
-  errs() << "adding functions..\n";
+  if (DEBUG) errs() << "adding functions..\n";
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *f = fi;
     FunctionState fstate(f);
@@ -417,6 +469,7 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
   while(!workList.empty()) {
     FunctionState& fstate = getFunctionState(functions, workList.back());
     workList.pop_back();
+    if (DEBUG) errs() << "size functions=" << functions.size() << " workList=" << workList.size() << "\n";
 
     analyzeFunction(fstate, functions, workList, allocatingFunctions);
     fstate.dirty = false;
