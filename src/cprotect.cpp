@@ -260,12 +260,24 @@ static bool matchedToSEXPArg(unsigned aidx, Function* fun) {
   return isSEXPParam(fun, aidx);
 } 
 
+// these callee-protect functions are written to conditionally protect (all arguments)
+// only if GC may run; the tool cannot find this out automatically
+
+static bool isSpecialCalleeProtect(Function *fun) {
+  if (!fun) return false;
+  return fun->getName() == "Rf_cons" || fun->getName() == "CONS_NR" || fun->getName() == "Rf_NewEnvironment" || fun->getName() == "mkPROMISE";
+}
+
 static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
 
   Function *fun = fstate.fun;
 
   if (!hasSEXPArg(fun) || allocatingFunctions.find(fun) == allocatingFunctions.end()) {
     return; // trivially nothing exposed
+  }
+  
+  if (isSpecialCalleeProtect(fun)) {
+    return; // nothing exposed (hardcoded)
   }
   
   if (fstate.confused) {
@@ -355,8 +367,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
       }
       
       CallSite cs(in);
-      if (cs && !cs.getCalledFunction()) {
-        // call to external function
+      if (cs && !cs.getCalledFunction()) { // call to external function
         // in allocation detection, this is treated as an allocating call, so for consistency we should
         // be also that conservative here, otherwise allocating functions that are allocating just because
         // of external calls would be reported as callee-protect... 
@@ -370,7 +381,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         }
         continue;
       }
-      if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) {
+      if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) { // call to allocating function
         Function *tgtFun = cs.getCalledFunction();
 
         ArgsTy protects = protectedArgs(s.pstack, nargs);
