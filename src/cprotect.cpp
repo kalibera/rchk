@@ -22,6 +22,7 @@ typedef IndexedTable<AllocaInst> VarIndexTy;
 typedef IndexedTable<Argument> ArgIndexTy;
 
 const bool DEBUG = false;
+const bool CONMSG = DEBUG; // print message when confused
 const unsigned MAX_DEPTH = 64;
 
 // the function takes at least one SEXP variable as argument
@@ -100,7 +101,7 @@ struct FunctionState {
   
   bool isNonTriviallyCalleeProtect(FunctionsSetTy& allocatingFunctions) {
 
-    if (!isCalleeProtect()) {
+    if (confused || !isCalleeProtect()) {
       return false;
     }
     if (allocatingFunctions.find(fun) == allocatingFunctions.end()) { // the functions allocates
@@ -156,7 +157,7 @@ struct BlockState {
 
     unsigned depth = pstack.size();
     if (depth != s.pstack.size()) {
-      errs() << "confused, stack sizes mismatch at merge, not merging\n";
+      if (CONMSG) errs() << "confused, stack sizes mismatch at merge, not merging\n";
       fstate.markConfused();
       return updated;
     }
@@ -212,6 +213,16 @@ static ArgsTy protectedArgs(ProtectStackTy pstack, unsigned nargs) {
   return protects;
 }
 
+static void dumpArgs(ArgsTy args) {
+
+  unsigned nargs = args.size();
+  for(unsigned i = 0; i < nargs; i++) {
+    if (args.at(i)) {
+      errs() << " " << std::to_string(i);
+    }
+  }
+}
+
 // note: the case may not be interesting (e.g. non-SEXP argument, not allocating function, that has to be checked extra)
 static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned aidx) {
 
@@ -220,6 +231,16 @@ static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned 
   
   FunctionState& fstate = fsearch->second;
   return fstate.exposed.at(aidx);
+}
+
+// note: the case may not be interesting (e.g. non-SEXP argument, not allocating function, that has to be checked extra)
+static bool isUsedAfterExposureBitSet(Function *fun, FunctionTableTy& functions, unsigned aidx) {
+
+  auto fsearch = functions.find(fun);
+  assert(fsearch != functions.end());
+  
+  FunctionState& fstate = fsearch->second;
+  return fstate.usedAfterExposure.at(aidx);
 }
 
 static FunctionState& getFunctionState(FunctionTableTy& functions, Function *f) {
@@ -252,10 +273,23 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   }
 
   if (DEBUG) errs() << "analyzing function " << funName(fun) << " worklist size " << std::to_string(functionsWorkList.size()) << "\n";
-
+  if (DEBUG) {
+    errs() << "   exposed ";
+    dumpArgs(fstate.exposed);
+    errs() << "\n";
+    errs() << "   usedAfterExposure ";
+    dumpArgs(fstate.usedAfterExposure);
+    errs() << "\n";
+  }
+  
   unsigned nvars = fstate.varIndex.size();
   unsigned nargs = fstate.argIndex.size();
   bool updated = false;
+  
+  ArgsTy sexpArgs(nargs, false);
+  for(unsigned i = 0; i < nargs; i++) {
+    sexpArgs.at(i) = isSEXPParam(fun, i); // is this caching needed?
+  }
   
   BlocksTy blocks;
   BlockWorkListTy workList;
@@ -286,6 +320,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
             unsigned aidx = fstate.argIndex.indexOf(arg);
             unsigned vidx = fstate.varIndex.indexOf(var);
             s.vars.at(vidx) = aidx;
+            if (DEBUG) errs() << "var = arg [" << varName(var) << "=" << aidx << "] " <<  sourceLocation(in) << "\n";
             continue;
           }
           
@@ -294,6 +329,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
               unsigned vidx = fstate.varIndex.indexOf(var);
               unsigned svidx = fstate.varIndex.indexOf(srcVar);
               s.vars.at(vidx) = s.vars.at(svidx);
+              if (DEBUG) errs() << "var = srcVar [" << varName(var) << " = " << varName(srcVar) << "] " << sourceLocation(in) << "\n";
               continue;
             }
           }
@@ -312,15 +348,37 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
             if (s.exposed.at(aidx)) {
               s.usedAfterExposure.at(aidx) = true;
             }
+            if (DEBUG) errs() << "load of var " << varName(var) << " holding argument " << aidx << " " << sourceLocation(in) << "\n";
           }
         }
         continue;
       }
       
       CallSite cs(in);
-      if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) {
+      if (cs && !cs.getCalledFunction()) {
+        // call to external function
+        // in allocation detection, this is treated as an allocating call, so for consistency we should
+        // be also that conservative here, otherwise allocating functions that are allocating just because
+        // of external calls would be reported as callee-protect... 
+        
         ArgsTy protects = protectedArgs(s.pstack, nargs);
+        for(unsigned i = 0; i < nargs; i++) {
+          if (!protects.at(i) && sexpArgs.at(i)) {
+            s.exposed.at(i) = true;
+            s.usedAfterExposure.at(i) = true;
+          }
+        }
+        continue;
+      }
+      if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) {
         Function *tgtFun = cs.getCalledFunction();
+
+        ArgsTy protects = protectedArgs(s.pstack, nargs);
+        ArgsTy passedInCall(nargs, false);        
+        ArgsTy passedToNonSEXPArg(nargs, false);
+        ArgsTy exposedInCall(nargs, false);
+        ArgsTy usedAfterExposureInCall(nargs, false);
+        
         unsigned tgtAidx = 0;
         for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++tgtAidx) {
           Value* val = *ai;
@@ -330,6 +388,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
           if (Argument *arg = dyn_cast<Argument>(val)) {
             aidx = fstate.argIndex.indexOf(arg);
             passingArg = isSEXP(arg->getType());
+            if (DEBUG && passingArg) errs() << "passing argument " << aidx << " directly " << sourceLocation(in) << "\n";            
           } else if (LoadInst *li = dyn_cast<LoadInst>(val)) {
             if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // passing a variable
               unsigned vidx = fstate.varIndex.indexOf(var);
@@ -337,6 +396,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
               if (varState >= 0) {
                 aidx = varState;
                 passingArg = isSEXP(var);
+                if (DEBUG && passingArg) errs() << "passing argument " << aidx << " through variable " << varName(var) << " " << sourceLocation(in) << "\n";
               }
             }
           }
@@ -344,12 +404,48 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
           if (!passingArg) {
             continue;
           }
+          passedInCall.at(aidx) = true;
           
-          // the subtle part: an argument may match to ... parameter
-          //   the tool does not handle it, so to be safe, we treat the argument as exposed
-          //   also if there was e.g. a void* parameter this conservativeness would apply      
-          if (!protects.at(aidx) && (!matchedToSEXPArg(tgtAidx, tgtFun) || isExposedBitSet(tgtFun, functions, tgtAidx))) {
-            s.exposed.at(aidx) = true;
+          if (!matchedToSEXPArg(tgtAidx, tgtFun)) {
+            // the subtle part: an argument may match to ... parameter
+            //   the tool does not handle it, so to be safe, we treat the argument as exposed
+            //   also if there was e.g. a void* parameter this conservativeness would apply
+            passedToNonSEXPArg.at(aidx) = true;
+            continue;
+          }
+          
+          if (isExposedBitSet(tgtFun, functions, tgtAidx)) {
+            exposedInCall.at(aidx) = true;
+          }
+          if (isUsedAfterExposureBitSet(tgtFun, functions, tgtAidx)) {
+            usedAfterExposureInCall.at(aidx) = true;
+          }
+        }
+        // first mark all arguments as exposed, but later fix-up for the case when
+        //   some of them is passed to a callee-protect function
+        for(unsigned i = 0; i < nargs; i++) {
+          if (!sexpArgs.at(i)) {
+            continue;
+          }
+          if (protects.at(i)) {
+            continue; // arg is protected, the callee can do anything
+          }
+          if (!passedInCall.at(i)) {
+            s.exposed.at(i) = true; // arg is not passed to the (allocating) function
+          }
+          if (passedToNonSEXPArg.at(i)) {
+            // be conservative
+            s.exposed.at(i) = true;
+            s.usedAfterExposure.at(i) = true;
+          }
+          
+          if (exposedInCall.at(i)) {
+            s.exposed.at(i) = true; // not protected, exposed at least through one parameter
+            if (DEBUG) errs() << "   argument " << std::to_string(i) << " is exposed at call to " << funName(tgtFun) << "\n";
+          }
+          if (usedAfterExposureInCall.at(i) || passedToNonSEXPArg.at(i)) {
+            s.usedAfterExposure.at(i) = true; // not protected, used after exposure at least through one parameter
+            if (DEBUG) errs() << "   argument " << std::to_string(i) << " is used after exposure at call to " << funName(tgtFun) << "\n";
           }
         }
         continue;
@@ -368,18 +464,23 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         if (Argument *arg = dyn_cast<Argument>(val)) { // PROTECT(arg)
           unsigned aidx = fstate.argIndex.indexOf(arg);
           protValue = aidx;  
+          if (DEBUG) errs() << "protecting argument directly " << sourceLocation(in) << "\n";
         }
         if (LoadInst *li = dyn_cast<LoadInst>(val)) {
           if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // PROTECT(var)
             unsigned vidx = fstate.varIndex.indexOf(var);
             int varState = s.vars.at(vidx);
             protValue = varState;
+            if (DEBUG) errs() << "protecting argument via variable " << sourceLocation(in) << "\n";
           }
         }
         if (s.pstack.size() < MAX_DEPTH) {
           s.pstack.push_back(protValue);
+          if (DEBUG) errs() << "pushing value " << std::to_string(protValue) << " to protect stack " << sourceLocation(in) << "\n";
         } else {
-          errs() << "maximum stack depth reached\n";
+          errs() << "maximum stack depth reached (treating as confusion)\n";
+          fstate.markConfused();
+          return;
         }
         continue;
       }
@@ -389,21 +490,26 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         Value *val = cs.getArgument(0);
         if (ConstantInt* ci = dyn_cast<ConstantInt>(val)) {
           uint64_t ival = ci->getZExtValue();
-          while(ival-- && !s.pstack.empty()) {
+          if (DEBUG) errs() << "unprotecting " << std::to_string(ival) << " values, stack size " << std::to_string(s.pstack.size()) << " " << sourceLocation(in) << "\n";
+          while(ival > 0 && !s.pstack.empty()) {
+            ival--;
             s.pstack.pop_back();
           }
+
           if (ival) {
-            errs() << "   confusion: unprotecting more value than protected\n";
+            if (CONMSG) errs() << "   confusion: unprotecting more values than protected\n";
             fstate.markConfused();
             return;
           }
+          
+        } else {
+          if (CONMSG) errs() << "   confusion: unsupported form of unprotect " << sourceLocation(in) << "\n";
+          fstate.markConfused();
+          return;
         }
-      } else {
-        errs() << "   confusion: unsupported form of unprotect\n";
-        fstate.markConfused();
-        return;
       }
     }
+    
     TerminatorInst *t = bb->getTerminator();
     for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
       BasicBlock *succ = t->getSuccessor(i);
@@ -421,6 +527,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         // merge
         if (pstate.merge(s, fstate) && !pstate.dirty) {
           if (fstate.confused) {
+            if (CONMSG) errs() << "   confusion after merging into successor";
             return;
           }
           pstate.dirty = true;
@@ -430,9 +537,20 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
     }
   
     if (ReturnInst::classof(t)) {
-      updated = updated || fstate.merge(s.exposed, s.usedAfterExposure);
+      updated = fstate.merge(s.exposed, s.usedAfterExposure) || updated;
     }
   }
+
+  if (DEBUG) errs() << "done analyzing function " << funName(fun) << " updated " << updated << "\n";
+  if (DEBUG) {
+    errs() << "   exposed ";
+    dumpArgs(fstate.exposed);
+    errs() << "\n";
+    errs() << "   usedAfterExposure ";
+    dumpArgs(fstate.usedAfterExposure);
+    errs() << "\n";
+  }
+
   if (updated) {
     // mark dirty all functions calling this function
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
@@ -443,6 +561,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
           Function *pf = bb->getParent();
           FunctionState& pstate = getFunctionState(functions, pf);
           addToFunctionWorkList(functionsWorkList, pstate);
+          if (DEBUG) errs() << "adding function " << funName(pf) << " to worklist (updated its callee)\n";
         }
       }
     }

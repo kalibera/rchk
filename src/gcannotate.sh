@@ -19,7 +19,7 @@ echo -n "$RBC..."
 $CHECK $RBC >$TMPF
 echo " Done."
 
-find $RHOME -name "*.bc" | grep -v "a.out.bc" | grep -v "R.bin.bc"  | while read F ; do
+find $RHOME -name "*.bc" | grep -v "a.out.bc" | grep -v "R.bin.bc" | grep -v "bitcode" | while read F ; do
   echo -n "$F..."
   $CHECK $RBC $F >>$TMPF
   echo " Done."
