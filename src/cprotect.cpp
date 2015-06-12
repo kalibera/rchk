@@ -268,20 +268,38 @@ static bool isSpecialCalleeProtect(Function *fun) {
   return fun->getName() == "Rf_cons" || fun->getName() == "CONS_NR" || fun->getName() == "Rf_NewEnvironment" || fun->getName() == "mkPROMISE";
 }
 
+static void addCallersToWorkList(Function *fun, FunctionTableTy& functions, FunctionListTy& functionsWorkList) {
+  // mark dirty all functions calling this function
+  for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
+    User *u = *ui;
+
+    if (Instruction *in = dyn_cast<Instruction>(u)) {
+      if (BasicBlock *bb = dyn_cast<BasicBlock>(in->getParent())) {
+        Function *pf = bb->getParent();
+        FunctionState& pstate = getFunctionState(functions, pf);
+        addToFunctionWorkList(functionsWorkList, pstate);
+        if (DEBUG) errs() << "adding function " << funName(pf) << " to worklist (updated its callee)\n";
+      }
+    }
+  }
+}
+
 static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
 
   Function *fun = fstate.fun;
 
+  // these are constant properties of the function
   if (!hasSEXPArg(fun) || allocatingFunctions.find(fun) == allocatingFunctions.end()) {
     return; // trivially nothing exposed
   }
-  
   if (isSpecialCalleeProtect(fun)) {
     return; // nothing exposed (hardcoded)
   }
   
+  // this can only change from non-confused to confused
   if (fstate.confused) {
     return; // the functions is too complicated for the tool
+      // it has already been marked as exposing everything
   }
 
   if (DEBUG) errs() << "analyzing function " << funName(fun) << " worklist size " << std::to_string(functionsWorkList.size()) << "\n";
@@ -293,10 +311,20 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
     dumpArgs(fstate.usedAfterExposure);
     errs() << "\n";
   }
+
+  // keep copy of the original state to detect changes
+  
+  ArgsTy oldExposed(fstate.exposed);
+  ArgsTy oldUsedAfterExposure(fstate.usedAfterExposure);
   
   unsigned nvars = fstate.varIndex.size();
   unsigned nargs = fstate.argIndex.size();
-  bool updated = false;
+  
+  for(unsigned i = 0; i < nargs; i++) {
+    fstate.exposed.at(i) = false;
+    fstate.usedAfterExposure.at(i) = false;
+    // could instead use swap, but this is more readable
+  }
   
   ArgsTy sexpArgs(nargs, false);
   for(unsigned i = 0; i < nargs; i++) {
@@ -442,12 +470,14 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
             continue; // arg is protected, the callee can do anything
           }
           if (!passedInCall.at(i)) {
+            if (DEBUG) errs() << "argument " << std::to_string(i) << " exposed because not passed to allocating function " << funName(tgtFun) << "\n";
             s.exposed.at(i) = true; // arg is not passed to the (allocating) function
           }
           if (passedToNonSEXPArg.at(i)) {
             // be conservative
             s.exposed.at(i) = true;
             s.usedAfterExposure.at(i) = true;
+            if (DEBUG) errs() << "argument " << std::to_string(i) << " assumed exposed+usedAfterExposure because passed to non-SEXP parameter of " << funName(tgtFun) << "\n";
           }
           
           if (exposedInCall.at(i)) {
@@ -491,6 +521,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         } else {
           errs() << "maximum stack depth reached (treating as confusion)\n";
           fstate.markConfused();
+          addCallersToWorkList(fun, functions, functionsWorkList);
           return;
         }
         continue;
@@ -510,12 +541,14 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
           if (ival) {
             if (CONMSG) errs() << "   confusion: unprotecting more values than protected\n";
             fstate.markConfused();
+            addCallersToWorkList(fun, functions, functionsWorkList);
             return;
           }
           
         } else {
           if (CONMSG) errs() << "   confusion: unsupported form of unprotect " << sourceLocation(in) << "\n";
           fstate.markConfused();
+          addCallersToWorkList(fun, functions, functionsWorkList);
           return;
         }
       }
@@ -539,6 +572,8 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         if (pstate.merge(s, fstate) && !pstate.dirty) {
           if (fstate.confused) {
             if (CONMSG) errs() << "   confusion after merging into successor";
+            fstate.markConfused();
+            addCallersToWorkList(fun, functions, functionsWorkList);
             return;
           }
           pstate.dirty = true;
@@ -548,11 +583,11 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
     }
   
     if (ReturnInst::classof(t)) {
-      updated = fstate.merge(s.exposed, s.usedAfterExposure) || updated;
+      fstate.merge(s.exposed, s.usedAfterExposure);
     }
   }
 
-  if (DEBUG) errs() << "done analyzing function " << funName(fun) << " updated " << updated << "\n";
+  if (DEBUG) errs() << "done analyzing function " << funName(fun) << "\n";
   if (DEBUG) {
     errs() << "   exposed ";
     dumpArgs(fstate.exposed);
@@ -562,20 +597,9 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
     errs() << "\n";
   }
 
-  if (updated) {
-    // mark dirty all functions calling this function
-    for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
-      User *u = *ui;
-
-      if (Instruction *in = dyn_cast<Instruction>(u)) {
-        if (BasicBlock *bb = dyn_cast<BasicBlock>(in->getParent())) {
-          Function *pf = bb->getParent();
-          FunctionState& pstate = getFunctionState(functions, pf);
-          addToFunctionWorkList(functionsWorkList, pstate);
-          if (DEBUG) errs() << "adding function " << funName(pf) << " to worklist (updated its callee)\n";
-        }
-      }
-    }
+  if (fstate.exposed != oldExposed || fstate.usedAfterExposure != oldUsedAfterExposure) {
+    if (DEBUG) errs() << "adding callers of " << funName(fun) << " to worklist, because " << funName(fun) << " analysis has changed.\n";
+    addCallersToWorkList(fun, functions, functionsWorkList);
   }
 }
 
