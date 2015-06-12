@@ -387,6 +387,11 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
             assert(aidx < s.exposed.size() && aidx < s.usedAfterExposure.size());
             if (s.exposed.at(aidx)) {
               s.usedAfterExposure.at(aidx) = true;
+              // Note: this does not work well for functions that make a value exposed
+              //   note that if the loaded value is to be passed to a function that exposes it,
+              //   the exposed bit is not yet set, so usedAfterExposure will not be set, either
+              //
+              //   but, this is handled in the function call case below
             }
             if (DEBUG) errs() << "load of var " << varName(var) << " holding argument " << aidx << " " << sourceLocation(in) << "\n";
           }
@@ -603,7 +608,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   }
 }
 
-FunctionsSetTy findCalleeProtectFunctions(Module *m) {
+CProtectInfo findCalleeProtectFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
 
   FunctionTableTy functions; // function envelopes
   FunctionListTy workList; // functions to be re-analyzed
@@ -617,9 +622,6 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
     addToFunctionWorkList(workList, fstate);
   }
   
-  FunctionsSetTy allocatingFunctions;
-  findAllocatingFunctions(m, allocatingFunctions);
-  
   while(!workList.empty()) {
     FunctionState& fstate = getFunctionState(functions, workList.back());
     workList.pop_back();
@@ -632,16 +634,128 @@ FunctionsSetTy findCalleeProtectFunctions(Module *m) {
       //   that it has been re-analyzed
   }  
   
-  FunctionsSetTy cprotect;
+  CProtectInfo cprotect;
   for(FunctionTableTy::iterator fi = functions.begin(), fe = functions.end(); fi != fe; ++fi) {
     Function* fun = fi->first;
     FunctionState& fstate = fi->second;
     
-    if (fstate.isNonTriviallyCalleeProtect(allocatingFunctions)) {
-      errs() << "Function " << funName(fun) << " is callee-protect.\n";
-      cprotect.insert(fun);
+    unsigned nargs = fstate.exposed.size();
+    CPArgsTy cpargs(nargs, CP_TRIVIAL);
+    bool isAllocating = allocatingFunctions.find(fun) != allocatingFunctions.end();
+    
+    for(unsigned i = 0; i < nargs; i++) {
+      if (!isAllocating || !isSEXPParam(fun, i)) {
+        cpargs.at(i) = CP_TRIVIAL;
+        continue;
+      }
+      if (fstate.exposed.at(i)) {
+        if (!fstate.usedAfterExposure.at(i)) {
+          cpargs.at(i) = CP_CALLEE_SAFE;
+        } else {
+          cpargs.at(i) = CP_CALLER_PROTECT;
+        }
+      } else {
+        cpargs.at(i) = CP_CALLEE_PROTECT;
+      }
     }
+    cprotect.map.insert({fun, cpargs});
   }
-  
+
   return cprotect;
 }
+
+bool CProtectInfo::isCalleeProtect(Function *fun, int argIndex, bool onlyNonTrivially) {
+  auto fsearch = map.find(fun);
+  assert(fsearch != map.end()); 
+  CPArgsTy& cpargs = fsearch->second;
+  CPKind k = cpargs.at(argIndex);
+  if (onlyNonTrivially) {
+    return k == CP_CALLEE_PROTECT;
+  } else {
+    return k == CP_CALLEE_PROTECT || k == CP_TRIVIAL;
+  }
+}
+
+bool CProtectInfo::isCalleeProtect(Function *fun, bool onlyNonTrivially) {
+  auto fsearch = map.find(fun);
+  assert(fsearch != map.end()); 
+  CPArgsTy& cpargs = fsearch->second;
+  
+  unsigned nargs = cpargs.size();
+  bool seenNonTrivial = false;
+  
+  for(unsigned i = 0; i < nargs; i++) {
+    CPKind k = cpargs.at(i);
+    if (k == CP_TRIVIAL) {
+      continue;
+    }
+    if (k == CP_CALLEE_PROTECT) {
+      seenNonTrivial = true;
+      continue;
+    }
+    return false;
+  }
+  if (onlyNonTrivially) {
+    return seenNonTrivial;
+  } else {
+    return true;
+  }
+}
+
+bool CProtectInfo::isCalleeSafe(Function *fun, int argIndex, bool onlyNonTrivially) {
+  auto fsearch = map.find(fun);
+  assert(fsearch != map.end()); 
+  CPArgsTy& cpargs = fsearch->second;
+  
+  CPKind k = cpargs.at(argIndex);
+  
+  if (onlyNonTrivially) {
+    return k == CP_CALLEE_SAFE;
+  } else {
+    return k == CP_CALLEE_SAFE || CP_TRIVIAL || k == CP_CALLEE_PROTECT;
+  }
+}
+
+bool CProtectInfo::isCalleeSafe(Function *fun, bool onlyNonTrivially) {
+  auto fsearch = map.find(fun);
+  assert(fsearch != map.end()); 
+  CPArgsTy& cpargs = fsearch->second;
+  
+  unsigned nargs = cpargs.size();
+  bool seenNonTrivial = false;
+  
+  for(unsigned i = 0; i < nargs; i++) {
+    CPKind k = cpargs.at(i);
+    if (k == CP_TRIVIAL || k == CP_CALLEE_PROTECT) {
+      continue;
+    }
+    if (k == CP_CALLEE_SAFE) {
+      seenNonTrivial = true;
+      continue;
+    }
+    return false;
+  }
+  if (onlyNonTrivially) {
+    return seenNonTrivial;
+  } else {
+    return true;
+  }
+}
+
+bool CProtectInfo::isNonTrivial(Function *fun) {
+
+  auto fsearch = map.find(fun);
+  assert(fsearch != map.end()); 
+  CPArgsTy& cpargs = fsearch->second;
+  
+  unsigned nargs = cpargs.size();
+  
+  for(unsigned i = 0; i < nargs; i++) {
+    CPKind k = cpargs.at(i);
+    if (k != CP_TRIVIAL) {
+      return true;
+    }
+  }
+  return false;
+}
+
