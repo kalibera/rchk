@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
   
   FunctionsSetTy possibleAllocators;
-  findPossibleAllocators(m, possibleAllocators);
+  findPossibleAllocators(m, possibleAllocators); // FIXME: use context-sensitive (more precise) detection
 
   for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
     if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {

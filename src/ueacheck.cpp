@@ -205,7 +205,7 @@ int main(int argc, char* argv[])
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 
   FunctionsSetTy possibleAllocators;
-  findPossibleAllocators(m, possibleAllocators);
+  findPossibleAllocators(m, possibleAllocators); // FIXME: use context-sensitive (more precise) allocator detection
 
   DominatorTreeWrapperPass dtPass;
   
