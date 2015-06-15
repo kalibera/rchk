@@ -231,8 +231,17 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
 
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
 
+  FunctionsSetTy onlyFunctions;
+
+  for(Module::iterator f = m->begin(), fe = m->end(); f != fe; ++f) {
+
+    if (!isAssertedNonAllocating(f)) {
+      onlyFunctions.insert(f);
+    }
+  }
+  
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */, NULL, NULL, getGCFunction(m) /* assume external functions allocate */);
+  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, NULL, getGCFunction(m) /* assume external functions allocate */);
 
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
 
@@ -240,7 +249,7 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
     Function *f = const_cast<Function *>(fi->second.function);
     if (!f) continue;
 
-    if ((fi->second.callsFunctionMap)[gcFunctionIndex] && !isAssertedNonAllocating(f)) {
+    if ((fi->second.callsFunctionMap)[gcFunctionIndex]) {
       allocatingFunctions.insert(f);
     }
   }
