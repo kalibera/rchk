@@ -46,7 +46,7 @@ SOURCES := $(wildcard *.cpp)
 DEPENDS := $(SOURCES:.cpp=.d)
 OBJECTS := $(SOURCES:.cpp=.o)
 
-TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck
+TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck
 
 all: $(TOOLS)
 
@@ -65,6 +65,8 @@ bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cg
 ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
 
 symcheck: symcheck.o symbols.o common.o
+
+glcheck: glcheck.o symbols.o common.o
 
 clean:
 	rm -f $(OBJECTS) $(DEPENDS) $(TOOLS)
