@@ -56,6 +56,35 @@ static void unprotectAll(FreshVarsTy& freshVars) {
   }
 }
 
+static void issueConditionalMessage(Instruction *in, AllocaInst *var, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos,
+    LiveVarsTy& liveVars, std::string& message) {
+
+  auto lsearch = liveVars.find(in);
+  if (lsearch != liveVars.end()) {
+    // there should be a record for all instructions
+    VarsLiveness& vlive = lsearch->second;
+    if (vlive.isDefinitelyUsed(var)) {
+      msg.info(MSG_PFX + message, in);
+      if (msg.trace()) msg.trace("issued an info directly because variable \"" + varName(var) + "\" is definitely live", in);
+      refinableInfos++;
+      return;
+    }
+  } 
+    
+  // prepare a conditional message - the variable may be live, but we don't know
+  auto vsearch = freshVars.condMsgs.find(var);
+  if (vsearch == freshVars.condMsgs.end()) {
+    DelayedLineMessenger dmsg(&msg);
+    dmsg.info(MSG_PFX + message, in);
+    freshVars.condMsgs.insert({var, dmsg});
+    if (msg.debug()) msg.debug(MSG_PFX + "created conditional message \"" + message + "\" first for variable " + varName(var), in);
+  } else {
+    DelayedLineMessenger& dmsg = vsearch->second;
+    dmsg.info(MSG_PFX + message, in);
+    if (msg.debug()) msg.debug(MSG_PFX + "added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
+  }
+}
+
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
   
@@ -278,7 +307,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       if (!src || !cm->isPossibleCAllocator(src)) {
         continue;
       }
-      if (aidx < tgt->fun->arg_size() &&  cprotect.isCalleeSafe(tgt->fun, aidx, false)) {
+      if (aidx < tgt->fun->arg_size() && cprotect.isCalleeSafe(tgt->fun, aidx, false)) {
         // we are directly passing an argument, so it does not matter the argument is destroyed by the call
         // (well, except that the value may be used again, in the LLVM bitcode -- it is an approximation that we ignore this)
         continue;
@@ -298,8 +327,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     if (msg.trace()) msg.trace(MSG_PFX + "checking freshvars at allocating call to " + funName(tgt), in);
   
     // compute all variables passed to the call
-    //   (if a fresh variable is passed to a function, it is not to be reported here as error)
-    // FIXME: perhaps should do this only for callee-protect functions?
+    //   (if a fresh variable is passed to a function, it is not to be reported here as error, but it is done at handleLoad)
     
     VarsSetTy passedVars;
     FunctionType* ftype = f->getFunctionType();
@@ -351,36 +379,13 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
       }
       
       std::string message = "unprotected variable " + varName(var) + " while calling allocating function " + funName(tgt);
-
-      auto lsearch = liveVars.find(in);
-      if (lsearch != liveVars.end()) {
-        // there should be a record for all instructions
-        VarsLiveness& vlive = lsearch->second;
-        if (vlive.isDefinitelyUsed(var)) {
-          msg.info(MSG_PFX + message, in);
-          if (msg.trace()) msg.trace("issued an info directly because variable \"" + varName(var) + "\" is definitely live", in);
-          continue;
-        }
-      } 
-    
-      // prepare a conditional message - the variable may be live, but we don't know
-      auto vsearch = freshVars.condMsgs.find(var);
-      if (vsearch == freshVars.condMsgs.end()) {
-        DelayedLineMessenger dmsg(&msg);
-        dmsg.info(MSG_PFX + message, in);
-        freshVars.condMsgs.insert({var, dmsg});
-        if (msg.debug()) msg.debug(MSG_PFX + "created conditional message \"" + message + "\" first for variable " + varName(var), in);
-      } else {
-        DelayedLineMessenger& dmsg = vsearch->second;
-        dmsg.info(MSG_PFX + message, in);
-        if (msg.debug()) msg.debug(MSG_PFX + "added conditional message \"" + message + "\" for variable " + varName(var) + "(size " + std::to_string(dmsg.size()) + ")", in);
-      }
+      issueConditionalMessage(in, var, freshVars, msg, refinableInfos, liveVars, message);
     }
   }
 }
 
 static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg,
-    unsigned& refinableInfos, CProtectInfo& cprotect) {
+    unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
     
   if (QUIET_WHEN_CONFUSED && freshVars.confused) {
     return;
@@ -491,8 +496,25 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   if (var->getName().str().empty()) {
     nameSuffix = " <arg " + std::to_string(aidx+1) + ">";
   }
-  msg.info(MSG_PFX + "calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
-  refinableInfos++;
+  
+  if (aidx >= tgt->fun->arg_size()  || !cprotect.isCalleeSafe(tgt->fun, aidx, false)) {
+    // passing an unprotected argument to a function parameter that is not callee-safe, this is always an error
+    
+
+    msg.info(MSG_PFX + "calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
+    refinableInfos++;
+  }
+  
+  // the function the argument is passed to is callee-safe for the respective parameter
+  // a warning has to be reported if the value of this argument were to be used again
+  
+  Instruction *callIn = cs.getInstruction();
+  assert(callIn == li->user_back());
+  
+  std::string message = MSG_PFX + "allocating function " + funName(tgt) + " may destroy its unprotected argument ("
+    + varName(var) + nameSuffix + "), which is later used.";
+
+  issueConditionalMessage(in, var, freshVars, msg, refinableInfos, liveVars, message);
 }
 
 static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
@@ -570,7 +592,7 @@ void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGu
     FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
 
   handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
-  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos, cprotect);
+  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
   handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
 }
 
