@@ -35,7 +35,7 @@ int main(int argc, char* argv[])
   const CalledFunctionsIndexTy* calledFunctions = cm->getCalledFunctions();
 
   outs() << "Callee protect functions: \n";
-  CProtectInfo cprotect = findCalleeProtectFunctions(m, *allocatingFunctions);
+  CProtectInfo cprotect = findCalleeProtectFunctions(m, *cm->getContextSensitiveAllocatingFunctions());
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = fi;
     if (functionsOfInterest.find(fun) == functionsOfInterest.end()) {
