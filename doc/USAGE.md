@@ -84,7 +84,7 @@ manually in [pqR](http://www.pqr-project.org/) and I've ported those fixes
 to R-devel.  In the example above, `ScalarLogical` indeed allocates and
 returns the allocated object.  `install` may also allocate and return the
 allocated object, but it would also protect it implicitly by putting it into the symbol
-table.  The `lang5` function is callee-protect, it protects its arguments. 
+table.  The `lang5` function is callee-protect, it protects (all) its arguments. 
 If `ScalarLogical` is executed before `install`, `install` may allocate and
 kill the object allocated by `ScalarLogical`.  In C, the order of execution
 of `install` and `ScalarLogical` is undefined, so this can happen.
@@ -319,10 +319,15 @@ warning when it gets confused.
 The tool also detects when an allocating function is called with an
 allocating argument, which is often an error (by convention, most R
 functions should be called with arguments protected by callers), but there
-are many exceptions - functions that protect their arguments.  The tool
-cannot yet detect this, but it has a hard-coded list of such callee-protect
-functions from the R source code.  This is indeed error prone as the R code
-can change between versions.
+are many exceptions - functions that protect their arguments
+(callee-protect) or functions that protect their argument as long as they
+need them, but expose them to a GC after they don't (callee-safe).  In fact,
+a function may treat some arguments as callee-protect, while other as
+callee-safe.  The tool can detect callee-safe and callee-protect functions
+(not all, but many, and there is a hardcoded list of important
+callee-protect functions that the tool can't detect).  The automated
+detection is per-argument, so functions with mixed semantics are supported
+as well.
 
 One source of false alarms is when the tool thinks that some function
 returns a newly allocated object, but in fact it does not in the particular
@@ -375,7 +380,7 @@ bizarre.  This may be caused by approximation at the level of intepretting
 the LLVM bitcode - phi nodes are often not supported or their semantics is
 simplified.  Also, the tool only maintains some state for local variables,
 but not for other LLVM bitcode registers; this can lead to errors when the
-compiler generates unusal code (e.g.  an outdated value of a local variable
+compiler generates unusual code (e.g.  an outdated value of a local variable
 is read from an LLVM register); note the CLANG compiler has to be run with
 all optimizations disabled.
 
@@ -390,5 +395,5 @@ the other hand, the resulting bitcode is harder to check as it has indeed
 more local variables, so one may need a lot of RAM for the checking.  Using
 the tool does not eliminate these errors entirely.  It may not remove all
 phi nodes (even in practice it seems to), and it will not remove unusual
-code (e.g.  the use of an oudated variable value) that happens within a
+code (e.g.  the use of an outdated variable value) that happens within a
 single basic block.

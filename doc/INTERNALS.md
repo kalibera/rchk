@@ -146,19 +146,21 @@ be uninitialized).
 The context-sensitive allocator detection, balance checking, and unprotected
 objects checking (all described later) are all based on the same core
 checking algorithm.  This algorithm is (based on) a work-list algorithm for
-forward data flow analysis.  It ''simulates'' execution of the checked
-function, maintaining a *state*.  The state includes the current instruction
-pointer and more, depending on the precision of checking and the tool.  The
-checker remembers states that were already explored, at basic block
-granularity, to avoid checking states multiple times (e.g.  due to loops). 
-When reaching the terminator of a basic block, the tool discovers possibly
+forward data flow analysis, but it also has features of systematic state
+search.  It does not ''merge'' states on back-branches, but instead keeps
+checking the newly created states.  The algorithm ''simulates'' execution of
+the checked function, maintaining a *state*.  The state includes the current
+instruction pointer and more, depending on the precision of checking and the
+tool.  The checker remembers states that were already explored, at basic
+block granularity, to avoid checking states multiple times (e.g.  due to
+loops).  When reaching the terminator of a basic block, the tool discovers
 new states to explore (conservatively allowing all successor basic blocks,
 but with more precise tools only a subset of them).  The simulation
 terminates when there are no new states to explore.  To ensure termination,
 the additional information in the states must not be too precise compared to
 the precision of adding successors - e.g.  remembering in the state the
 exact value of the loop control variable, but not being able to tell when
-the loop should finish, would lead to infinite simulation.
+the loop should finish, would indeed lead to infinite simulation.
 
 ```
 workList =
@@ -331,6 +333,70 @@ The detection is only approximate. E.g., the algorithm may even miss some
 allocators when a function does not allocate, but returns one of its
 arguments allocated by the caller.
 
+## Detection of Callee-Protect and Callee-Safe Functions
+
+Most functions in R are/should be called with SEXP arguments protected by
+caller. This convention has a number of advantages, but perhaps to save some
+code bloat, some functions protect their arguments on their own. The tool
+differentiates between these cases:
+
+* function must be called with its argument protected, otherwise it may
+  crash (*caller protect*)
+* function may be called with its argument unprotected, the function will
+  function correctly, but it may expose the unprotected argument to GC, so
+  the argument may not be used after the function finishes (*callee safe*)
+* function may be called with its argument unprotected, the argument will be
+  protected by the function whenever there is a possible GC during the
+  function execution, and so it is safe to use after the function returns 
+  (*callee protect*)
+
+The detection is implemented using a traditional data-flow analysis with
+merging states on back-branches.  The analysis is intra-procedural (going
+through basic blocks of a function) as well as inter-procedural
+(re-analyzing a function whenever any function it calls has been
+re-analyzed).  The analysis is mostly sound, it is written to err on the
+safe side with respect to what the caller has to do with pointers it passes
+to functions (caller protect is always safe, callee-safe is safer than
+callee-protect).
+
+In the intra-procedural checking state, the tool maintains for each basic
+block:
+
+* bitmap of arguments (possibly) *exposed* to a GC
+* bitmap of arguments (possibly) *used-after-exposure* to a GC
+* protection stack abstraction - for each value on the stack, whether it is
+  definitely a value of a function argument (and of which argument)
+* local variables abstraction - for each variable, whether it is definitely
+  a value of a function argument (and of which argument)
+
+The tool only supports simple ways of protection (unprotection using a
+constant like `UNPROTECT(3)`), so more complicated callee-protect or
+callee-safe functions will not be detected. 
+
+In the inter-procedural checking state, the tool maintains for each
+function:
+
+* bitmap of arguments (possibly) *exposed* to a GC
+* bitmap of arguments (possibly) *used-after-exposure* to a GC
+
+A function argument not *exposed* to a GC (and hence trivially not
+used-after-exposure) is *callee-protect*. This statement is non-trivial only
+when the argument is actually an object pointer and the function allocates.
+A callee-protect function is a function with all arguments callee-protect.
+
+A function argument not *used-after-exposure* to a GC is *callee-safe*. Any
+callee-protect argument is also callee-safe. A callee-safe function is a
+function with all arguments callee-safe.
+
+This analysis uses the detection of allocating functions on input. It is
+path-insensitive and hence does not know the context for functions called
+and cannot take full advantage of context-sensitive allocator detection. 
+However, to improve precision, it uses the more expensive context-sensitive
+allocator detection, but simply ignores the context of the allocator
+functions (this is still more precise than context-insensitive allocator
+detection, because context is taken advantage of deeper in the call tree of
+allocators).
+
 ## Balance Checking
 
 The purpose of balance checking is finding functions that cause pointer
@@ -396,7 +462,7 @@ to a variable (`saveddepth = R_PPStackTop`), so that it can simulate the
 reverse operation of restoring it later (`R_PPStackTop = saveddepth`). This
 is only supported in the exact state (when exact depth is known).
 
-### Unprotected Objects Checking
+## Unprotected Objects Checking
 
 The objective is to detect when an unprotected object may be killed by a
 call to an allocating function, but used afterwards. 
@@ -528,24 +594,28 @@ conditional on it are removed.
 
 So, when the tool gets to an allocating function, it will create conditional
 error messages for unprotected variables (variables tracked with protect
-count zero).  The tool has a hardcoded list of callee-protect functions,
-which is functions that will on their own protect arguments passed to them
-and ensure they are protected through all possible allocations; hence, the
-tool does not produce falls alarms for unprotected variables being passed to
-callee-protect functions.  The tool also reports when a result of an
-allocator call is passed directly into a (non-callee-protect) allocation
+count zero).  The tool uses the automated detection of callee-protect and
+callee-safe function arguments (which supports per-argument semantics) and
+also a hard-coded list of callee-protect functions (which includes functions
+with all arguments callee-protet).  The hard-coded list is still used,
+because the automated detection cannot detect some important callee-protect
+functions which protect some variables implicitly in complicated ways for
+the tool.  Based on this information, the tool does not produce false alarms
+for unprotected variables passed to callee-protect functions.  Also, it does
+not report false alarms for unprotected variables passed to callee-safe
+functions (and not used later).  The tool also reports when a result of an
+allocator call is passed directly into a (non-callee-safe) allocating
 function.
 
-Possibly, callee-protect and maybe setter calls could be detected
-automatically by the tool, even though certainly with limited precision.  It
-would be more robust, less precise, and possibly could be combined: custom
-functions in packages can be callee-protect, but the tool will not know. 
-Sadly the unprotected objects checking currently produces a large number of
-false alarms.  It also fails on a number of functions which use the
-mentioned non-trivial protection features.  It is not immediately obvious
-how to extend the tool to support those.
+Possibly, setter calls could be detected automatically by the tool, even
+though certainly with limited precision, and perhaps similarly to
+callee-protect functions automated detection could be combined with a
+hardcoded list.  Such combination has some advantages: important core
+functions hard to analyze (find out they're setters or callee-protect) are
+handled, but (simple) functions in custom package code are supported as
+well.
 
-### Multiple-Allocating Arguments
+## Multiple-Allocating Arguments
 
 The tools to detect multiple allocating arguments at calls are simple
 heuristics and do not use the data flow algorithms described above directly,
