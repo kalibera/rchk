@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
     if (functionsOfInterest.find(fun) == functionsOfInterest.end()) {
       continue;
     }
-    if (cprotect.isCalleeSafe(fun, true) || cprotect.isCalleeProtect(fun, true)) {
+    if (cprotect.isCalleeSafe(fun, true /* non-trivially */) || cprotect.isCalleeProtect(fun, true /* non-trivially */)) {
       continue;
     }
     if (!cprotect.isNonTrivial(fun)) {

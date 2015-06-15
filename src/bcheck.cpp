@@ -327,10 +327,11 @@ struct ModuleCheckingStateTy {
   GlobalsTy& gl;
   LineMessenger& msg;
   CalledModuleTy& cm;
+  CProtectInfo& cprotect;
   
   ModuleCheckingStateTy(FunctionsSetTy& possibleAllocators, FunctionsSetTy& allocatingFunctions, FunctionsSetTy& errorFunctions,
-      GlobalsTy& gl, LineMessenger& msg, CalledModuleTy& cm):
-    possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions), errorFunctions(errorFunctions), gl(gl), msg(msg), cm(cm) {};
+      GlobalsTy& gl, LineMessenger& msg, CalledModuleTy& cm, CProtectInfo& cprotect):
+    possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions), errorFunctions(errorFunctions), gl(gl), msg(msg), cm(cm), cprotect(cprotect) {};
 };
 
 class FunctionChecker {
@@ -398,7 +399,7 @@ class FunctionChecker {
         m.msg.trace("visiting", in);
    
         if (freshVarsCheckingEnabled) {
-          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos, liveVars);
+          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos, liveVars, m.cprotect);
           if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
         if (balanceCheckingEnabled) {
@@ -520,8 +521,9 @@ int main(int argc, char* argv[])
   findSymbols(m, &symbolsMap);
   
   CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &gl, &possibleAllocators, &allocatingFunctions);
+  CProtectInfo cprotect = findCalleeProtectFunctions(m, *cm.getContextSensitiveAllocatingFunctions());
   
-  ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg, cm); 
+  ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg, cm, cprotect); 
     // FIXME: perhaps get rid of ModuleCheckingState now that we have CalledModule
 
   unsigned nAnalyzedFunctions = 0;

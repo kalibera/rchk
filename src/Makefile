@@ -60,7 +60,7 @@ csfpcheck: csfpcheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o
 
 maacheck: maacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
 
-bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cgclosure.o linemsg.o common.o patterns.o callocators.o patterns.o symbols.o exceptions.o liveness.o
+bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cgclosure.o linemsg.o common.o patterns.o callocators.o patterns.o symbols.o exceptions.o liveness.o cprotect.o
 
 ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
 

@@ -57,7 +57,7 @@ static void unprotectAll(FreshVarsTy& freshVars) {
 }
 
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
-    LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
+    LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
   
   bool confused = QUIET_WHEN_CONFUSED && freshVars.confused;
 
@@ -269,12 +269,18 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   
   // calling an allocating function
   
-  if (!protectsArguments(tgt)) {
+  if (!protectsArguments(tgt) && !cprotect.isCalleeSafe(tgt->fun, false)) {
     // this check can be done even when the tool is confused
-    for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai) {
+    unsigned aidx = 0;
+    for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++aidx) {
       Value *arg = *ai;
       const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
       if (!src || !cm->isPossibleCAllocator(src)) {
+        continue;
+      }
+      if (aidx < tgt->fun->arg_size() &&  cprotect.isCalleeSafe(tgt->fun, aidx, false)) {
+        // we are directly passing an argument, so it does not matter the argument is destroyed by the call
+        // (well, except that the value may be used again, in the LLVM bitcode -- it is an approximation that we ignore this)
         continue;
       }
       msg.info(MSG_PFX + "calling allocating function " + funName(tgt) + " with argument allocated using " + funName(src), in);
@@ -373,7 +379,9 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   }
 }
 
-static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg,
+    unsigned& refinableInfos, CProtectInfo& cprotect) {
+    
   if (QUIET_WHEN_CONFUSED && freshVars.confused) {
     return;
   }
@@ -456,7 +464,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   //   or if the function allocates only after the fresh argument is no longer needed    
     
   const CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
-  if (!tgt || !cm->isCAllocating(tgt) || protectsArguments(tgt)) {
+  if (!tgt || !cm->isCAllocating(tgt) || protectsArguments(tgt) || cprotect.isCalleeProtect(tgt->fun, false)) {
     return;
   }
   
@@ -464,17 +472,24 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     return;
   }    
 
+  unsigned aidx = 0;
+  CallSite cs(cast<Value>(li->user_back()));
+  assert(cs);
+  
+  for(aidx = 0; aidx < cs.arg_size(); aidx++) {
+    if (cs.getArgument(aidx) == li) {
+      break;
+    }
+  }
+  assert(aidx < cs.arg_size());
+
+  if (aidx < tgt->fun->arg_size() && cprotect.isCalleeProtect(tgt->fun, aidx, false)) {
+    return; // the variable is callee-protect for the given argument
+  }
+
   std::string nameSuffix = "";
   if (var->getName().str().empty()) {
-    unsigned i;
-    CallSite cs(cast<Value>(li->user_back()));
-    assert(cs);
-    for(i = 0; i < cs.arg_size(); i++) {
-      if (cs.getArgument(i) == li) {
-        nameSuffix = " <arg " + std::to_string(i+1) + ">";
-        break;
-      }
-    }
+    nameSuffix = " <arg " + std::to_string(aidx+1) + ">";
   }
   msg.info(MSG_PFX + "calling allocating function " + funName(tgt) + " with a fresh pointer (" + varName(var) + nameSuffix + ")", in);
   refinableInfos++;
@@ -552,10 +567,10 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
 }
 
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
-    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars) {
+    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
 
-  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars);
-  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
+  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos, cprotect);
   handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
 }
 
