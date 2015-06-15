@@ -67,6 +67,7 @@ struct CalledFunctionTy {
   CalledFunctionTy(Function *fun, const ArgInfosVectorTy *argInfo, CalledModuleTy *module): fun(fun), argInfo(argInfo), module(module), idx(UINT_MAX) {};
   std::string getName() const;
   std::string getNameSuffix() const;
+  bool hasContext() const;
 };
 
 struct CalledFunctionTy_hash {
@@ -111,6 +112,8 @@ class CalledModuleTy {
   GlobalsTy* globals;
   FunctionsSetTy* possibleAllocators;
   FunctionsSetTy* allocatingFunctions;
+  FunctionsSetTy* contextSensitivePossibleAllocators;
+  FunctionsSetTy* contextSensitiveAllocatingFunctions;
   CalledFunctionsSetTy* possibleCAllocators;
   CalledFunctionsSetTy* allocatingCFunctions;
   CallSiteTargetsTy callSiteTargets; // maps  call instruction -> set of target functions
@@ -149,6 +152,8 @@ class CalledModuleTy {
     FunctionsSetTy* getErrorFunctions() { return errorFunctions; }
     FunctionsSetTy* getPossibleAllocators() { return possibleAllocators; }
     FunctionsSetTy* getAllocatingFunctions() { return allocatingFunctions; }
+    FunctionsSetTy* getContextSensitiveAllocatingFunctions() { computeCalledAllocators(); return contextSensitiveAllocatingFunctions; }
+    FunctionsSetTy* getContextSensitivePossibleAllocators() { computeCalledAllocators(); return contextSensitivePossibleAllocators; }
     GlobalsTy* getGlobals() { return globals; }
     Module* getModule() { return m; }
     const CalledFunctionTy* getCalledGCFunction() { return gcFunction; }

@@ -36,6 +36,21 @@ const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
 const bool KEEP_CALLED_IN_STATE = false;
 
+bool CalledFunctionTy::hasContext() const {
+  if (!argInfo) {
+    return false;
+  }
+  
+  for(ArgInfosVectorTy::const_iterator ai = argInfo->begin(), ae = argInfo->end(); ai != ae; ++ai) {
+    const ArgInfoTy *a = *ai;
+    if (a && a->isSymbol()) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 std::string CalledFunctionTy::getNameSuffix() const {
 
   std::string suff;
@@ -204,6 +219,12 @@ CalledModuleTy::~CalledModuleTy() {
   }
   if (allocatingCFunctions) {
     delete allocatingCFunctions;
+  }
+  if (contextSensitiveAllocatingFunctions) {
+    delete contextSensitiveAllocatingFunctions;
+  }
+  if (contextSensitivePossibleAllocators) {
+    delete contextSensitivePossibleAllocators;
   }
 }
 
@@ -858,20 +879,35 @@ void CalledModuleTy::computeCalledAllocators() {
   
   // fill in results
   
+  // also fill in context-sensitive non-called allocators, allocating functions
+  //   (note: this is more precise than possibleAllocators, allocatingFunctions)
+  
+  contextSensitiveAllocatingFunctions = new FunctionsSetTy();
+  contextSensitivePossibleAllocators = new FunctionsSetTy();
+  
   unsigned gcidx = gcFunction->idx;
   for(unsigned i = 0; i < nfuncs; i++) {
     if (callsMat[i][gcidx]) {
-      allocatingCFunctions->insert(getCalledFunction(i));
+      const CalledFunctionTy *tgt = getCalledFunction(i);
+      allocatingCFunctions->insert(tgt);
+      if (!tgt->hasContext()) {
+        contextSensitiveAllocatingFunctions->insert(tgt->fun);
+      }
     }
     if (wrapsMat[i][gcidx]) {
       const CalledFunctionTy *tgt = getCalledFunction(i);
       if (!isKnownNonAllocator(tgt->fun)) {
         possibleCAllocators->insert(tgt);
+        if (!tgt->hasContext()) {
+          contextSensitivePossibleAllocators->insert(tgt->fun);
+        }
       }
     }    
   }
   allocatingCFunctions->insert(gcFunction);
   possibleCAllocators->insert(gcFunction);
+  contextSensitiveAllocatingFunctions->insert(gcFunction->fun);
+  contextSensitivePossibleAllocators->insert(gcFunction->fun);
 }
 
 std::string funName(const CalledFunctionTy *cf) {

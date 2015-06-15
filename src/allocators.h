@@ -7,6 +7,13 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 
+// these allocators are found using a path-insensitive algorithm which does
+// not depend on callocators; on the contrary, this allocator detection is
+// used by callocators for performance reasons
+//
+// more precise (even non-called) allocators can be obtained through
+// callocators, because there may be some context deeper in the call-tree
+
 using namespace llvm;
 
 const std::string gcFunction = "R_gc_internal";
