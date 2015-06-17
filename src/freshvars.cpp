@@ -511,7 +511,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   Instruction *callIn = cs.getInstruction();
   assert(callIn == li->user_back());
   
-  std::string message = MSG_PFX + "allocating function " + funName(tgt) + " may destroy its unprotected argument ("
+  std::string message = "allocating function " + funName(tgt) + " may destroy its unprotected argument ("
     + varName(var) + nameSuffix + "), which is later used.";
 
   issueConditionalMessage(in, var, freshVars, msg, refinableInfos, liveVars, message);
