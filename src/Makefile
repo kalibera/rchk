@@ -4,23 +4,31 @@
 HOST := $(shell hostname -s)
 
 ifeq ($(HOST), prg)
-  #LLVM := /home/tomas/work/opt/clang+llvm-3.5.0-x86_64-linux-gnu
   LLVM := /home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu
-  #LLVM := /home/tomas/work/opt/inst3.6.1
+  CXX := g++-4.8
   BCHECK_MAX_STATES := 1500000
   CALLOCATORS_MAX_STATES := 1000000
+
 else ifeq ($(HOST), r-lnx400)
   LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.61-x86_64-fedora20
+  CXX := g++
   BCHECK_MAX_STATES := 6000000
   CALLOCATORS_MAX_STATES := 1000000
+
 else
   # ------  CUSTOMIZE HERE --------- 
-  $(error Please customize your Makefile here. Please set the home directory for LLVM 3.6.1)
-  #LLVM := /home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu
+  # or provide these variables to make
   
+  ifeq ($(wildcard $(LLVM)),)
+    $(error Please customize your Makefile here. Please set the home directory for LLVM 3.6.1)
+  endif
+
+  #LLVM := /home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu
   # please update the "MAX_STATES", these defaults seem to work fine for 8G RAM laptop
-  BCHECK_MAX_STATES := 3000000
-  CALLOCATORS_MAX_STATES := 1000000  
+
+  CXX ?= g++
+  BCHECK_MAX_STATES ?= 3000000
+  CALLOCATORS_MAX_STATES ?= 1000000
 endif
 
 # ---------------------
@@ -36,9 +44,6 @@ CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
 
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
-
-#CXX := $(LLVM)/bin/clang++
-CXX := g++
 
 LINK.o = $(LINK.cc) # link with C++ compiler by default
 
