@@ -65,9 +65,10 @@ ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsM
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  FunctionsOrderedSetTy functionsOfInterest;
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;
   
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);  
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);  
   
   FunctionsInfoMapTy functionsMap;
   buildCGClosure(m, functionsMap, true /* ignore error paths */);
@@ -77,12 +78,11 @@ int main(int argc, char* argv[])
   FunctionsSetTy possibleAllocators;
   findPossibleAllocators(m, possibleAllocators); // FIXME: use context-sensitive (more precise) detection
 
-  for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
-    if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {
-      continue;
-    }
+  for(FunctionsVectorTy::iterator FI = functionsOfInterestVector.begin(), FE = functionsOfInterestVector.end(); FI != FE; ++FI) {
 
-    FunctionInfo& finfo = FI->second;
+    auto fisearch = functionsMap.find(*FI);
+    assert (fisearch != functionsMap.end());
+    FunctionInfo& finfo = fisearch->second;
 
     for(std::vector<CallInfo>::const_iterator CI = finfo.callInfos.begin(), CE = finfo.callInfos.end(); CI != CE; ++CI) {
       const CallInfo& cinfo = *CI;

@@ -13,6 +13,7 @@
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
+#include <vector>
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
@@ -26,6 +27,7 @@ typedef std::unordered_set<Function*> FunctionsSetTy;
 typedef std::unordered_set<AllocaInst*> VarsSetTy;
 typedef std::unordered_set<GlobalVariable*> GlobalVarsSetTy;
 typedef std::set<Function*> FunctionsOrderedSetTy;
+typedef std::vector<Function*> FunctionsVectorTy;
 typedef std::set<AllocaInst*> VarsOrderedSetTy;
 
 struct VarBoolCacheTy_hash {
@@ -35,7 +37,7 @@ struct VarBoolCacheTy_hash {
 };
 typedef std::unordered_map<AllocaInst*,bool,VarBoolCacheTy_hash> VarBoolCacheTy;
 
-Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterest, LLVMContext& context);
+Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterestSet, FunctionsVectorTy& functionsOfInterestVector, LLVMContext& context);
 
 std::string demangle(std::string name);
 

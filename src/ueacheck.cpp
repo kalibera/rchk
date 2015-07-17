@@ -195,9 +195,10 @@ bool isLoadOfUnprotectedObject(Value *arg, Instruction *callInst, FunctionsSetTy
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  FunctionsOrderedSetTy functionsOfInterest;
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;
   
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);  
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);  
   
   FunctionsInfoMapTy functionsMap;
   buildCGClosure(m, functionsMap, true /* ignore error paths */);
@@ -208,13 +209,13 @@ int main(int argc, char* argv[])
   findPossibleAllocators(m, possibleAllocators); // FIXME: use context-sensitive (more precise) allocator detection
 
   DominatorTreeWrapperPass dtPass;
-  
-  for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
-    if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {
-      continue;
-    }
 
-    FunctionInfo& finfo = FI->second;
+  for(FunctionsVectorTy::iterator FI = functionsOfInterestVector.begin(), FE = functionsOfInterestVector.end(); FI != FE; ++FI) {
+
+    auto fisearch = functionsMap.find(*FI);
+    assert (fisearch != functionsMap.end());
+    FunctionInfo& finfo = fisearch->second;
+
     if (finfo.function->empty()) {
       continue;
     }

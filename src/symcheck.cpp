@@ -23,9 +23,10 @@ using namespace llvm;
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  FunctionsOrderedSetTy functionsOfInterest;
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;
   
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
     // NOTE: functionsOfInterest ignored but (re-)analyzing the R core is necessary
   
   SymbolsMapTy symbolsMap;

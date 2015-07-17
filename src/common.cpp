@@ -17,6 +17,37 @@
 
 #include <llvm/Support/raw_ostream.h>
 
+struct {
+  bool operator()(Function *a, Function *b) {
+  
+    if (!b) {
+      return false;
+    }
+    if (!a) {
+      return true;
+    }
+    
+    std::string aname = funName(a);
+    std::string bname = funName(b);
+    
+    int cmp = aname.compare(bname);
+    if (cmp < 0) {
+      return true;
+    }
+    if (cmp > 0) {
+      return false;
+    }
+    return a < b; // FIXME
+  }
+} FunctionLess;
+
+// sort functions in the set by name, return the order as vector
+void sortFunctionsByName(FunctionsOrderedSetTy& functionsOfInterestSet, FunctionsVectorTy& functionsOfInterestVector) {
+
+  functionsOfInterestVector.insert(functionsOfInterestVector.begin(), functionsOfInterestSet.begin(), functionsOfInterestSet.end());
+  std::sort(functionsOfInterestVector.begin(), functionsOfInterestVector.end(), FunctionLess);
+}
+
 // supported usage
 //   tool
 //     processes R.bin.bc
@@ -27,7 +58,7 @@
 //     from that module (but some tools need to do whole-program analysis
 //     which also will include functions from the base
 //      IR file not included in the module)
-Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterest, LLVMContext& context) {
+Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functionsOfInterestSet, FunctionsVectorTy& functionsOfInterestVector, LLVMContext& context) {
 
   if (argc > 3) {
     errs() << argv[0] << " base_file.bc [module_file.bc]" << "\n";
@@ -53,8 +84,9 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   if (argc == 1 || argc == 2) {
     // only a single input file
     for(Module::iterator f = base->begin(), fe = base->end(); f != fe; ++f) {
-      functionsOfInterest.insert(f);
+      functionsOfInterestSet.insert(f);
     }
+    sortFunctionsByName(functionsOfInterestSet, functionsOfInterestVector);
     return base;
   }
   
@@ -94,10 +126,11 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   
   for(std::vector<std::string>::iterator ni = functionNames.begin(), ne = functionNames.end(); ni != ne; ++ni) {
     std::string name = *ni;
-    functionsOfInterest.insert(base->getFunction(name));
+    functionsOfInterestSet.insert(base->getFunction(name));
   }  
 
   delete module;
+  sortFunctionsByName(functionsOfInterestSet, functionsOfInterestVector);
   return base;
 }
 

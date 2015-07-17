@@ -21,34 +21,17 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "callocators.h"
+#include "lannotate.h"
 
 using namespace llvm;
-
-struct LineTy {
-  std::string path;
-  unsigned line;
-  
-  LineTy(std::string path, unsigned line): path(path), line(line) {}
-};
-
-struct LineTy_compare {
-  bool operator() (const LineTy& lhs, const LineTy& rhs) const {
-    int cmp = lhs.path.compare(rhs.path);
-    if (cmp) {
-      return cmp < 0;
-    }
-    return lhs.line < rhs.line;
-  }
-};
-
-typedef std::set<LineTy, LineTy_compare> LinesTy;
 
 int main(int argc, char* argv[])
 {
   LLVMContext context;
 
-  FunctionsOrderedSetTy functionsOfInterest;
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
   CalledModuleTy *cm = CalledModuleTy::create(m);
 
   const CallSiteTargetsTy *callSiteTargets = cm->getCallSiteTargets();
@@ -59,7 +42,7 @@ int main(int argc, char* argv[])
   for(CallSiteTargetsTy::const_iterator ci = callSiteTargets->begin(), ce = callSiteTargets->end(); ci != ce; ++ci) {
     Value *inst = ci->first;
     Function *csFun = cast<Instruction>(inst)->getParent()->getParent();
-    if (functionsOfInterest.find(csFun) == functionsOfInterest.end()) {
+    if (functionsOfInterestSet.find(csFun) == functionsOfInterestSet.end()) {
         continue;
     }
     const CalledFunctionsSetTy& funcs = ci->second;
@@ -68,19 +51,12 @@ int main(int argc, char* argv[])
       const CalledFunctionTy *f = *fi;
       
       if (allocatingCFunctions->find(f) != allocatingCFunctions->end()) {
-        std::string path;
-        unsigned line;
-        sourceLocation(cast<Instruction>(inst), path, line);
-        LineTy l(path, line);
-        sfpLines.insert(l);
+        annotateLine(sfpLines, cast<Instruction>(inst));
       }
     }
   }
 
-  for(LinesTy::const_iterator li = sfpLines.begin(), le = sfpLines.end(); li != le; ++li) {
-    const LineTy& l = *li;
-    outs() << l.path << " " << std::to_string(l.line) << "\n";
-  }
+  printLineAnnotations(sfpLines);
   
   CalledModuleTy::release(cm);  
   delete m;

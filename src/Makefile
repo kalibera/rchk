@@ -59,9 +59,9 @@ alloccheck: alloccheck.o allocators.o callocators.o errors.o cgclosure.o symbols
 
 errcheck: errcheck.o errors.o common.o
 
-sfpcheck: sfpcheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
+sfpcheck: sfpcheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o lannotate.o
 
-csfpcheck: csfpcheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o
+csfpcheck: csfpcheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o lannotate.o
 
 maacheck: maacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
 

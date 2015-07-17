@@ -20,15 +20,17 @@
 #include "allocators.h"
 #include "cgclosure.h"
 #include "exceptions.h"
+#include "lannotate.h"
 
 using namespace llvm;
 
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  FunctionsOrderedSetTy functionsOfInterest;
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;
   
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
   
   FunctionsInfoMapTy functionsMap;
   buildCGClosure(m, functionsMap, true /* ignore error paths */);
@@ -40,12 +42,14 @@ int main(int argc, char* argv[])
   std::string lastFile = "";
   std::string lastDirectory = "";
   unsigned lastLine = 0;
-  
-  for(FunctionsInfoMapTy::iterator FI = functionsMap.begin(), FE = functionsMap.end(); FI != FE; ++FI) {
-    if (functionsOfInterest.find(FI->first) == functionsOfInterest.end()) {
-      continue;
-    }
-    FunctionInfo& finfo = FI->second;
+
+  LinesTy sfpLines;
+    
+  for(FunctionsVectorTy::iterator FI = functionsOfInterestVector.begin(), FE = functionsOfInterestVector.end(); FI != FE; ++FI) {
+
+    auto fisearch = functionsMap.find(*FI);
+    assert (fisearch != functionsMap.end());
+    FunctionInfo& finfo = fisearch->second;
 
     for(std::vector<CallInfo>::const_iterator CI = finfo.callInfos.begin(), CE = finfo.callInfos.end(); CI != CE; ++CI) {
       const CallInfo& cinfo = *CI;
@@ -55,29 +59,11 @@ int main(int argc, char* argv[])
         const FunctionInfo *targetFinfo = *TFI;
           
         if ((targetFinfo->callsFunctionMap)[gcFunctionIndex] && !isAssertedNonAllocating(const_cast<Function*>(targetFinfo->function))) {
-          const DebugLoc &callDebug = cinfo.instruction->getDebugLoc();
-          const MDNode* scope = callDebug.getScopeNode(context);
-          DILocation loc(scope);
-            
-          unsigned line = callDebug.getLine();
-          std::string directory = loc.getDirectory().str();
-          std::string file = loc.getFilename().str();
-            
-          if (line != lastLine || file != lastFile || directory != lastDirectory) {
-            outs() << directory << "/" << file << " " << line << "\n";
-            errs() << "  " << funName(finfo.function) << " " << loc.getDirectory() << "/" << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
-            lastFile = file;
-            lastDirectory = directory;
-            lastLine = line;
-          } else {
-            errs() << "  (GC point on another call at line) " << funName(finfo.function) << " " << loc.getDirectory() << "/" 
-              << loc.getFilename() << ":" << callDebug.getLine() << "\n"; 
-          }
-          break;
+          annotateLine(sfpLines, cinfo.instruction);        
         }
       }
     }
   }
-
+  printLineAnnotations(sfpLines);
   delete m;
 }

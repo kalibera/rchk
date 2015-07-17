@@ -501,9 +501,10 @@ class FunctionChecker {
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  FunctionsOrderedSetTy functionsOfInterest;
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;
   
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
   EXCLUDE_PROTECTION_FUNCTIONS = (argc == 3); // exclude when checking modules
   GlobalsTy gl(m);
   LineMessenger msg(context, DEBUG, TRACE, UNIQUE_MSG);
@@ -527,7 +528,7 @@ int main(int argc, char* argv[])
     // FIXME: perhaps get rid of ModuleCheckingState now that we have CalledModule
 
   unsigned nAnalyzedFunctions = 0;
-  for(FunctionsOrderedSetTy::iterator FI = functionsOfInterest.begin(), FE = functionsOfInterest.end(); FI != FE; ++FI) {
+  for(FunctionsVectorTy::iterator FI = functionsOfInterestVector.begin(), FE = functionsOfInterestVector.end(); FI != FE; ++FI) {
     Function *fun = *FI;
 
     if (!fun) continue;

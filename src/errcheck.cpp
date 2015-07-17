@@ -22,13 +22,14 @@ using namespace llvm;
 int main(int argc, char* argv[])
 {
   LLVMContext context;
-  FunctionsOrderedSetTy functionsOfInterest;
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;  
   
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
   FunctionsSetTy errorFunctions;
   findErrorFunctions(m, errorFunctions);
   
-  for(FunctionsOrderedSetTy::iterator fi = functionsOfInterest.begin(), fe = functionsOfInterest.end(); fi != fe; ++fi) {
+  for(FunctionsVectorTy::iterator fi = functionsOfInterestVector.begin(), fe = functionsOfInterestVector.end(); fi != fe; ++fi) {
     Function *fun = *fi;
 
     if (!fun) continue;

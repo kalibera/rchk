@@ -26,9 +26,10 @@ int main(int argc, char* argv[])
 {
   LLVMContext context;
 
-  FunctionsOrderedSetTy functionsOfInterest;
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterest, context);
-    CalledModuleTy *cm = CalledModuleTy::create(m);
+  FunctionsOrderedSetTy functionsOfInterestSet;
+  FunctionsVectorTy functionsOfInterestVector;
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
+  CalledModuleTy *cm = CalledModuleTy::create(m);
 
   FunctionsSetTy *possibleAllocators = cm->getPossibleAllocators();
   FunctionsSetTy *allocatingFunctions = cm->getAllocatingFunctions();
@@ -36,11 +37,8 @@ int main(int argc, char* argv[])
 
   outs() << "Callee protect functions: \n";
   CProtectInfo cprotect = findCalleeProtectFunctions(m, *cm->getContextSensitiveAllocatingFunctions());
-  for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-    Function *fun = fi;
-    if (functionsOfInterest.find(fun) == functionsOfInterest.end()) {
-      continue;
-    }
+  for(FunctionsVectorTy::iterator fi = functionsOfInterestVector.begin(), fe = functionsOfInterestVector.end(); fi != fe; ++fi) {
+    Function *fun = *fi;
     if (cprotect.isCalleeProtect(fun, true /* non-trivially */)) {
       outs() << "  " << funName(fun) << "\n";
     }
@@ -48,11 +46,8 @@ int main(int argc, char* argv[])
   outs() << "\n";
 
   outs() << "Callee safe functions (non-trivially, excluding callee-protect): \n";
-  for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-    Function *fun = fi;
-    if (functionsOfInterest.find(fun) == functionsOfInterest.end()) {
-      continue;
-    }
+  for(FunctionsVectorTy::iterator fi = functionsOfInterestVector.begin(), fe = functionsOfInterestVector.end(); fi != fe; ++fi) {
+    Function *fun = *fi;
     if (cprotect.isCalleeSafe(fun, true /* non-trivially */)) {
       outs() << "  " << funName(fun) << "\n";
     }
@@ -60,11 +55,8 @@ int main(int argc, char* argv[])
   outs() << "\n";
   
   outs() << "Mixed callee-protect/callee-safe functions [ callee-[S]afe callee-[P]rotect caller-protect[!] non-SEXP[-] ]: \n";
-  for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-    Function *fun = fi;
-    if (functionsOfInterest.find(fun) == functionsOfInterest.end()) {
-      continue;
-    }
+  for(FunctionsVectorTy::iterator fi = functionsOfInterestVector.begin(), fe = functionsOfInterestVector.end(); fi != fe; ++fi) {
+    Function *fun = *fi;
     if (cprotect.isCalleeSafe(fun, true /* non-trivially */) || cprotect.isCalleeProtect(fun, true /* non-trivially */)) {
       continue;
     }
@@ -109,7 +101,7 @@ int main(int argc, char* argv[])
     outs() << "Detected called functions: \n";
     for(CalledFunctionsIndexTy::const_iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
       const CalledFunctionTy *f = *fi;
-      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+      if (functionsOfInterestSet.find(f->fun) == functionsOfInterestSet.end()) {
         continue;
       }
       outs() << "  called function " << funName(f) << "\n";
@@ -120,11 +112,8 @@ int main(int argc, char* argv[])
   const FunctionsSetTy *csAllocatingFunctions = cm->getContextSensitiveAllocatingFunctions();
 
   if (1) {
-    for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-      Function *fun = fi;
-      if (functionsOfInterest.find(fun) == functionsOfInterest.end()) {
-        continue;
-      }
+    for(FunctionsVectorTy::iterator fi = functionsOfInterestVector.begin(), fe = functionsOfInterestVector.end(); fi != fe; ++fi) {
+      Function *fun = *fi;
       if (csPossibleAllocators->find(fun) != csPossibleAllocators->end()) {
         outs() << "CS-ALLOCATOR: " << funName(fun) << "\n";
       }
@@ -133,11 +122,8 @@ int main(int argc, char* argv[])
   }
   
   if (1) {
-    for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-      Function *fun = fi;
-      if (functionsOfInterest.find(fun) == functionsOfInterest.end()) {
-        continue;
-      }
+    for(FunctionsVectorTy::iterator fi = functionsOfInterestVector.begin(), fe = functionsOfInterestVector.end(); fi != fe; ++fi) {
+      Function *fun = *fi;
       if (csAllocatingFunctions->find(fun) != csAllocatingFunctions->end()) {
         outs() << "CS-ALLOCATING: " << funName(fun) << "\n";
       }
@@ -151,7 +137,7 @@ int main(int argc, char* argv[])
   if(1) {
     for(CalledFunctionsSetTy::const_iterator fi = possibleCAllocators->begin(), fe = possibleCAllocators->end(); fi != fe; ++fi) {
       const CalledFunctionTy *f = *fi;
-      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+      if (functionsOfInterestSet.find(f->fun) == functionsOfInterestSet.end()) {
         continue;
       }
       outs() << "C-ALLOCATOR: " << funName(f) << "\n";
@@ -161,7 +147,7 @@ int main(int argc, char* argv[])
   if(1) {
     for(CalledFunctionsSetTy::const_iterator fi = allocatingCFunctions->begin(), fe = allocatingCFunctions->end(); fi != fe; ++fi) {
       const CalledFunctionTy *f = *fi;
-      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+      if (functionsOfInterestSet.find(f->fun) == functionsOfInterestSet.end()) {
         continue;
       }
       outs() << "C-ALLOCATING: " << funName(f) << "\n";
@@ -171,7 +157,7 @@ int main(int argc, char* argv[])
   if(1) {
     for(FunctionsSetTy::iterator fi = possibleAllocators->begin(), fe = possibleAllocators->end(); fi != fe; ++fi) {
       Function *f = *fi;
-      if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
+      if (functionsOfInterestSet.find(f) == functionsOfInterestSet.end()) {
         continue;
       }
       outs() << "ALLOCATOR: " << funName(f) << "\n";
@@ -182,7 +168,7 @@ int main(int argc, char* argv[])
   if(1) {
     for(FunctionsSetTy::iterator fi = allocatingFunctions->begin(), fe = allocatingFunctions->end(); fi != fe; ++fi) {
       Function *f = *fi;
-      if (functionsOfInterest.find(f) == functionsOfInterest.end()) {
+      if (functionsOfInterestSet.find(f) == functionsOfInterestSet.end()) {
         continue;
       }
       outs() << "ALLOCATING: " << funName(f) << "\n";
@@ -193,7 +179,7 @@ int main(int argc, char* argv[])
   if (1) {  
     for(CalledFunctionsIndexTy::const_iterator fi = calledFunctions->begin(), fe = calledFunctions->end(); fi != fe; ++fi) {
       const CalledFunctionTy *f = *fi;
-      if (functionsOfInterest.find(f->fun) == functionsOfInterest.end()) {
+      if (functionsOfInterestSet.find(f->fun) == functionsOfInterestSet.end()) {
         continue;
       }
       bool callocator = possibleCAllocators->find(f) != possibleCAllocators->end();
