@@ -125,19 +125,19 @@ execute "make rchk" do
 end
 
 execute "configure rchk - llvm dir" do
-  command "sed -i -e 's|\( LLVM=\).*|\1#{llvmdir}|g' #{rchkdir}/scripts/config.inc"
+  command "sed -i 's|\\( LLVM=\\).*|\\1#{llvmdir}|g' #{rchkdir}/scripts/config.inc"
   user "root"
   action :run
 end
 
 execute "configure rchk - wllvm dir" do
-  command "sed -i -e 's|\( WLLVM=\).*|\1#{wllvmdir}|g' #{rchkdir}/scripts/config.inc"
+  command "sed -i 's|\\( WLLVM=\\).*|\\1#{wllvmdir}|g' #{rchkdir}/scripts/config.inc"
   user "root"
   action :run
 end
 
 execute "configure rchk - rchk dir" do
-  command "sed -i -e 's|\( RCHK=\).*|\1#{rchkdir}|g' #{rchkdir}/scripts/config.inc"
+  command "sed -i 's|\\( RCHK=\\).*|\\1#{rchkdir}|g' #{rchkdir}/scripts/config.inc"
   user "root"
   action :run
 end
