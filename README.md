@@ -31,7 +31,7 @@ by `vagrant ssh`.
 For both native and virtual installation, to check GNU-R:
 
 4. Get latest version of GNU-R: `svn checkout http://svn.r-project.org/R/trunk`
-5. Build it using for rchk
+5. Build it using for rchk (run in R source tree)
   1. `. <rchk_root>/scripts/config.inc`
   2. `<rchkroot>/scripts/build_r.sh`
 6. Run default rchk tools on GNU-R: ``<rchkroot>/scripts/check_r.sh`. Look for
