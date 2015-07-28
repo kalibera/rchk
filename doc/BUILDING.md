@@ -62,11 +62,11 @@ lost.
 We have therefore modified GNU-R so that `R CMD INSTALL` will perform the
 builds in a non-temporary directory, one provided by environment variable
 `PKG_BUILD_DIR`. Our patch
-[installr_build_dir.diff](scripts/installr_build_dir.diff) is to be applied
+[installr_build_dir.diff](/scripts/installr_build_dir.diff) is to be applied
 before building R:
 
 ```
-patch -p0 <rchk_root>/scripts/installr_build_dir.diff
+patch -p0 < <rchk_root>/scripts/installr_build_dir.diff
 ```
 
 ## Getting LLVM

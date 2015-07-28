@@ -33,7 +33,7 @@ To check a package:
   2. `. <rchk_root>/scripts/cmpconfig.inc`
 2. Install packages from within R: `./bin/R` (use `install.packages` or
 `biocLite` or any other mechanism that in the end uses `instal.packages`
-3. Check all installed packages: `<rchkroot>/scripts/check_package.sh
+3. Check all installed packages: `<rchkroot>/scripts/check_package.sh`
 4. The results of the checks will appear under `packages/lib/<package_dir>`,
 again look for files with suffices `.maacheck` and `.bcheck`.
 
