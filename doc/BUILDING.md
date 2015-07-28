@@ -20,8 +20,8 @@ the C compiler to generate both executable binaries and bitcode files.
 The simple way is to run the C compiler twice for each source file, once
 generating the object file in executable format and once in bitcode format. 
 This leads indeed to long compile time, but it is easy to set up.  One can
-use our modified version of the
-[whole-program-llvm](https://github.com/kalibera/whole-program-llvm) wrapper
+use the
+[whole-program-llvm](https://github.com/travitch/whole-program-llvm) wrapper
 script by Tristan Ravitch.
 
 ```
@@ -31,42 +31,51 @@ export CXX=/opt/whole-program-llvm/wllvm++
 export PATH=/opt/clang+llvm-3.6.1-x86_64-linux-gnu/bin:$PATH
 export LLVM_COMPILER=clang
 
-export BITCODE_DIR=`pwd`/bitcode
-#rm -rf $BITCODE_DIR
-
 ./configure --with-blas --with-lapack --enable-R-static-lib
 make
 ```
 
 As a result, one gets executable binaries (`R.bin`, `stats.so`) and bitcode
-versions of the object files (in `bitcode` directory). The binaries have
-encoded in their meta-data from which object files they have been linked. To
-get actually the bitcode version of the binaries, this meta-data is read and
-respective bitcode versions of the object files are linked (by `extract-bc`).
+versions of the object files (except for some packages, see discussion
+below).  The binaries have encoded in their meta-data from which object
+files they have been linked. To get actually the bitcode version of the
+binaries, this meta-data is read and respective bitcode versions of the
+object files are linked (by `extract-bc`).
 
 ```
-export PATH=/home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu/bin:$PATH
-export BITCODE_DIR=`pwd`/bitcode
+export PATH=/opt/clang+llvm-3.6.1-x86_64-linux-gnu/bin:$PATH
 
-~/work/wllvm/whole-program-llvm/extract-bc src/main/R.bin
+/opt/whole-program-llvm/extract-bc src/main/R.bin
 find . -name *.so -exec /opt/whole-program-llvm/extract-bc {} \;
 
 ```
 
-Our version of
-[whole-program-llvm](https://github.com/kalibera/whole-program-llvm) adds
-support for the `BITCODE_DIR` to the original version, which leaves the
-bitcode files in the directories where object files are compiled.  This,
-however, does not work when installing R packages, which are built in
-temporary directories that are deleted during the build process.
+Normally, this process does not work for the packages installed from
+tarballs using `R CMD INSTALL` (or `install.packages` which internally uses
+the same code as`R CMD INSTALL`).  The problem is that packages are built in
+session temporary directories, which are deleted right after the particular
+R session is closed; the bitcode files and also the source code is hence
+lost.
+
+## Patching GNU-R
+
+We have therefore modified GNU-R so that `R CMD INSTALL` will perform the
+builds in a non-temporary directory, one provided by environment variable
+`PKG_BUILD_DIR`. Our patch
+[installr_build_dir.diff](scripts/installr_build_dir.diff) is to be applied
+before building R:
+
+```
+patch -p0 <rchk_root>/scripts/installr_build_dir.diff
+```
 
 ## Getting LLVM
 
 Both the wrapper script and `rchk` itself work with the binary distribution
 of [CLANG+LLVM](http://llvm.org/releases/download.html#3.6.1), so one does
-not have to build LLVM on the supported platforms.  On unsupported
-platforms, such as Fedora 20, one can build the binary distribution of LLVM
-using the test-release.sh script, e.g.
+not have to build LLVM on many platforms.  On unsupported platforms, such as
+Fedora 20, one can build the binary distribution of LLVM using the
+test-release.sh script, e.g.
 
 ```
 ./test-release.sh -release 3.61 -final -j 32 -triple x86_64-fedora20 -disable-objc
@@ -100,10 +109,9 @@ make
 make install
 ```
 
-
 ## Using LTO and bitcode object files
 
-The double-building of each source file is a waste of resources. 
+The double-building of each source file done by WLLVM is a waste of resources. 
 Conceptually, it should be possible to only generate bitcode object files by
 the C compiler and use them in the end to get both executable binaries and
 bitcode files.  In principle, this should work as LLVM supports link-time
