@@ -125,7 +125,17 @@ bool isProtectionCounterVariable(AllocaInst* var, Function* unprotectFunction) {
       if (!l->hasOneUse()) {
         return false;
       }
-      CallSite cs(cast<Value>(l->user_back()));
+      Value* unprotectArg = l->user_back(); // the tentative argument to UNPROTECT
+      
+      if (BinaryOperator *bo = dyn_cast<BinaryOperator>(unprotectArg)) {  // support UNPROTECT(nprotect + 2)
+        if (bo->getOpcode() == Instruction::Add) {  // FIXME: hasOneUse may be too restrictive
+          if (unprotectArg->hasOneUse() && (ConstantInt::classof(bo->getOperand(0)) || ConstantInt::classof(bo->getOperand(1)))) {
+            unprotectArg = unprotectArg->user_back();
+          }
+        }
+      }
+      
+      CallSite cs(cast<Value>(unprotectArg));
       if (cs && cs.getCalledFunction() == unprotectFunction) {
         passedToUnprotect = true;
       }
@@ -188,8 +198,40 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
       }
       return;
     }
-    if (LoadInst::classof(unprotectValue)) { // e.g. UNPROTECT(numProtects)
-      Value *varValue = const_cast<Value*>(cast<LoadInst>(unprotectValue)->getPointerOperand());
+    // UNPROTECT(nprotect), UNPROTECT(nprotect + 3)
+    
+    int64_t npadd = 0;   // UNPROTECT(npvar + npadd)
+    Value *npvar = unprotectValue;
+    
+    if (BinaryOperator *bo = dyn_cast<BinaryOperator>(unprotectValue)) {
+      if (bo->getOpcode() == Instruction::Add) {
+        if (ConstantInt *cint = dyn_cast<ConstantInt>(bo->getOperand(0))) {
+          npadd = cint->getSExtValue();
+          npvar = bo->getOperand(1);
+        } else if (ConstantInt *cint = dyn_cast<ConstantInt>(bo->getOperand(1))) {
+          npadd = cint->getSExtValue();
+          npvar = bo->getOperand(0);
+        } else {
+          msg.info(MSG_PFX + "has an unsupported form of unprotect with a variable - binary add " + CONFUSION_DISCLAIMER, in);
+          if (QUIET_WHEN_CONFUSED) {
+            b.confused = true;
+            if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+          }
+          return;
+        }
+        if (msg.debug()) msg.debug(MSG_PFX + "unprotect call using counter and constant UNPROTECT(nprotect+" + std::to_string(npadd) + ")", in);        
+      } else {
+        msg.info(MSG_PFX + "has an unsupported form of unprotect with a variable - binary operation " + CONFUSION_DISCLAIMER, in);
+        if (QUIET_WHEN_CONFUSED) {
+          b.confused = true;
+          if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
+        }
+        return;      
+      }
+    }
+    
+    if (LoadInst::classof(npvar)) { // e.g. UNPROTECT(numProtects), UNPROTECT(numProtects + 3)
+      Value *varValue = const_cast<Value*>(cast<LoadInst>(npvar)->getPointerOperand());
       if (AllocaInst::classof(varValue)) {
         AllocaInst* var = cast<AllocaInst>(varValue);
         if (!isProtectionCounterVariable(var, g.unprotectFunction, counterVarsCache)) {
@@ -216,7 +258,7 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
           return;
         }
         if (b.countState == CS_EXACT) {
-          b.depth -= b.count;
+          b.depth -= b.count + npadd;
           if (msg.debug()) msg.debug(MSG_PFX + "unprotect call using counter in exact state", in);
           if (b.depth < 0) {
             msg.info(MSG_PFX + "has negative depth", in);
@@ -229,11 +271,19 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
         if (msg.debug()) msg.debug(MSG_PFX + "unprotect call using counter in diff state", in);
         b.countState = CS_NONE;
         // depth keeps its value - it now becomes exact depth again
+        
+        b.depth -= npadd;
         if (b.depth < 0) {
           msg.info(MSG_PFX + "has negative depth after UNPROTECT(<counter>)", in);
           refinableInfos++;
         }
+        return;
       }
+    }
+    msg.info(MSG_PFX + "has an unsupported form of unprotect (not constant, not variable " + CONFUSION_DISCLAIMER, in);
+    if (QUIET_WHEN_CONFUSED) {
+      b.confused = true;
+      if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
     }
     return;
   }
