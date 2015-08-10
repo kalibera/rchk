@@ -47,6 +47,14 @@ execute "install R (dev) build deps" do
   not_if 'dpkg --get-selections | grep -q "^xvfb\s"'
 end
 
+  # now also needed to build R
+["libcurl4-openssl-dev"].each do |pkg|
+  package pkg do
+    action :install
+    not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
+  end
+end
+
 directory "/opt" do
   owner "root"
   group "root"
