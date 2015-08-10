@@ -566,13 +566,34 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
             // this case is handled in handleCall
             return;
           }
+            // handle setter calls with indirect loads, e.g.
+            // SET_VECTOR_ELT(ans, 2, cosines = allocVector(REALSXP, shiftlen));
+    
+          if (cs.arg_size() > 1 && isSetterFunction(otherFun)) {
+            if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs.getArgument(0))) {
+              if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
+            
+                auto vsearch = freshVars.vars.find(firstArg);
+                if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
+                  // first argument of the setter is not fresh
+
+                  Value *protArg = cs.getArgument(1); // the argument being implicitly protected
+                  if (protArg != storeValueOp) {
+                    if (msg.debug()) msg.debug(MSG_PFX + "indirect protect using setter call for variable " + varName(var), in);
+                    freshVars.vars.erase(var);
+                    return ; // variable is not fresh as it is implicitly protected
+                  }
+                }
+              }
+            }
+          }
         }
       }
       
       int nProtects = 0;
       auto vsearch = freshVars.vars.find(var);
       if (vsearch == freshVars.vars.end()) {
-        freshVars.vars.insert({var, nProtects}); // remember, insert won't ovewrite std:map value for an existing key
+        freshVars.vars.insert({var, nProtects}); // remember, insert won't overwrite std::map value for an existing key
       } else {
         vsearch->second = nProtects;
       }
