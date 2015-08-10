@@ -58,7 +58,6 @@ cd trunk
 . /opt/rchk/scripts/config.inc
 /opt/rchk/scripts/build_r.sh
 
-sudo apt-get install libcurl4-openssl-dev
 . /opt/rchk/scripts/config.inc
 . /opt/rchk/scripts/cmpconfig.inc
 echo 'install.packages("curl",repos="http://cran.ma.imperial.ac.uk")' |  ./bin/R --slave
