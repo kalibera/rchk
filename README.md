@@ -50,6 +50,23 @@ To check a package:
 4. The results of the checks will appear under `packages/lib/<package_dir>`,
 again look for files with suffices `.maacheck` and `.bcheck`.
 
+To check the "curl" package from the virtual installation:
+* ```
+svn checkout http://svn.r-project.org/R/trunk
+cd trunk
+. /opt/rchk/scripts/config.inc
+/opt/rchk/scripts/build_r.sh
+```
+
+* ```
+sudo apt-get install libcurl4-openssl-dev
+. /opt/rchk/scripts/config.inc
+. /opt/rchk/scripts/cmpconfig.inc
+echo 'install.packages("curl",repos="http://cran.ma.imperial.ac.uk")' |  ./bin/R --slave
+/opt/rchk/scripts/check_package.sh curl
+less /home/vagrant/trunk/packages/lib/curl/libs/curl.so.bcheck
+```
+
 Further information:
 
 * [User documentation](doc/USAGE.md) - how to use the tools and what they check.
