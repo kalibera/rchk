@@ -51,17 +51,15 @@ To check a package:
 again look for files with suffices `.maacheck` and `.bcheck`.
 
 To check the "curl" package from the virtual installation:
-* 
-```
+
+*```
 svn checkout http://svn.r-project.org/R/trunk
 cd trunk
 . /opt/rchk/scripts/config.inc
 /opt/rchk/scripts/build_r.sh
 ```
 
-* 
-```
-sudo apt-get install libcurl4-openssl-dev
+*```sudo apt-get install libcurl4-openssl-dev
 . /opt/rchk/scripts/config.inc
 . /opt/rchk/scripts/cmpconfig.inc
 echo 'install.packages("curl",repos="http://cran.ma.imperial.ac.uk")' |  ./bin/R --slave
