@@ -72,10 +72,11 @@ class IntGuardsChecker {
 enum SEXPGuardState {
   SGS_NIL = 0, // R_NilValue
   SGS_SYMBOL,  // A specific symbol, name stored in symbolName
+  SGS_VECTOR,  // Anything that LENGTH can be called on (includes numeric vectors, generic vectors, but not things implemented as pair-lists) 
   SGS_NONNIL,
   SGS_UNKNOWN
 };
-const unsigned SGS_BITS = 2;
+const unsigned SGS_BITS = 3;
 
 struct SEXPGuardTy {
   SEXPGuardState state;

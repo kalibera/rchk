@@ -305,6 +305,13 @@ void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
   } // ordered map
 }
 
+bool isVectorGuard(Function *f) {
+  if (!f) return false;
+  return f->getName() == "Rf_isPrimitive" || f->getName() == "Rf_isList" || f->getName() == "Rf_isFunction" ||
+    f->getName() == "Rf_isPairList" || f->getName() == "Rf_isLanguage" || f->getName() == "Rf_isVector" ||
+    f->getName() == "Rf_isVectorList" || f->getName() == "Rf_isVectorAtomic";
+}
+
 // SEXP guard is a local variable of type SEXP
 //   that follows the heuristics included below
 //   these heuristics are important because the keep the state space small(er)
@@ -351,7 +358,7 @@ bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
       }
       CallSite cs(cast<Value>(uu));
       if (cs) {
-        if (isTypeTest(cs.getCalledFunction(), g)) {
+        if (isTypeTest(cs.getCalledFunction(), g) || isVectorGuard(cs.getCalledFunction())) {
           // isNull(guard);
           nComparisons++;
         } else if (cs.getCalledFunction()) {
@@ -415,6 +422,7 @@ std::string sgs_name(SEXPGuardTy& g) {
     case SGS_NONNIL: return "non-nil (not R_NilValue)";
     case SGS_UNKNOWN: return "unknown";
     case SGS_SYMBOL: return "symbol \"" + g.symbolName + "\"";
+    case SGS_VECTOR: return "vector";
   }
 }
 
@@ -439,6 +447,8 @@ SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, 
 
 void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& sexpGuards) {
 
+  // TODO: handle calls like LENGTH
+  
   if (!StoreInst::classof(in)) {
     return;
   }
@@ -455,14 +465,20 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
   }
   // sexpguard = ...
 
-  if (argInfos && Argument::classof(storeValueOp))  { // sexpguard = symbol_argument
+  if (argInfos && Argument::classof(storeValueOp))  { // sexpguard = function_argument
     Argument *arg = cast<Argument>(storeValueOp);
     const ArgInfoTy *ai = (*argInfos)[arg->getArgNo()];
-    if (ai && ai->isSymbol()) {
+    if (ai && ai->isSymbol()) { // sexpguard = symbol_argument
       SEXPGuardTy newGS(SGS_SYMBOL, static_cast<const SymbolArgInfoTy*>(ai)->symbolName);
       sexpGuards[storePointerVar] = newGS;
       if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" +
         static_cast<const SymbolArgInfoTy*>(ai)->symbolName + "\" from argument\n", store);
+      return;
+    }
+    if (ai && ai->isVector()) { // sexpguard = vector_argument
+      SEXPGuardTy newGS(SGS_VECTOR);
+      sexpGuards[storePointerVar] = newGS;
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector from argument\n", store);
       return;
     }
   }
@@ -510,6 +526,8 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
         return;
       }
     }
+    // TODO: installConst calls (?)
+    // TODO: vector creation calls?
   }
   sexpGuards.erase(storePointerVar);
   if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to unknown", store);
@@ -524,7 +542,9 @@ bool SEXPGuardsChecker::handleNullCheck(bool positive, SEXPGuardState gs, Alloca
 
   if (gs != SGS_UNKNOWN) {
     // note a symbol cannot be R_NilValue
-
+    // note a vector cannot be R_NilValue
+    //  so SGS_NONNIL and SGS_SYMBOL and SGS_VECTOR all mean "non-nil"
+    
     if (positive) {       
       // guard == R_NilValue
       succIndex = (gs == SGS_NIL) ? 0 : 1;
@@ -551,9 +571,9 @@ bool SEXPGuardsChecker::handleNullCheck(bool positive, SEXPGuardState gs, Alloca
     // true branch is possible
     {
       StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
-      if (gs != SGS_SYMBOL) {
+      if (gs != SGS_SYMBOL && gs != SGS_VECTOR) {
         SEXPGuardTy newGS(positive ? SGS_NIL : SGS_NONNIL);
-        state->sexpGuards[guard] = newGS;
+        state->sexpGuards[guard] = newGS; // added information from that the true branch was taken
       }
       if (state->add()) {
         msg->trace("added true branch on sexp guard of branch at", branch);
@@ -564,9 +584,9 @@ bool SEXPGuardsChecker::handleNullCheck(bool positive, SEXPGuardState gs, Alloca
     // false branch is possible
     {
       StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
-      if (gs != SGS_SYMBOL) {
+      if (gs != SGS_SYMBOL && gs != SGS_VECTOR) {
         SEXPGuardTy newGS(positive ? SGS_NONNIL : SGS_NIL);
-        state->sexpGuards[guard] = newGS;
+        state->sexpGuards[guard] = newGS; // added information from that the false branch was taken
       }
       if (state->add()) {
         msg->trace("added false branch on sexp guard of branch at", branch);
@@ -606,6 +626,7 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
       canBeFalse = false; // isSymbol(symbol)
     } 
     if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL) {  // gs == SGS_NONNIL can be any type...
+                                                                       // gs == SGS_VECTOR cannot be a symbol
       canBeTrue = false; // isSymbol(nonsymbol)
     }
   }
@@ -660,6 +681,31 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
   
 }
 
+bool trueForVector(Function *f) { // myvector => true branch
+  return f->getName() == "Rf_isVector";
+}
+
+bool trueForNonVector(Function *f) { // !myvector => true branch
+  return false;
+}
+
+bool falseForVector(Function *f) { // myvector => false branch
+  return f->getName() == "Rf_isPrimitive" || f->getName() == "Rf_isList" || f->getName() == "Rf_isFunction" || 
+    f->getName() == "Rf_isPairList" || f->getName() == "Rf_isLanguage";
+}
+
+bool falseForNonVector(Function *f) { // !myvector => false branch
+  return f->getName() == "Rf_isVector" || f->getName() == "Rf_isVectorList" || f->getName() == "Rf_isVectorAtomic";
+}
+
+bool impliesVectorWhenTrue(Function *f) {
+  return f->getName() == "Rf_isVector" || f->getName() == "Rf_isVectorList" || f->getName() == "Rf_isVectorAtomic";
+}
+
+bool impliesVectorWhenFalse(Function *f) {
+  return false;
+}
+
 bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s) {
   
   if (!BranchInst::classof(t)) {
@@ -700,7 +746,6 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
       CallSite cs(op);
       if (cs) {
         f = cs.getCalledFunction();
-        tcType = g->getTypeForTypeTest(cs.getCalledFunction());
         
         if (LoadInst::classof(cs.getArgument(0))) {
           Value *loadOp = cast<LoadInst>(cs.getArgument(0))->getPointerOperand();
@@ -708,17 +753,82 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
             guard = cast<AllocaInst>(loadOp);
           }
         }
+        if (guard) {
+          tcType = g->getTypeForTypeTest(f);
+        }
       }
     }
     
-    if (tcType == RT_UNKNOWN || !guard || !isGuard(guard)) {
+    if (!guard || !isGuard(guard) || !f) {
       return false;
     }
     SEXPGuardState gs = getGuardState(s.sexpGuards, guard);
     
-    return handleTypeCheck(ci->isTrueWhenEqual(), tcType, gs, guard, branch, s);
+    if (tcType != RT_UNKNOWN) { // a simple type check (like isSymbol)
+      return handleTypeCheck(ci->isTrueWhenEqual(), tcType, gs, guard, branch, s);
+    } else if (isVectorGuard(f)) {
+      // handle complex type checks that check for multiple types at once
+      //   (now the only supported ones check for vectors)
+      
+      // either I know whether var is a vector, and then I know which branch to take
+      
+      // or I don't know whether var is a vector, and then I will add information dependinv
+      //   on which branch is taken
+      
+      bool guardIsVector = (gs == SGS_VECTOR);
+      bool guardIsNonVector = (gs == SGS_SYMBOL || gs == SGS_NIL);
+
+      bool onlyTrueBranch = (guardIsVector && trueForVector(f)) || (guardIsNonVector && trueForNonVector(f));
+      bool onlyFalseBranch = (guardIsVector && falseForVector(f)) || (guardIsNonVector && falseForNonVector(f));
+      
+      assert(!onlyTrueBranch || !onlyFalseBranch);
+      
+      if (onlyTrueBranch) {
+        {
+          StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
+          if (state->add()) {
+            msg->trace("added *only* true branch on sexp guard (vector) of branch at", branch);
+          }
+        }
+        return true;
+      }
+
+      if (onlyFalseBranch) {
+        {
+          StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
+          if (state->add()) {
+            msg->trace("added *only* false branch on sexp guard (vector) of branch at", branch);
+          }
+        }
+        return true;
+      }
+      
+      // add both branches, but with added information
+      {
+        StateWithGuardsTy* state = s.clone(branch->getSuccessor(0));
+        if (gs != SGS_SYMBOL && impliesVectorWhenTrue(f)) {
+          SEXPGuardTy newGS(SGS_VECTOR);
+          state->sexpGuards[guard] = newGS; // added information from that the true branch was taken
+        }
+        if (state->add()) {
+          msg->trace("added (also) true branch on sexp guard (vector) of branch at", branch);
+        }
+      }
+      {
+        StateWithGuardsTy* state = s.clone(branch->getSuccessor(1));
+        if (gs != SGS_SYMBOL && impliesVectorWhenFalse(f)) {
+          SEXPGuardTy newGS(SGS_VECTOR);
+          state->sexpGuards[guard] = newGS; // added information from that the true branch was taken
+        }
+        if (state->add()) {
+          msg->trace("added (also) false branch on sexp guard (vector) of branch at", branch);
+        }
+      }      
+      return true;
+    } else {
+      return false;
+    }
   }
-  
   
   if (!LoadInst::classof(ci->getOperand(0)) || !LoadInst::classof(ci->getOperand(1))) {
     return false;
@@ -779,7 +889,7 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
       succIndex = (guardSymbolName == constSymbolName) ? 1 : 0;
     }
   }
-  if (gs == SGS_NIL) {
+  if (gs == SGS_NIL || gs == SGS_VECTOR) {  // SGS_NIL and SGS_VECTOR cannot be a symbol
     if (ci->isTrueWhenEqual()) {
       // guard == R_XSymbol
       succIndex = 1;
@@ -861,12 +971,13 @@ PackedSEXPGuardsTy SEXPGuardsChecker::pack(const SEXPGuardsTy& sexpGuards) {
     
     unsigned base = idx * SGS_BITS;
     switch(gs) {
-      case SGS_NIL:    packed.bits[base] = true; break;     // 1 0
-      case SGS_NONNIL: packed.bits[base + 1] = true; break; // 0 1
-      case SGS_SYMBOL: packed.bits[base] = true; packed.bits[base + 1] = true; // 1 1
+      case SGS_NIL:    packed.bits[base] = true; break;     // 1 0 0
+      case SGS_NONNIL: packed.bits[base + 1] = true; break; // 0 1 0
+      case SGS_SYMBOL: packed.bits[base] = true; packed.bits[base + 1] = true; // 1 1 0
                        packed.symbols.push_back(guard.symbolName);
                        break;
-      case SGS_UNKNOWN: break; // 0 0
+      case SGS_VECTOR: packed.bits[base + 2] = true; break;     // 0 0 1
+      case SGS_UNKNOWN: break; // 0 0 0
     }
   }
 
@@ -885,11 +996,12 @@ SEXPGuardsTy SEXPGuardsChecker::unpack(const PackedSEXPGuardsTy& sexpGuards) {
     SEXPGuardState gs = SGS_UNKNOWN;
     std::string symbolName;
     
-    bool bit1 = sexpGuards.bits[base];
-    bool bit0 = sexpGuards.bits[base + 1];
+    bool bit2 = sexpGuards.bits[base];
+    bool bit1 = sexpGuards.bits[base + 1];
+    bool bit0 = sexpGuards.bits[base + 2];
     
-    if (bit1) {
-      if (bit0) {
+    if (bit2) {
+      if (bit1) {
         gs = SGS_SYMBOL;
         symbolName = sexpGuards.symbols[symbolIdx];
         symbolIdx++;
@@ -897,8 +1009,10 @@ SEXPGuardsTy SEXPGuardsChecker::unpack(const PackedSEXPGuardsTy& sexpGuards) {
         gs = SGS_NIL;
       }
     } else {
-      if (bit0) {
+      if (bit1) {
         gs = SGS_NONNIL;
+      } else if (bit0) {
+        gs = SGS_VECTOR;
       }
     }
     

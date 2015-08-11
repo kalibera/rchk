@@ -43,7 +43,7 @@ bool CalledFunctionTy::hasContext() const {
   
   for(ArgInfosVectorTy::const_iterator ai = argInfo->begin(), ae = argInfo->end(); ai != ae; ++ai) {
     const ArgInfoTy *a = *ai;
-    if (a && a->isSymbol()) {
+    if (a && (a->isSymbol() || a->isVector())) {
       return true;
     }
   }
@@ -67,6 +67,9 @@ std::string CalledFunctionTy::getNameSuffix() const {
     }
     if (a && a->isSymbol()) {
       suff += "S:" + static_cast<const SymbolArgInfoTy*>(a)->symbolName;
+      nKnown++;
+    } else if (a && a->isVector()) {
+      suff += "V";
       nKnown++;
     } else {
       suff += "?";
@@ -101,15 +104,20 @@ size_t ArgInfosVectorTy_hash::operator()(const ArgInfosVectorTy& t) const {
   size_t res = 0;
   hash_combine(res, t.size());
   
-  size_t cnt = 0;
+  size_t cntSym = 0;
+  size_t cntVec = 0;
   for(ArgInfosVectorTy::const_iterator ai = t.begin(), ae = t.end(); ai != ae; ++ai) {
     const ArgInfoTy *a = *ai;
     if (a && a->isSymbol()) {
       hash_combine(res, static_cast<const SymbolArgInfoTy*>(a)->symbolName);
-      cnt++;
+      cntSym++;
+    } else if (a && a->isVector()) {
+      hash_combine(res, true);
+      cntVec++;
     }
   }
-  hash_combine(res, cnt);
+  hash_combine(res, cntSym);
+  hash_combine(res, cntVec);
   return res;
 }
 
@@ -162,6 +170,10 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
             argInfo[i] = SymbolArgInfoTy::create(symbolName);
             continue;
           }
+          if (gs == SGS_VECTOR) {
+            argInfo[i] = VectorArgInfoTy::get();
+            continue;
+          }
         }
       }
     }
@@ -170,6 +182,7 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
       argInfo[i] = SymbolArgInfoTy::create(symbolName);
       continue;
     }
+    // TODO: detect immediate vector creation
     // not a symbol, leave argInfo as NULL
   }
       

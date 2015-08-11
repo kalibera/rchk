@@ -318,6 +318,8 @@ GlobalsTy::GlobalsTy(Module *m) : typesMap() {
   nilVariable = getSpecialVariable(m, "R_NilValue");
   
     // mutually exclusive test functions
+    // these functions test the type field and nothing more
+    //   there are more complicated type tests, too, like isInteger or isVector, etc
   isNullFunction = getSpecialFunction(m, "Rf_isNull");
   isSymbolFunction = getSpecialFunction(m, "Rf_isSymbol");
   isLogicalFunction = getSpecialFunction(m, "Rf_isLogical");

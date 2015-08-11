@@ -21,7 +21,8 @@ using namespace llvm;
 
 struct ArgInfoTy {
 
-  virtual bool isSymbol() const { return false; };
+  virtual bool isSymbol() const { return false; }; /* this means a specific symbol, defined by its string name */
+  virtual bool isVector() const { return false; }; /* this means anything LENGTH could be called on */
 };
 
 
@@ -50,6 +51,21 @@ struct SymbolArgInfoTy : public ArgInfoTy {
   static const SymbolArgInfoTy* create(const std::string& symbolName) {
     return table.intern(SymbolArgInfoTy(symbolName)); // FIXME: leaks memory  
   }
+};
+
+struct VectorArgInfoTy : public ArgInfoTy { // a signleton class
+
+  virtual bool isVector() const { return true; }
+  
+  static const VectorArgInfoTy* get() {
+    static VectorArgInfoTy instance;
+    return &instance;
+  }
+  
+  private:
+    VectorArgInfoTy() {};
+    VectorArgInfoTy(VectorArgInfoTy const&);
+    void operator=(VectorArgInfoTy const&);
 };
 
 typedef std::vector<const ArgInfoTy*> ArgInfosVectorTy; // for interned elements
