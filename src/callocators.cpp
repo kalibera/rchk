@@ -8,6 +8,7 @@
 #include "table.h"
 #include "exceptions.h"
 #include "patterns.h"
+#include "vectors.h"
 
 #include <map>
 #include <stack>
@@ -182,7 +183,10 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
       argInfo[i] = SymbolArgInfoTy::create(symbolName);
       continue;
     }
-    // TODO: detect immediate vector creation
+    if (isVectorProducingCall(arg)) {
+      argInfo[i] = VectorArgInfoTy::get();
+      continue;
+    }
     // not a symbol, leave argInfo as NULL
   }
       

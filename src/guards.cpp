@@ -517,7 +517,7 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
       if (sfind != symbolsMap->end()) {
         SEXPGuardTy newGS(SGS_SYMBOL, sfind->second);
         sexpGuards[storePointerVar] = newGS;
-        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + sfind->second + "\" at assignment\n", store);
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + sfind->second + "\" at assignment", store);
         return;
       } 
     }
@@ -532,14 +532,25 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
         return;
       }
     }
-    // TODO: installConst calls (?)
+
+    if (acs) {
+      std::string symbolName;
+      if (isInstallConstantCall(storeValueOp, symbolName)) {
+        Function *afun = acs.getCalledFunction();        
+        SEXPGuardTy newGS(SGS_SYMBOL, symbolName);
+        sexpGuards[storePointerVar] = newGS;
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + symbolName + "\" at install call", store);
+        return;        
+      }
+    }
+    
     // TODO: more vector creating calls
     if (acs && isVectorProducingCall(storeValueOp)) {
       Function *afun = acs.getCalledFunction();        
       SEXPGuardTy newGS(SGS_VECTOR);
       sexpGuards[storePointerVar] = newGS;
       if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector (created by " + funName(afun) + ")", store);
-      return;      
+      return;
     }
   }
   sexpGuards.erase(storePointerVar);
