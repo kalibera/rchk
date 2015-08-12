@@ -73,6 +73,7 @@ enum SEXPType {
   RT_WEAKREF = 23,
   RT_RAW = 24,
   RT_S4 = 25,
+  RT_INTCHAR = 73,
   
   RT_UNKNOWN = -1  // not really an R type
 };

@@ -9,6 +9,25 @@
 
 using namespace llvm;
 
+bool isAllocVectorOfKnownType(Value *inst, unsigned& type) {
+  CallSite cs(inst);
+  if (!cs) {
+    return false;
+  }
+  Function *tgt = cs.getCalledFunction();
+  if (!tgt || tgt->getName() != "Rf_allocVector") {
+    return false;
+  }
+  Value *arg = cs.getArgument(0);
+  if (!ConstantInt::classof(arg)) {
+    return false;
+  }
+  
+  ConstantInt *ctype = cast<ConstantInt>(arg);
+  type = ctype->getZExtValue();
+  return true;
+}
+
 bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) {
 
   // %33 = load %struct.SEXPREC** %2, align 8, !dbg !21240 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 1097:0]

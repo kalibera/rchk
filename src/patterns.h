@@ -17,4 +17,6 @@ AllocaInst* originsOnlyFromLoad(Value *inst);
 
 ValuesSetTy valueOrigins(Value *inst);
 
+bool isAllocVectorOfKnownType(Value *inst, unsigned& type);
+
 #endif

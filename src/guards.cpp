@@ -1,6 +1,7 @@
 
 #include "guards.h"
 #include "patterns.h"
+#include "vectors.h"
 
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
@@ -305,13 +306,6 @@ void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
   } // ordered map
 }
 
-bool isVectorGuard(Function *f) {
-  if (!f) return false;
-  return f->getName() == "Rf_isPrimitive" || f->getName() == "Rf_isList" || f->getName() == "Rf_isFunction" ||
-    f->getName() == "Rf_isPairList" || f->getName() == "Rf_isLanguage" || f->getName() == "Rf_isVector" ||
-    f->getName() == "Rf_isVectorList" || f->getName() == "Rf_isVectorAtomic";
-}
-
 // SEXP guard is a local variable of type SEXP
 //   that follows the heuristics included below
 //   these heuristics are important because the keep the state space small(er)
@@ -527,7 +521,14 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
       }
     }
     // TODO: installConst calls (?)
-    // TODO: vector creation calls?
+    // TODO: more vector creating calls
+    if (acs && isVectorProducingCall(storeValueOp)) {
+      Function *afun = acs.getCalledFunction();        
+      SEXPGuardTy newGS(SGS_VECTOR);
+      sexpGuards[storePointerVar] = newGS;
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector (created by " + funName(afun) + ")", store);
+      return;      
+    }
   }
   sexpGuards.erase(storePointerVar);
   if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to unknown", store);
@@ -679,31 +680,6 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
   }
   return true;  
   
-}
-
-bool trueForVector(Function *f) { // myvector => true branch
-  return f->getName() == "Rf_isVector";
-}
-
-bool trueForNonVector(Function *f) { // !myvector => true branch
-  return false;
-}
-
-bool falseForVector(Function *f) { // myvector => false branch
-  return f->getName() == "Rf_isPrimitive" || f->getName() == "Rf_isList" || f->getName() == "Rf_isFunction" || 
-    f->getName() == "Rf_isPairList" || f->getName() == "Rf_isLanguage";
-}
-
-bool falseForNonVector(Function *f) { // !myvector => false branch
-  return f->getName() == "Rf_isVector" || f->getName() == "Rf_isVectorList" || f->getName() == "Rf_isVectorAtomic";
-}
-
-bool impliesVectorWhenTrue(Function *f) {
-  return f->getName() == "Rf_isVector" || f->getName() == "Rf_isVectorList" || f->getName() == "Rf_isVectorAtomic";
-}
-
-bool impliesVectorWhenFalse(Function *f) {
-  return false;
 }
 
 bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s) {
