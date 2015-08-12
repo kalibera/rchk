@@ -99,6 +99,8 @@ struct GlobalsTy {
     GlobalVariable *getSpecialVariable(Module *m, std::string name);
 };
 
+bool isPointerToStruct(Type* type, std::string name);
+//bool isPointerToUnion(Type* type, std::string name);
 bool isSEXP(AllocaInst *var);
 bool isSEXP(Type* type);
 bool isSEXPPtr(Type *type);

@@ -233,8 +233,7 @@ std::string varName(const AllocaInst *var) {
   return name;
 }
 
-bool isSEXP(Type* type) {
-
+bool isPointerToStruct(Type* type, std::string name) {
   if (!PointerType::classof(type)) {
     return false;
   }
@@ -243,10 +242,29 @@ bool isSEXP(Type* type) {
     return false;
   }
   StructType *estr = cast<StructType>(etype);
-  if (!estr->hasName() || estr->getName() != "struct.SEXPREC") {
+  if (!estr->hasName() || estr->getName() != name) {
     return false;
   }
   return true;
+}
+
+/*bool isPointerToUnion(Type* type, std::string name) {
+  if (!PointerType::classof(type)) {
+    return false;
+  }
+  Type *etype = (cast<PointerType>(type))->getPointerElementType();
+  if (!UnionType::classof(etype)) {
+    return false;
+  }
+  UnionType *euni = cast<UnionType>(etype);
+  if (!euni->hasName() || euni->getName() != name) {
+    return false;
+  }
+  return true;
+}
+*/
+bool isSEXP(Type* type) {
+  return isPointerToStruct(type, "struct.SEXPREC");
 }
 
 bool isSEXPPtr(Type* type) {

@@ -19,5 +19,6 @@ bool impliesVectorWhenTrue(Function *f);
 bool impliesVectorWhenFalse(Function *f);
 
 bool isVectorProducingCall(Value *inst);
+bool isVectorOnlyVarOperation(Value *inst, AllocaInst*& var);
 
 #endif

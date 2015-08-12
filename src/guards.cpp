@@ -441,7 +441,19 @@ SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, 
 
 void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& sexpGuards) {
 
-  // TODO: handle calls like LENGTH
+  // TODO: handle more "vector-only" operations, including passing to vector-only arguments of functions
+  AllocaInst* vvar;
+  if (isVectorOnlyVarOperation(in, vvar)) {
+    // vvar is a vector
+    
+    SEXPGuardState gs = getGuardState(sexpGuards, vvar);
+    if (gs != SGS_VECTOR) {
+      SEXPGuardTy newGS(SGS_VECTOR);
+      sexpGuards[vvar] = newGS;
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(vvar) + " set to vector because used with vector-only operation", in);
+    }
+    return;
+  }
   
   if (!StoreInst::classof(in)) {
     return;

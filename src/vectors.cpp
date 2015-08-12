@@ -70,3 +70,18 @@ bool isVectorProducingCall(Value *inst) {
   return false;
 }
 
+bool isVectorOnlyVarOperation(Value *inst, AllocaInst*& var) {
+  AllocaInst* tvar;
+  Type *type;
+  
+  if (!isBitCastOfVar(inst, tvar, type)) {
+    return false;
+  }
+
+  if (isPointerToStruct(type, "struct.VECTOR_SEXPREC") || isPointerToStruct(type, "union.SEXPREC_ALIGN")) {
+    var = tvar;
+    return true;
+  }
+  
+  return false;
+}

@@ -28,6 +28,27 @@ bool isAllocVectorOfKnownType(Value *inst, unsigned& type) {
   return true;
 }
 
+bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type) {
+
+  if (!BitCastInst::classof(inst)) {
+    return false;
+  }
+  BitCastInst* bc = cast<BitCastInst>(inst);
+  
+  Value *lvar = bc->getOperand(0);
+  if (!LoadInst::classof(lvar)) {
+    return false;
+  }
+  Value *avar = cast<LoadInst>(lvar)->getPointerOperand();
+  if (!AllocaInst::classof(avar)) {
+    return false;
+  }
+  
+  var = cast<AllocaInst>(avar);
+  type = cast<Type>(bc->getDestTy());
+  return true;
+}
+
 bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) {
 
   // %33 = load %struct.SEXPREC** %2, align 8, !dbg !21240 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 1097:0]
