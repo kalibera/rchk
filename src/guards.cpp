@@ -211,10 +211,10 @@ bool IntGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy&
         msg->debug("undecided branch on integer guard variable " + varName(var), branch);
         break;
       case 0:
-        msg->debug("taking true branch on integer guard variable " + varName(var), branch);
+        msg->debug("taking (only) true branch on integer guard variable " + varName(var), branch);
         break;
       case 1:
-        msg->debug("taking false branch on integer guard variable " + varName(var), branch);
+        msg->debug("taking (only) false branch on integer guard variable " + varName(var), branch);
         break;
     }
   }
@@ -573,10 +573,10 @@ bool SEXPGuardsChecker::handleNullCheck(bool positive, SEXPGuardState gs, Alloca
         msg->debug("undecided branch on sexp guard variable " + varName(guard), branch);
         break;
       case 0:
-        msg->debug("taking true branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking (only) true branch on sexp guard variable " + varName(guard), branch);
         break;
       case 1:
-        msg->debug("taking false branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking (only) false branch on sexp guard variable " + varName(guard), branch);
         break;
     }
   }
@@ -638,9 +638,9 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
     if (gs == testedState && gs != SGS_UNKNOWN) {
       canBeFalse = false; // isSymbol(symbol)
     } 
-    if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL) {  // gs == SGS_NONNIL can be any type...
-                                                                       // gs == SGS_VECTOR cannot be a symbol
-      canBeTrue = false; // isSymbol(nonsymbol)
+    if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL && gs != SGS_VECTOR) {  // gs == SGS_NONNIL can be any type...
+                                                                                           // gs == SGS_VECTOR cannot be a symbol
+      canBeTrue = false; // isSymbol(nonsymbol), isReal(symbol)
     }
   }
   
@@ -648,7 +648,7 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
     if (gs == testedState && gs != SGS_UNKNOWN) {
       canBeTrue = false; // !isSymbol(symbol)
     }
-    if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL) {
+    if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL && gs != SGS_VECTOR) {
       canBeFalse = false; // !isSymbol(nonsymbol)
     }
   }
@@ -665,10 +665,10 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
         msg->debug("undecided type branch on sexp guard variable " + varName(guard), branch);
         break;
       case 0:
-        msg->debug("taking true type branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking (only) true type branch on sexp guard variable " + varName(guard), branch);
         break;
       case 1:
-        msg->debug("taking false type branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking (only) false type branch on sexp guard variable " + varName(guard), branch);
         break;
     }
   }
@@ -893,10 +893,10 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
         msg->debug("undecided symbol branch on sexp guard variable " + varName(guard), branch);
         break;
       case 0:
-        msg->debug("taking true symbol branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking (only) true symbol branch on sexp guard variable " + varName(guard), branch);
         break;
       case 1:
-        msg->debug("taking false symbol branch on sexp guard variable " + varName(guard), branch);
+        msg->debug("taking (only) false symbol branch on sexp guard variable " + varName(guard), branch);
         break;
     }
   }
