@@ -18,6 +18,7 @@ bool falseForNonVector(Function *f);
 bool impliesVectorWhenTrue(Function *f);
 bool impliesVectorWhenFalse(Function *f);
 
+bool isVectorType(unsigned type);
 bool isVectorProducingCall(Value *inst);
 bool isVectorOnlyVarOperation(Value *inst, AllocaInst*& var);
 

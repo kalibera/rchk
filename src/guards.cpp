@@ -642,6 +642,9 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
                                                                                            // gs == SGS_VECTOR cannot be a symbol
       canBeTrue = false; // isSymbol(nonsymbol), isReal(symbol)
     }
+    if (gs == SGS_VECTOR && !isVectorType(testedType)) {
+      canBeTrue = false; // isList(vector)
+    }
   }
   
   if (!positive) {
@@ -651,6 +654,9 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
     if (gs != testedState && gs != SGS_UNKNOWN && gs != SGS_NONNIL && gs != SGS_VECTOR) {
       canBeFalse = false; // !isSymbol(nonsymbol)
     }
+    if (gs == SGS_VECTOR && !isVectorType(testedType)) {
+      canBeFalse = false; // isList(vector)
+    }    
   }
   
   assert(canBeTrue || canBeFalse);
@@ -676,6 +682,10 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
     // true branch is possible
     {
       StateWithGuardsTy* state = s.clone(branch->getSuccessor(0)); // FIXME: capture that something is a symbol even if we don't know which one
+      if (gs != SGS_SYMBOL && gs != SGS_VECTOR && isVectorType(testedType) && positive) {
+        SEXPGuardTy newGS(SGS_VECTOR);
+        state->sexpGuards[guard] = newGS; // added information from that the true branch was taken (e.g. if it is a String, it is definitely a vector)
+      }      
       if (state->add()) {
         msg->trace("added true type branch on sexp guard of branch at", branch);
       }
