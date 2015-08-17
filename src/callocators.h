@@ -1,4 +1,6 @@
 
+class CalledModuleTy;
+
 #ifndef RCHK_CALLOCATORS_H
 #define RCHK_CALLOCATORS_H
 
@@ -71,7 +73,7 @@ struct VectorArgInfoTy : public ArgInfoTy { // a signleton class
 
 typedef std::vector<const ArgInfoTy*> ArgInfosVectorTy; // for interned elements
 
-class CalledModuleTy;
+
 
 struct CalledFunctionTy {
 
@@ -145,7 +147,7 @@ class CalledModuleTy {
 
   public:
     CalledModuleTy(Module *m, SymbolsMapTy* symbolsMap, FunctionsSetTy* errorFunctions, GlobalsTy* globals,
-      FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions, VrfStateTy* vrfState);
+      FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions);
       
     static CalledModuleTy* create(Module *m);
     static void release(CalledModuleTy *cm);
@@ -176,7 +178,9 @@ class CalledModuleTy {
     Module* getModule() { return m; }
     const CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
     SymbolsMapTy* getSymbolsMap() { return symbolsMap; }
-    VrfStateTy* getVrfState() { return vrfState; }
+    void computeVectorReturningFunctions() { if (vrfState == NULL) findVectorReturningFunctions(this); }
+    VrfStateTy* getVrfState() { computeVectorReturningFunctions(); return vrfState; }
+    void setVrfState(VrfStateTy* vrfState) { this->vrfState = vrfState; }
 };
 
 std::string funName(const CalledFunctionTy *cf);

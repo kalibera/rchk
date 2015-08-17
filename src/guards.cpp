@@ -425,8 +425,11 @@ SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, 
   if (gsearch == sexpGuards.end()) {
     return SGS_UNKNOWN;
   } else {
-    symbolName = gsearch->second.symbolName;
-    return gsearch->second.state;
+    SEXPGuardState gs = gsearch->second.state;
+    if (gs == SGS_SYMBOL) {
+      symbolName = gsearch->second.symbolName;
+    }
+    return gs;
   }
 }
 
@@ -523,14 +526,14 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
     }
   } else {
     CallSite acs(storeValueOp);
-    if (acs && possibleAllocators) { // sexpguard = fooAlloc()
-      Function *afun = acs.getCalledFunction();
-      if (possibleAllocators->find(afun) != possibleAllocators->end()) {
-        SEXPGuardTy newGS(SGS_NONNIL);
-        sexpGuards[storePointerVar] = newGS;
-        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to non-nill (allocated by " + funName(afun) + ")", store);
-        return;
-      }
+    const CalledFunctionTy *atgt = msg->debug() ? cm->getCalledFunction(storeValueOp, this, &sexpGuards, true) : NULL; // just for debugging - seeing the context
+
+    if (acs && isVectorProducingCall(storeValueOp, cm, this, &sexpGuards)) {
+      Function *afun = acs.getCalledFunction();        
+      SEXPGuardTy newGS(SGS_VECTOR);
+      sexpGuards[storePointerVar] = newGS;
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector (created by " + funName(atgt) +  ")", store);
+      return;
     }
 
     if (acs) {
@@ -539,18 +542,21 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
         Function *afun = acs.getCalledFunction();        
         SEXPGuardTy newGS(SGS_SYMBOL, symbolName);
         sexpGuards[storePointerVar] = newGS;
-        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + symbolName + "\" at install call", store);
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + symbolName + "\" at install call " + funName(atgt), store);
         return;        
       }
     }
     
-    if (acs && isVectorProducingCall(storeValueOp, this, &sexpGuards)) {
-      Function *afun = acs.getCalledFunction();        
-      SEXPGuardTy newGS(SGS_VECTOR);
-      sexpGuards[storePointerVar] = newGS;
-      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector (created by " + funName(afun) + ")", store);
-      return;
+    if (acs && possibleAllocators) { // sexpguard = fooAlloc()
+      Function *afun = acs.getCalledFunction();
+      if (possibleAllocators->find(afun) != possibleAllocators->end()) {
+        SEXPGuardTy newGS(SGS_NONNIL);
+        sexpGuards[storePointerVar] = newGS;
+        if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to non-nill (allocated by " + funName(atgt) + ")", store);
+        return;
+      }
     }
+    
   }
   sexpGuards.erase(storePointerVar);
   if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to unknown", store);

@@ -47,9 +47,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "Rf_protect"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "do_aperm"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "Rf_protect";
+const std::string ONLY_FUNCTION_NAME = "do_aperm";
 const bool VERBOSE_DUMP = false;
 
 const bool PROGRESS_MARKS = false;
@@ -461,7 +461,7 @@ class FunctionChecker {
         fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), 
         /* TODO: we would need "sure" allocators here instead of possible allocators! */
         sexpGuardsChecker(&moduleState.msg, &moduleState.gl, 
-          USE_ALLOCATOR_DETECTION ? moduleState.cm.getContextSensitivePossibleAllocators() : NULL, moduleState.cm.getSymbolsMap(), NULL, moduleState.cm.getVrfState()),
+          USE_ALLOCATOR_DETECTION ? moduleState.cm.getContextSensitivePossibleAllocators() : NULL, moduleState.cm.getSymbolsMap(), NULL, moduleState.cm.getVrfState(), &moduleState.cm),
         errorBasicBlocks(), m(moduleState) {
         
       findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
@@ -521,9 +521,7 @@ int main(int argc, char* argv[])
   SymbolsMapTy symbolsMap;
   findSymbols(m, &symbolsMap);
   
-  VrfStateTy* vrfState = findVectorReturningFunctions(m);
-  
-  CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &gl, &possibleAllocators, &allocatingFunctions, vrfState);
+  CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &gl, &possibleAllocators, &allocatingFunctions);
   CProtectInfo cprotect = findCalleeProtectFunctions(m, *cm.getContextSensitiveAllocatingFunctions());
   
   ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg, cm, cprotect); 
@@ -559,7 +557,6 @@ int main(int argc, char* argv[])
   msg.flush();
   clearStates();
   delete m;
-  freeVrfState(vrfState);
 
   outs().flush();
   errs() << "Analyzed " << nAnalyzedFunctions << " functions, traversed " << totalStates << " states.\n";

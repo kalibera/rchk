@@ -597,7 +597,8 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
       } else {
         vsearch->second = nProtects;
       }
-      if (msg.debug()) msg.debug(MSG_PFX + "initialized fresh SEXP variable " + varName(var) + " with protect count " + std::to_string(nProtects), in);
+      if (msg.debug()) msg.debug(MSG_PFX + "initialized fresh SEXP variable " + varName(var) + " with protect count " + std::to_string(nProtects) +
+        " allocated by " + funName(srcFun), in);
       return;
     }
   }

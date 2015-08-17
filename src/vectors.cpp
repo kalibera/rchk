@@ -3,6 +3,7 @@
 #include "patterns.h"
 #include "table.h"
 #include "callocators.h"
+#include "exceptions.h"
 
 #include <unordered_map>
 #include <vector>
@@ -16,8 +17,8 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-//#undef NDEBUG
-//#include <assert.h>
+#undef NDEBUG
+#include <assert.h>
 
 using namespace llvm;
 
@@ -161,7 +162,7 @@ std::string funNameWithContext(Function *fun, ArgsTy context) {
   res += "(";
   for(unsigned a = 0; a < nargs; a++) {
     if (a>0) {
-      res += ", ";
+      res += ",";
     }
     if (context.at(a)) {
       res += "V";
@@ -254,7 +255,7 @@ struct BlockState {
 typedef std::unordered_map<BasicBlock*, BlockState> BlocksTy;
 typedef std::vector<BasicBlock*> BlockWorkListTy;
 
-static bool callReturnsOnlyVector(CallSite& cs, FunctionState& fstate, BlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList) {
+static bool callReturnsOnlyVector(CallSite& cs, FunctionState& fstate, BlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
 
   if (!cs) {
     return false;
@@ -263,6 +264,11 @@ static bool callReturnsOnlyVector(CallSite& cs, FunctionState& fstate, BlockStat
   Function *tgt = cs.getCalledFunction();
   if (!tgt) {
     return false;
+  }
+  
+  const CalledFunctionTy *ctgt = cm->getCalledFunction(cs.getInstruction(), NULL, NULL, false); // this will infer some uses of symbols
+  if (isKnownVectorReturningFunction(ctgt)) {
+    return true;
   }
   
   // build arguments (context)
@@ -335,7 +341,7 @@ static bool callReturnsOnlyVector(CallSite& cs, FunctionState& fstate, BlockStat
   }
 }
 
-static bool valueIsVector(Value *val, FunctionState& fstate, BlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList) {
+static bool valueIsVector(Value *val, FunctionState& fstate, BlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
           
   if (Argument *arg = dyn_cast<Argument>(val)) {  // = arg
     unsigned aidx = fstate.argIndex.indexOf(arg);
@@ -358,14 +364,14 @@ static bool valueIsVector(Value *val, FunctionState& fstate, BlockState& s, Args
   if (cs && cs.getCalledFunction()) {
     Function *tgt = cs.getCalledFunction();
     if (isSEXP(tgt->getReturnType())) {
-      return callReturnsOnlyVector(cs, fstate, s, context, functions, functionsWorkList);
+      return callReturnsOnlyVector(cs, fstate, s, context, functions, functionsWorkList, cm);
     }
   }
 
   return false;
 }
 
-static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx, FunctionTableTy& functions, FunctionListTy& functionsWorkList) {
+static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
 
   Function *fun = fstate.fun;
   ArgsTy context = fstate.contextIndex.at(contextIdx);
@@ -399,7 +405,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
 
           unsigned vidx = fstate.varIndex.indexOf(var);
           if (DEBUG) errs() << "var " << varName(var) << " ";
-          s.vars.at(vidx) = valueIsVector(si->getValueOperand(), fstate, s, context, functions, functionsWorkList);
+          s.vars.at(vidx) = valueIsVector(si->getValueOperand(), fstate, s, context, functions, functionsWorkList, cm);
         }
         continue;
       }
@@ -418,7 +424,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
 
     if (ReturnInst *r = dyn_cast<ReturnInst>(t)) {
     
-      if (valueIsVector(r->getReturnValue(), fstate, s, context, functions, functionsWorkList)) {
+      if (valueIsVector(r->getReturnValue(), fstate, s, context, functions, functionsWorkList, cm)) {
         returnsVector = true;
         continue;
       }
@@ -458,7 +464,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
   if (DEBUG) errs() << "Function " << funNameWithContext(fun, context) << " returns only vectors\n";
 }
 
-static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList) {
+static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
 
   Function *fun = fstate.fun;
   
@@ -471,7 +477,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   if (DEBUG) errs() << "Analyzing (all " << ncontexts << " contexts of) function " << funName(fun) << " fstate " << &fstate << "\n";
   
   for(unsigned i = 0; i < ncontexts; i++) {
-    analyzeFunctionInContext(fstate, i, functions, functionsWorkList);  
+    analyzeFunctionInContext(fstate, i, functions, functionsWorkList, cm);  
   }
   
   if (before != fstate.returnsOnlyVector) {
@@ -495,13 +501,16 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   }
 }
 
-VrfStateTy* findVectorReturningFunctions(Module *m) {
+void findVectorReturningFunctions(CalledModuleTy *cm) {
 
   VrfStateTy* res = new VrfStateTy();
+  cm->setVrfState(res);
+  
   FunctionTableTy &functions = res->functions;
   FunctionListTy workList;   // functions to be re-analyzed
  
   // add some functions to the worklist, with default contexts  
+  Module *m = cm->getModule();
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *f = fi;
     if (!isSEXP(f->getReturnType())) {
@@ -520,9 +529,8 @@ VrfStateTy* findVectorReturningFunctions(Module *m) {
     workList.pop_back();
     fstate.dirty = false;
 
-    analyzeFunction(fstate, functions, workList);
+    analyzeFunction(fstate, functions, workList, cm);
   }
-  return res;
 }
 
 void printVectorReturningFunctions(FunctionTableTy *functionsPtr) {
@@ -563,16 +571,17 @@ void printVectorReturningFunctions(FunctionTableTy *functionsPtr) {
   }  
 }
 
-void printVectorReturningFunctions(VrfStateTy* vrfState) {
-  printVectorReturningFunctions(&(vrfState->functions));
+void printVectorReturningFunctions(CalledModuleTy *cm) {
+  printVectorReturningFunctions(&(cm->getVrfState()->functions));
 }
 
-void freeVrfState(VrfStateTy* vrfState) {
+void freeVrfState(VrfStateTy *vrfState) {
   delete vrfState;
 }
 
-bool isVectorReturningFunction(Function *fun, ArgsTy context, FunctionTableTy* functionsPtr) {
+bool isVectorReturningFunction(Function *fun, ArgsTy context, CalledModuleTy* cm) {
 
+  FunctionTableTy* functionsPtr = &(cm->getVrfState()->functions);
   FunctionListTy workList;
   FunctionTableTy& functions = *functionsPtr;
 
@@ -602,7 +611,7 @@ bool isVectorReturningFunction(Function *fun, ArgsTy context, FunctionTableTy* f
     workList.pop_back();
     fstate.dirty = false;
 
-    analyzeFunction(fstate, functions, workList);
+    analyzeFunction(fstate, functions, workList, cm);
   }
   
   FunctionState& fstate = FunctionState::get(functions, fun);
@@ -614,11 +623,20 @@ bool isVectorReturningFunction(Function *fun, ArgsTy context, FunctionTableTy* f
 }
 
 
-bool isVectorProducingCall(Value *inst, SEXPGuardsChecker* sexpGuardsChecker, SEXPGuardsTy *sexpGuards) {
+bool isVectorProducingCall(Value *inst, CalledModuleTy* cm, SEXPGuardsChecker* sexpGuardsChecker, SEXPGuardsTy *sexpGuards) {
   unsigned type;
   
   if (isAllocVectorOfKnownType(inst, type)) {
     return isVectorType(type);
+  }
+  
+  const CalledFunctionTy *ctgt = cm->getCalledFunction(inst, sexpGuardsChecker, sexpGuards, true /* needed? */); 
+  if (!ctgt) {
+    return false;
+  }
+    
+  if (isKnownVectorReturningFunction(ctgt)) {
+    return true;
   }
   
   CallSite cs(inst);
@@ -644,13 +662,13 @@ bool isVectorProducingCall(Value *inst, SEXPGuardsChecker* sexpGuardsChecker, SE
         }
         continue;
       }
-      if (isVectorProducingCall(targ, sexpGuardsChecker, sexpGuards)) {
+      if (isVectorProducingCall(targ, cm, sexpGuardsChecker, sexpGuards)) {
         // NOTE: this recursion is bounded by how many nested call expressions we have, there cannot be a loop
         targs.at(i) = true;
       }
     }
     
-    return isVectorReturningFunction(cs.getCalledFunction(), targs, &(sexpGuardsChecker->getVrfState()->functions));
+    return isVectorReturningFunction(cs.getCalledFunction(), targs, cm);
   }
   
   return false;

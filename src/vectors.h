@@ -1,11 +1,14 @@
 
 struct VrfStateTy;
+class CalledModuleTy;
+void findVectorReturningFunctions(CalledModuleTy *cm);
 
 #ifndef RCHK_VECTORS_H
 #define RCHK_VECTORS_H
 
 #include "common.h"
 #include "guards.h"
+#include "callocators.h"
 
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Function.h>
@@ -26,9 +29,8 @@ bool isVectorType(unsigned type);
 bool isVectorProducingCall(Value *inst);
 bool isVectorOnlyVarOperation(Value *inst, AllocaInst*& var);
 
-VrfStateTy* findVectorReturningFunctions(Module *m);
-bool isVectorProducingCall(Value *inst, SEXPGuardsChecker* sexpGuardsChecker, SEXPGuardsTy *sexpGuards);
-void freeVrfState(VrfStateTy* vrfState);
-void printVectorReturningFunctions(VrfStateTy* vrfState);
+bool isVectorProducingCall(Value *inst, CalledModuleTy *cm, SEXPGuardsChecker* sexpGuardsChecker, SEXPGuardsTy *sexpGuards);
+void printVectorReturningFunctions(CalledModuleTy *cm);
+void freeVrfState(VrfStateTy *vrfState);
 
 #endif

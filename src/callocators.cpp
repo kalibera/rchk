@@ -162,18 +162,16 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
       }
       if (sexpGuards && sexpGuardsChecker && AllocaInst::classof(src)) {
         AllocaInst *var = cast<AllocaInst>(src);
-        auto gsearch = sexpGuards->find(var);
-        if (gsearch != sexpGuards->end()) {
-          std::string symbolName;
-          SEXPGuardState gs = sexpGuardsChecker->getGuardState(*sexpGuards, var, symbolName);
-          if (gs == SGS_SYMBOL) {
-            argInfo[i] = SymbolArgInfoTy::create(symbolName);
-            continue;
-          }
-          if (gs == SGS_VECTOR) {
-            argInfo[i] = VectorArgInfoTy::get();
-            continue;
-          }
+          
+        std::string symbolName;
+        SEXPGuardState gs = sexpGuardsChecker->getGuardState(*sexpGuards, var, symbolName);
+        if (gs == SGS_SYMBOL) {
+          argInfo[i] = SymbolArgInfoTy::create(symbolName);
+          continue;
+        }
+        if (gs == SGS_VECTOR) {
+          argInfo[i] = VectorArgInfoTy::get();
+          continue;
         }
       }
     }
@@ -182,7 +180,7 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
       argInfo[i] = SymbolArgInfoTy::create(symbolName);
       continue;
     }
-    if (isVectorProducingCall(arg, sexpGuardsChecker, sexpGuards)) {
+    if (isVectorProducingCall(arg, this, sexpGuardsChecker, sexpGuards)) {
       argInfo[i] = VectorArgInfoTy::get();
       continue;
     }
@@ -208,10 +206,10 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
 }
 
 CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSetTy* errorFunctions, GlobalsTy* globals, 
-  FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions, VrfStateTy* vrfState):
+  FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions):
   
   m(m), symbolsMap(symbolsMap), errorFunctions(errorFunctions), globals(globals), possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions),
-  callSiteTargets(), gcFunction(getCalledFunction(getGCFunction(m))), vrfState(vrfState) {
+  callSiteTargets(), gcFunction(getCalledFunction(getGCFunction(m))), vrfState(NULL) {
 
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = fi;
@@ -242,6 +240,9 @@ CalledModuleTy::~CalledModuleTy() {
   if (contextSensitivePossibleAllocators) {
     delete contextSensitivePossibleAllocators;
   }
+  if (vrfState) {
+    freeVrfState(vrfState);
+  }
 }
 
 CalledModuleTy* CalledModuleTy::create(Module *m) {
@@ -259,9 +260,7 @@ CalledModuleTy* CalledModuleTy::create(Module *m) {
   FunctionsSetTy *allocatingFunctions = new FunctionsSetTy();
   findAllocatingFunctions(m, *allocatingFunctions);
   
-  VrfStateTy *vrfState = findVectorReturningFunctions(m);
-      
-  return new CalledModuleTy(m, symbolsMap, errorFunctions, globals, possibleAllocators, allocatingFunctions, vrfState);
+  return new CalledModuleTy(m, symbolsMap, errorFunctions, globals, possibleAllocators, allocatingFunctions);
 }
 
 void CalledModuleTy::release(CalledModuleTy *cm) {
@@ -492,7 +491,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
   
   msg.newFunction(f->fun, " - " + funName(f));
   intGuardsChecker = new IntGuardsChecker(&msg);
-  sexpGuardsChecker = new SEXPGuardsChecker(&msg, cm->getGlobals(), NULL /* possible allocators */, cm->getSymbolsMap(), f->argInfo, cm->getVrfState());
+  sexpGuardsChecker = new SEXPGuardsChecker(&msg, cm->getGlobals(), NULL /* possible allocators */, cm->getSymbolsMap(), f->argInfo, cm->getVrfState(), cm);
   
   bool intGuardsEnabled = !avoidIntGuardsFor(f);
   bool sexpGuardsEnabled = !avoidSEXPGuardsFor(f);
@@ -914,7 +913,7 @@ void CalledModuleTy::computeCalledAllocators() {
     }
     if (wrapsMat[i][gcidx]) {
       const CalledFunctionTy *tgt = getCalledFunction(i);
-      if (!isKnownNonAllocator(tgt->fun)) {
+      if (!isKnownNonAllocator(tgt)) {
         possibleCAllocators->insert(tgt);
         if (!tgt->hasContext()) {
           contextSensitivePossibleAllocators->insert(tgt->fun);

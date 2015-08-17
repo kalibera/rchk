@@ -28,4 +28,6 @@ bool avoidIntGuardsFor(const CalledFunctionTy *f);
 bool protectsArguments(Function *f);
 bool protectsArguments(const CalledFunctionTy *f);
 
+bool isKnownVectorReturningFunction(const CalledFunctionTy *f);
+
 #endif

@@ -125,11 +125,12 @@ class SEXPGuardsChecker {
   const SymbolsMapTy* symbolsMap;
   const ArgInfosVectorTy* argInfos;
   VrfStateTy* vrfState;
+  CalledModuleTy* cm; // FIXME: get rid of fields that are already in called module anyway
   
   public:
     SEXPGuardsChecker(LineMessenger* msg, const GlobalsTy* g, const FunctionsSetTy* possibleAllocators, const SymbolsMapTy* symbolsMap, const ArgInfosVectorTy* argInfos,
-      VrfStateTy* vrfState):
-      varIndex(), varsCache(), msg(msg), g(g), possibleAllocators(possibleAllocators), symbolsMap(symbolsMap), argInfos(argInfos), vrfState(vrfState) {};
+      VrfStateTy* vrfState, CalledModuleTy* cm):
+      varIndex(), varsCache(), msg(msg), g(g), possibleAllocators(possibleAllocators), symbolsMap(symbolsMap), argInfos(argInfos), vrfState(vrfState), cm(cm) {};
 
     PackedSEXPGuardsTy pack(const SEXPGuardsTy& sexpGuards);
     SEXPGuardsTy unpack(const PackedSEXPGuardsTy& sexpGuards);

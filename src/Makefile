@@ -54,30 +54,31 @@ LINK.o = $(LINK.cc) # link with C++ compiler by default
 SOURCES := $(wildcard *.cpp)
 DEPENDS := $(SOURCES:.cpp=.d)
 OBJECTS := $(SOURCES:.cpp=.o)
+SOBJECTS := $(filter-out %check.o, $(OBJECTS))
 
 TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck
 
 all: $(TOOLS)
 
-alloccheck: alloccheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o cprotect.o vectors.o
+alloccheck: alloccheck.o $(SOBJECTS)
 
-errcheck: errcheck.o errors.o common.o
+errcheck: errcheck.o $(SOBJECTS)
 
-sfpcheck: sfpcheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o lannotate.o
+sfpcheck: sfpcheck.o $(SOBJECTS)
 
-csfpcheck: csfpcheck.o allocators.o callocators.o errors.o cgclosure.o symbols.o common.o linemsg.o guards.o state.o patterns.o exceptions.o lannotate.o vectors.o
+csfpcheck: csfpcheck.o $(SOBJECTS)
 
-maacheck: maacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
+maacheck: maacheck.o $(SOBJECTS)
 
-bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cgclosure.o linemsg.o common.o patterns.o callocators.o patterns.o symbols.o exceptions.o liveness.o cprotect.o vectors.o
+bcheck: bcheck.o $(SOBJECTS)
 
-ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
+ueacheck: ueacheck.o $(SOBJECTS)
 
-symcheck: symcheck.o symbols.o common.o
+symcheck: symcheck.o $(SOBJECTS)
 
-veccheck: veccheck.o vectors.o patterns.o common.o guards.o linemsg.o symbols.o
+veccheck: veccheck.o $(SOBJECTS)
 
-glcheck: glcheck.o symbols.o common.o
+glcheck: glcheck.o $(SOBJECTS)
 
 clean:
 	rm -f $(OBJECTS) $(DEPENDS) $(TOOLS)
