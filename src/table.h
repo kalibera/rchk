@@ -122,4 +122,44 @@ template <class Member> class IndexedTable {
     }
 };
 
+template <class Member> class IndexedCopyingTable {
+
+  public:
+    typedef std::vector<Member> Index;
+
+  private:
+    typedef std::unordered_map<Member, unsigned> Table;
+    Table table;
+    Index index;
+  
+  public:
+    unsigned indexOf(Member m) {
+      auto msearch = table.find(m);
+      if (msearch != table.end()) {
+        return msearch->second;
+      }
+      unsigned idx = index.size();
+      index.push_back(m);
+      table.insert({m, idx});
+      return idx;
+    }
+    
+    Member at(unsigned idx) {
+      return index.at(idx);
+    }
+    
+    void clear() {
+      table.clear();
+      index.clear();
+    }
+    
+    const Index& getIndex() const {
+      return index;
+    }
+    
+    size_t size() {
+      return index.size();
+    }
+};
+
 #endif

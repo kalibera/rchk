@@ -21,4 +21,6 @@ bool isAllocVectorOfKnownType(Value *inst, unsigned& type);
 
 bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type);
 
+bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname);
+
 #endif

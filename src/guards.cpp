@@ -544,8 +544,7 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
       }
     }
     
-    // TODO: more vector creating calls
-    if (acs && isVectorProducingCall(storeValueOp)) {
+    if (acs && isVectorProducingCall(storeValueOp, this, &sexpGuards)) {
       Function *afun = acs.getCalledFunction();        
       SEXPGuardTy newGS(SGS_VECTOR);
       sexpGuards[storePointerVar] = newGS;

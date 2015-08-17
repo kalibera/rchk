@@ -461,7 +461,7 @@ class FunctionChecker {
         fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), 
         /* TODO: we would need "sure" allocators here instead of possible allocators! */
         sexpGuardsChecker(&moduleState.msg, &moduleState.gl, 
-          USE_ALLOCATOR_DETECTION ? moduleState.cm.getContextSensitivePossibleAllocators() : NULL, moduleState.cm.getSymbolsMap(), NULL),
+          USE_ALLOCATOR_DETECTION ? moduleState.cm.getContextSensitivePossibleAllocators() : NULL, moduleState.cm.getSymbolsMap(), NULL, moduleState.cm.getVrfState()),
         errorBasicBlocks(), m(moduleState) {
         
       findErrorBasicBlocks(fun, &m.errorFunctions, errorBasicBlocks);
@@ -521,7 +521,9 @@ int main(int argc, char* argv[])
   SymbolsMapTy symbolsMap;
   findSymbols(m, &symbolsMap);
   
-  CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &gl, &possibleAllocators, &allocatingFunctions);
+  VrfStateTy* vrfState = findVectorReturningFunctions(m);
+  
+  CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &gl, &possibleAllocators, &allocatingFunctions, vrfState);
   CProtectInfo cprotect = findCalleeProtectFunctions(m, *cm.getContextSensitiveAllocatingFunctions());
   
   ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg, cm, cprotect); 
@@ -557,6 +559,7 @@ int main(int argc, char* argv[])
   msg.flush();
   clearStates();
   delete m;
+  freeVrfState(vrfState);
 
   outs().flush();
   errs() << "Analyzed " << nAnalyzedFunctions << " functions, traversed " << totalStates << " states.\n";

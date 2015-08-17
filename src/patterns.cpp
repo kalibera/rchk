@@ -28,6 +28,32 @@ bool isAllocVectorOfKnownType(Value *inst, unsigned& type) {
   return true;
 }
 
+bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname) {
+  CallSite cs(inst);
+  
+  if (!cs) {
+    return false;
+  }
+  
+  Function *tgt = cs.getCalledFunction();
+  if (!tgt) {
+    return false;
+  }
+  
+  Value *lval = cs.getArgument(0);
+  if (!LoadInst::classof(lval)) {
+    return false;
+  }
+  
+  Value *lvar = cast<LoadInst>(lval)->getPointerOperand();
+  if (!AllocaInst::classof(lvar)) {
+    return false;
+  }
+  
+  var = cast<AllocaInst>(lvar);
+  fname = tgt->getName();
+}
+
 bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type) {
 
   if (!BitCastInst::classof(inst)) {

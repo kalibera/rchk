@@ -7,6 +7,7 @@
 #include "guards.h"
 #include "symbols.h"
 #include "table.h"
+#include "vectors.h"
 
 #include <unordered_set>
 #include <vector>
@@ -133,6 +134,7 @@ class CalledModuleTy {
   CalledFunctionsSetTy* possibleCAllocators;
   CalledFunctionsSetTy* allocatingCFunctions;
   CallSiteTargetsTy callSiteTargets; // maps  call instruction -> set of target functions
+  VrfStateTy* vrfState; // state for vector returning functions detection
   
   const CalledFunctionTy* const gcFunction;
 
@@ -143,7 +145,7 @@ class CalledModuleTy {
 
   public:
     CalledModuleTy(Module *m, SymbolsMapTy* symbolsMap, FunctionsSetTy* errorFunctions, GlobalsTy* globals,
-      FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions);
+      FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions, VrfStateTy* vrfState);
       
     static CalledModuleTy* create(Module *m);
     static void release(CalledModuleTy *cm);
@@ -174,6 +176,7 @@ class CalledModuleTy {
     Module* getModule() { return m; }
     const CalledFunctionTy* getCalledGCFunction() { return gcFunction; }
     SymbolsMapTy* getSymbolsMap() { return symbolsMap; }
+    VrfStateTy* getVrfState() { return vrfState; }
 };
 
 std::string funName(const CalledFunctionTy *cf);

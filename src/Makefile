@@ -42,6 +42,10 @@ CPPFLAGS := $(shell $(LLVMC) --cppflags)
 CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
 #CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS)
 
+# for address sanitizer
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O1 -g3 -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -MMD $(HOSTFLAGS)
+#CXX := clang++
+
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
 
@@ -51,7 +55,7 @@ SOURCES := $(wildcard *.cpp)
 DEPENDS := $(SOURCES:.cpp=.d)
 OBJECTS := $(SOURCES:.cpp=.o)
 
-TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck
+TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck
 
 all: $(TOOLS)
 
@@ -70,6 +74,8 @@ bcheck: bcheck.o state.o allocators.o balance.o errors.o freshvars.o guards.o cg
 ueacheck: ueacheck.o allocators.o errors.o cgclosure.o common.o exceptions.o patterns.o
 
 symcheck: symcheck.o symbols.o common.o
+
+veccheck: veccheck.o vectors.o patterns.o common.o guards.o linemsg.o symbols.o
 
 glcheck: glcheck.o symbols.o common.o
 

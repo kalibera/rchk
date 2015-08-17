@@ -1,20 +1,24 @@
 #ifndef RCHK_GUARDS_H
 #define RCHK_GUARDS_H
 
-#include "common.h"
+#include <map>
+#include <unordered_set>
 
+#include <llvm/IR/Instructions.h>
+
+using namespace llvm;
+
+struct SEXPGuardTy; // there is a cyclic dependency between guards.h and vectors.h
+typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
+class SEXPGuardsChecker;
+
+#include "common.h"
 #include "callocators.h"
 #include "linemsg.h"
 #include "state.h"
 #include "symbols.h"
 #include "table.h"
-
-#include <map>
-#include <unordered_set>
-
-#include <llvm/IR/Instruction.h>
-
-using namespace llvm;
+#include "vectors.h"
 
 // integer variable used as a guard
 
@@ -90,7 +94,7 @@ struct SEXPGuardTy {
   
 };
 
-typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
+
 
 struct PackedSEXPGuardsTy {
 
@@ -120,10 +124,12 @@ class SEXPGuardsChecker {
   const FunctionsSetTy* possibleAllocators;
   const SymbolsMapTy* symbolsMap;
   const ArgInfosVectorTy* argInfos;
+  VrfStateTy* vrfState;
   
   public:
-    SEXPGuardsChecker(LineMessenger* msg, const GlobalsTy* g, const FunctionsSetTy* possibleAllocators, const SymbolsMapTy* symbolsMap, const ArgInfosVectorTy* argInfos):
-      varIndex(), varsCache(), msg(msg), g(g), possibleAllocators(possibleAllocators), symbolsMap(symbolsMap), argInfos(argInfos) {};
+    SEXPGuardsChecker(LineMessenger* msg, const GlobalsTy* g, const FunctionsSetTy* possibleAllocators, const SymbolsMapTy* symbolsMap, const ArgInfosVectorTy* argInfos,
+      VrfStateTy* vrfState):
+      varIndex(), varsCache(), msg(msg), g(g), possibleAllocators(possibleAllocators), symbolsMap(symbolsMap), argInfos(argInfos), vrfState(vrfState) {};
 
     PackedSEXPGuardsTy pack(const SEXPGuardsTy& sexpGuards);
     SEXPGuardsTy unpack(const PackedSEXPGuardsTy& sexpGuards);
@@ -138,6 +144,8 @@ class SEXPGuardsChecker {
 
     void reset(Function *f) {};    
     void clear() { varsCache.clear(); } // FIXME: get rid of this
+    
+    VrfStateTy* getVrfState() { return vrfState; }
     
   private:
     bool uncachedIsGuard(AllocaInst* var);

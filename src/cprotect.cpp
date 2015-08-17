@@ -12,8 +12,8 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#undef NDEBUG
-#include <assert.h>
+// #undef NDEBUG
+// #include <assert.h>
 
 using namespace llvm;
 
@@ -341,8 +341,6 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   while(!workList.empty()) {
     BasicBlock *bb = workList.back();
     workList.pop_back();
-    
-    //errs() << "   blocks:" << blocks.size() << " worklist: " << workList.size() << "\n";
     
     auto bsearch = blocks.find(bb);
     assert(bsearch != blocks.end());

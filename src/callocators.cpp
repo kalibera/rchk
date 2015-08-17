@@ -8,7 +8,6 @@
 #include "table.h"
 #include "exceptions.h"
 #include "patterns.h"
-#include "vectors.h"
 
 #include <map>
 #include <stack>
@@ -183,7 +182,7 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
       argInfo[i] = SymbolArgInfoTy::create(symbolName);
       continue;
     }
-    if (isVectorProducingCall(arg)) {
+    if (isVectorProducingCall(arg, sexpGuardsChecker, sexpGuards)) {
       argInfo[i] = VectorArgInfoTy::get();
       continue;
     }
@@ -209,10 +208,10 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuard
 }
 
 CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSetTy* errorFunctions, GlobalsTy* globals, 
-  FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions):
+  FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions, VrfStateTy* vrfState):
   
   m(m), symbolsMap(symbolsMap), errorFunctions(errorFunctions), globals(globals), possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions),
-  callSiteTargets(), gcFunction(getCalledFunction(getGCFunction(m))) {
+  callSiteTargets(), gcFunction(getCalledFunction(getGCFunction(m))), vrfState(vrfState) {
 
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = fi;
@@ -259,8 +258,10 @@ CalledModuleTy* CalledModuleTy::create(Module *m) {
 
   FunctionsSetTy *allocatingFunctions = new FunctionsSetTy();
   findAllocatingFunctions(m, *allocatingFunctions);
+  
+  VrfStateTy *vrfState = findVectorReturningFunctions(m);
       
-  return new CalledModuleTy(m, symbolsMap, errorFunctions, globals, possibleAllocators, allocatingFunctions);
+  return new CalledModuleTy(m, symbolsMap, errorFunctions, globals, possibleAllocators, allocatingFunctions, vrfState);
 }
 
 void CalledModuleTy::release(CalledModuleTy *cm) {
@@ -491,7 +492,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
   
   msg.newFunction(f->fun, " - " + funName(f));
   intGuardsChecker = new IntGuardsChecker(&msg);
-  sexpGuardsChecker = new SEXPGuardsChecker(&msg, cm->getGlobals(), NULL /* possible allocators */, cm->getSymbolsMap(), f->argInfo);
+  sexpGuardsChecker = new SEXPGuardsChecker(&msg, cm->getGlobals(), NULL /* possible allocators */, cm->getSymbolsMap(), f->argInfo, cm->getVrfState());
   
   bool intGuardsEnabled = !avoidIntGuardsFor(f);
   bool sexpGuardsEnabled = !avoidSEXPGuardsFor(f);
