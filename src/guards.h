@@ -90,7 +90,7 @@ struct SEXPGuardTy {
   SEXPGuardTy(SEXPGuardState state): state(state), symbolName() { assert(state != SGS_SYMBOL); }
   SEXPGuardTy() : SEXPGuardTy(SGS_UNKNOWN) {};
   
-  bool operator==(const SEXPGuardTy& other) const { return state == other.state && symbolName == other.symbolName; };
+  bool operator==(const SEXPGuardTy& other) const { return state == other.state && (state != SGS_SYMBOL || symbolName == other.symbolName); };
   
 };
 

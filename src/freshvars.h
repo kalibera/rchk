@@ -60,7 +60,7 @@ struct StateWithFreshVarsTy : virtual public StateBaseTy {
   void dump(bool verbose);
 };
 
-void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
+void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards,
   FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect);
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars);

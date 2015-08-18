@@ -85,12 +85,12 @@ static void issueConditionalMessage(Instruction *in, AllocaInst *var, FreshVarsT
   }
 }
 
-static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
+static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
   
   bool confused = QUIET_WHEN_CONFUSED && freshVars.confused;
 
-  const CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuards);
+  const CalledFunctionTy *tgt = cm->getCalledFunction(in, sexpGuardsChecker, sexpGuards, false);
   if (!tgt) {
     return;
   }
@@ -303,7 +303,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
     unsigned aidx = 0;
     for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++aidx) {
       Value *arg = *ai;
-      const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuards);
+      const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuardsChecker, sexpGuards, false);
       if (!src || !cm->isPossibleCAllocator(src)) {
         continue;
       }
@@ -384,7 +384,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   }
 }
 
-static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg,
+static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* sexpGuardsChecker, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg,
     unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
     
   if (QUIET_WHEN_CONFUSED && freshVars.confused) {
@@ -468,7 +468,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   // fresh variable passed to an allocating function - but this may be ok if it is callee-protect function
   //   or if the function allocates only after the fresh argument is no longer needed    
     
-  const CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuards);
+  const CalledFunctionTy* tgt = cm->getCalledFunction(li->user_back(), sexpGuardsChecker, sexpGuards, false);
   if (!tgt || !cm->isCAllocating(tgt) || protectsArguments(tgt) || cprotect.isCalleeProtect(tgt->fun, false)) {
     return;
   }
@@ -517,7 +517,9 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGu
   issueConditionalMessage(in, var, freshVars, msg, refinableInfos, liveVars, message);
 }
 
-static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, 
+  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+  
   if (QUIET_WHEN_CONFUSED && freshVars.confused) {
     return;
   }
@@ -542,7 +544,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
     if (msg.debug()) msg.debug(MSG_PFX + "removed conditional messages as variable " + varName(var) + " is rewritten.", in);
   }
   
-  const CalledFunctionTy *srcFun = cm->getCalledFunction(storeValueOp, sexpGuards);
+  const CalledFunctionTy *srcFun = cm->getCalledFunction(storeValueOp, sexpGuardsChecker, sexpGuards, false);
   if (srcFun) { 
     // only allowing single use, the other use can be and often is PROTECT
     
@@ -610,12 +612,12 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpG
   }
 }
 
-void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsTy *sexpGuards,
+void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards,
     FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
 
-  handleCall(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
-  handleLoad(in, cm, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
-  handleStore(in, cm, sexpGuards, freshVars, msg, refinableInfos);
+  handleCall(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
+  handleLoad(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
+  handleStore(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos);
 }
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {

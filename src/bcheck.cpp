@@ -129,7 +129,9 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
         const SEXPGuardTy& g = gi->second;
         hash_combine(res, (void *) var);
         hash_combine(res, (char) g.state);
-        hash_combine(res, g.symbolName);
+        if (g.state == SGS_SYMBOL) {
+          hash_combine(res, g.symbolName);
+        }
       } // ordered map
 
       hash_combine(res, freshVars.vars.size());
@@ -399,7 +401,7 @@ class FunctionChecker {
         m.msg.trace("visiting", in);
    
         if (freshVarsCheckingEnabled) {
-          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos, liveVars, m.cprotect);
+          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &sexpGuardsChecker : NULL, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos, liveVars, m.cprotect);
           if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
         if (balanceCheckingEnabled) {
