@@ -81,8 +81,7 @@ const bool UNIQUE_MSG = !DEBUG && !TRACE && !DUMP_STATES;
   // delayed until the next function, possibly even dropped in case of some
   // kind of adaptive checking.
 
-bool EXCLUDE_PROTECTION_FUNCTIONS = true;
-  // currently this is set below to true for the case when checking modules
+const bool EXCLUDE_PROTECTION_FUNCTIONS = true;
   // if set to true, functions like protect, unprotect are not being checked (because they indeed cause imbalance)
 
 
@@ -507,7 +506,7 @@ int main(int argc, char* argv[])
   FunctionsVectorTy functionsOfInterestVector;
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
-  EXCLUDE_PROTECTION_FUNCTIONS = (argc == 3); // exclude when checking modules
+//  EXCLUDE_PROTECTION_FUNCTIONS = (argc == 3); // exclude when checking modules
   GlobalsTy gl(m);
   LineMessenger msg(context, DEBUG, TRACE, UNIQUE_MSG);
   
