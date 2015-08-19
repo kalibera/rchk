@@ -637,8 +637,16 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
                             
   // FIXME: could there instead be returns in both branches?
                             
-  // interpret UNPROTECT(nprotect)
+  
   if (msg.debug()) msg.debug(MSG_PFX + "simplifying unprotect conditional on counter value (diff state)", t);
+  
+  /*
+  
+  it is fine to interpret UNPROTECT(nprotect) right away if doing just balance checking,
+    but if freshvars are also active, they'd miss the UNPROTECT(nprotect), so it is 
+    better to continue only with the unprotectSucc
+  
+  // interpret UNPROTECT(nprotect)
   s.balance.countState = CS_NONE;
   if (s.balance.depth < 0) {
     msg.info(MSG_PFX + "has negative depth after UNPROTECT(<counter>)", t);
@@ -652,6 +660,14 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
       if (msg.trace()) msg.trace(MSG_PFX + "added folded successor (diff counter state) of", t);
     }
   }
+  */
+  
+  {
+    StateWithBalanceTy* state = s.clone(unprotectSucc);
+    if (state->add()) {
+      if (msg.trace()) msg.trace(MSG_PFX + "added UNPROTECT(nprotect) successor of if (nprotect) UNPROTECT(nprotect)", t);
+    }
+  }  
   return true;
 }
 
