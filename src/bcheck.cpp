@@ -400,7 +400,9 @@ class FunctionChecker {
         m.msg.trace("visiting", in);
    
         if (freshVarsCheckingEnabled) {
-          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &sexpGuardsChecker : NULL, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, m.msg, refinableInfos, liveVars, m.cprotect);
+          handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &sexpGuardsChecker : NULL, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, 
+            m.msg, refinableInfos, liveVars, m.cprotect, balanceCheckingEnabled ? &s.balance : NULL);  // NOTE: must be called before balance handling
+            
           if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
         if (balanceCheckingEnabled) {
@@ -425,7 +427,7 @@ class FunctionChecker {
       TerminatorInst *t = s.bb->getTerminator();
 
       if (freshVarsCheckingEnabled) {
-        handleFreshVarsForTerminator(t, s.freshVars, liveVars);
+        handleFreshVarsForTerminator(t, s.freshVars, liveVars); // does nothing anyway
       }
 
       if (balanceCheckingEnabled && handleBalanceForTerminator(t, s, m.gl, counterVarsCache, m.msg, refinableInfos)) {

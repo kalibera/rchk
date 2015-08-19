@@ -8,6 +8,7 @@
 #include "guards.h"
 #include "liveness.h"
 #include "cprotect.h"
+#include "balance.h"
 
 #include <vector>
 
@@ -61,7 +62,7 @@ struct StateWithFreshVarsTy : virtual public StateBaseTy {
 };
 
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards,
-  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect);
+  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance);
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars);
 

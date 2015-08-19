@@ -86,7 +86,7 @@ static void issueConditionalMessage(Instruction *in, AllocaInst *var, FreshVarsT
 }
 
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
-    LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
+    LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance) {
   
   bool confused = QUIET_WHEN_CONFUSED && freshVars.confused;
 
@@ -242,17 +242,36 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
   
     if (f->getName() == "Rf_unprotect") {
       Value* arg = cs.getArgument(0);
-      if (ConstantInt* ci = dyn_cast<ConstantInt>(arg)) {
-        uint64_t val = ci->getZExtValue();
-        if (val > freshVars.pstack.size()) {
-          msg.info(MSG_PFX + "attempt to unprotect more items (" + std::to_string(val) + ") than protected ("
+      
+      uint64_t unprotectCount = 0;
+      bool haveCount = false;
+      
+      if (balance) { // UNPROTECT(nprotect)
+        if (LoadInst* li = dyn_cast<LoadInst>(arg)) {
+          if (AllocaInst *cvar = dyn_cast<AllocaInst>(li->getPointerOperand())) {
+            if (balance->counterVar == cvar && balance->countState == CS_EXACT) {
+              unprotectCount = balance->count;        
+              haveCount = true;
+            }
+          }
+        }
+      }
+      
+      if (ConstantInt* ci = dyn_cast<ConstantInt>(arg)) { // UNPROTECT(const)
+        unprotectCount = ci->getZExtValue();
+        haveCount = true;
+      }
+      
+      if (haveCount) {
+        if (unprotectCount > freshVars.pstack.size()) {
+          msg.info(MSG_PFX + "attempt to unprotect more items (" + std::to_string(unprotectCount) + ") than protected ("
             + std::to_string(freshVars.pstack.size()) + "), " + CONFUSION_DISCLAIMER, in);
           
           refinableInfos++;
           if (QUIET_WHEN_CONFUSED) freshVars.confused = true;
           return;
         }
-        while(val-- > 0) {
+        while(unprotectCount-- > 0) {
           AllocaInst* var = freshVars.pstack.back();
           freshVars.pstack.pop_back();
           
@@ -615,9 +634,9 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
 }
 
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards,
-    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect) {
+    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance) {
 
-  handleCall(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
+  handleCall(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect, balance);
   handleLoad(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
   handleStore(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos);
 }
