@@ -254,6 +254,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
         }
         while(val-- > 0) {
           AllocaInst* var = freshVars.pstack.back();
+          freshVars.pstack.pop_back();
+          
           if (!var) {
             continue;
           }
@@ -278,7 +280,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
             vsearch->second = nProtects;
           }
           if (msg.debug()) msg.debug(MSG_PFX + "unprotected variable " + varName(var), in);
-          freshVars.pstack.pop_back();
+          
         }
       
       } else {
