@@ -9,6 +9,7 @@ bool isKnownNonAllocator(Function *f) {
 
   if (f->getName() == "mkPRIMSXP") return true; // mkPRIMSXP caches its results internally (and permanently)
   if (f->getName() == "GETSTACK_PTR_TAG") return true; // GETSTACK_PTR_TAG stores the allocated result to the byte-code stack
+  if (f->getName() == "lookupAssignFcnSymbol") return true; // lookupAssignFcnSymbol reads (symbols) from a hashmap, the map cannot have active bindings
   
   return false;
 }
