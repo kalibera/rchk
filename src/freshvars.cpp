@@ -2,6 +2,7 @@
 #include "freshvars.h"
 #include "guards.h"
 #include "exceptions.h"
+#include "patterns.h"
 
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
@@ -135,7 +136,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
       }  
 
       if (var) {
-        freshVars.vars.erase(var);
+        freshVars.vars.erase(var); // conditional messages, if any, should have been handled by load
         if (msg.debug()) msg.debug(MSG_PFX + "Variable " + varName(var) + " given to PreserveObject and thus no longer fresh", in);
       }
       // do not return, PreserveObject allocates
@@ -456,7 +457,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
                 // first argument of the setter is not fresh
                 
                 if (msg.debug()) msg.debug(MSG_PFX + "fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);
-                freshVars.vars.erase(var);                
+                freshVars.vars.erase(var);
                 break;
               }
             }
@@ -544,6 +545,22 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
   if (QUIET_WHEN_CONFUSED && freshVars.confused) {
     return;
   }
+  
+  AllocaInst* protectedVar = NULL;
+  if (isStoreToStructureElement(in, "struct.R_bcstack_t", "union.ieee_double", protectedVar)) { // this indicates store to the node stack
+    freshVars.vars.erase(protectedVar);
+    if (msg.debug()) msg.debug(MSG_PFX + "variable " + varName(protectedVar) + " saved to node stack and thus assumed not fresh", in);
+    
+    AllocaInst* origVar = NULL;
+    if (aliasesVariable(in, protectedVar, origVar)) { // macros like SET_STACK use a local-copy into their temporary variable
+      freshVars.vars.erase(origVar); // conditional messages were flushed when on store to the proxy
+      if (msg.debug()) msg.debug(MSG_PFX + "variable " + varName(origVar) + " indirectly saved to node stack and thus assumed not fresh", in);
+    }
+    
+    return ;
+  }
+  
+  
   if (!StoreInst::classof(in)) {
     return;
   }

@@ -75,6 +75,135 @@ bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type) {
   return true;
 }
 
+// this is useful e.g. for detecting when a variable is stored into the node stack
+//   isStoreToStructureElement(in, "struct.R_bcstack_t", "union.ieee_double", protectedVar)
+
+bool isStoreToStructureElement(Value *inst, std::string structType, std::string elementType, AllocaInst*& var) {
+
+  // [] %431 = load %struct.SEXPREC** %__v__7, align 8, !dbg !152225 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 4610:5]
+  // %432 = load %struct.R_bcstack_t** %3, align 8, !dbg !152225 ; [#uses=1 type=%struct.R_bcstack_t*] [debug line = 4610:5]
+  // %433 = getelementptr inbounds %struct.R_bcstack_t* %432, i32 0, i32 1, !dbg !152225 ; [#uses=1 type=%union.ieee_double*] [debug line = 4610:5]
+  // %434 = bitcast %union.ieee_double* %433 to %struct.SEXPREC**, !dbg !152225 ; [#uses=1 type=%struct.SEXPREC**] [debug line = 4610:5]
+  // store %struct.SEXPREC* %431, %struct.SEXPREC** %434, align 8, !dbg !152225 ; [debug line = 4610:5]
+          
+  StoreInst *si = dyn_cast<StoreInst>(inst);
+  if (!si) {
+    return false;
+  }
+  
+  LoadInst *li = dyn_cast<LoadInst>(si->getValueOperand());
+  if (!li) {
+    return false;
+  }
+  
+  AllocaInst *pvar = dyn_cast<AllocaInst>(li->getPointerOperand());
+  if (!pvar) {
+    return false;
+  }
+  
+  BitCastInst *bc = dyn_cast<BitCastInst>(si->getPointerOperand());
+  if (!bc) {
+    return false;
+  }
+  
+  if (!isPointerToStruct(bc->getSrcTy(), elementType)) {
+    return false;
+  }
+  
+  GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(bc->getOperand(0));
+  if (!gep || !gep->isInBounds() || !isPointerToStruct(gep->getPointerOperandType(), structType)) {
+    return false;
+  }
+  
+  var = pvar;
+  return true;
+}
+
+// detect if variable proxyVar when used at instruction "useInst" has the same value as 
+//   some other variable origVar
+//
+// this is very primitive form of alias analysis, intended for cases like
+//
+// #define SETSTACK_PTR(s, v) do { \
+//    SEXP __v__ = (v); \
+//    (s)->tag = 0; \
+//    (s)->u.sxpval = __v__; \
+// } while (0)
+//
+// when we need to know the real name of variable "v"
+            
+bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar) {
+
+  StoreInst *si = NULL;
+  for(Value::user_iterator ui = proxyVar->user_begin(), ue = proxyVar->user_end(); ui != ue; ++ui) {
+    User *u = *ui;
+    if (StoreInst *s = dyn_cast<StoreInst>(u)) {
+      if (s->getPointerOperand() == proxyVar) {
+        if (si == NULL) {
+          si = s;
+        } else {
+          // more than one store to proxyVar, which we do not support
+          // FIXME: this restriction may not be necessary, see below
+          return false;
+        }
+      }
+    }
+  }
+  
+  LoadInst *li = dyn_cast<LoadInst>(si->getValueOperand());
+  if (!li) {
+    return false;
+  }
+  
+  AllocaInst *ovar = dyn_cast<AllocaInst>(li->getPointerOperand());
+  if (!ovar) {
+    return false;
+  }
+  
+  // ovar may be the original variable...
+  // but we need to check that ovar is not overwritten between the store (si) and the use (useInst)
+  
+
+  Instruction *ui = dyn_cast<Instruction>(useInst);
+  if (!ui) {
+    return false;
+  }
+  BasicBlock *bb = si->getParent();
+  if (bb != ui->getParent()) {
+    return false;
+  }
+  
+  bool reachedStore = false;
+  for(BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie; ++ii) {
+    Instruction *in = ii;
+    
+    if (in == si) {
+      reachedStore = true;
+      continue;
+    }
+    
+    // FIXME: check if the variable(s) have address taken
+    if (reachedStore) {
+      if (StoreInst *s = dyn_cast<StoreInst>(in)) {
+        if (s->getPointerOperand() == ovar) {
+          // detected interleacing write
+          return false;
+        }
+      }
+      if (in == ui) {
+        if (reachedStore) {
+          origVar = ovar;
+          return true;
+        } else {
+          return false;
+        }
+      }
+    }
+  }
+  // not reached really
+  return false;
+}
+
 bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) {
 
   // %33 = load %struct.SEXPREC** %2, align 8, !dbg !21240 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 1097:0]

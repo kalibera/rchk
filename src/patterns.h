@@ -23,4 +23,8 @@ bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type);
 
 bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname);
 
+bool isStoreToStructureElement(Value *inst, std::string structType, std::string elementType, AllocaInst*& var);
+
+bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar);
+
 #endif
