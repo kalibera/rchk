@@ -27,4 +27,6 @@ bool isStoreToStructureElement(Value *inst, std::string structType, std::string 
 
 bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar);
 
+bool findOnlyStoreTo(AllocaInst* var, StoreInst*& definingStore);
+
 #endif

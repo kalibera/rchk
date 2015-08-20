@@ -135,19 +135,8 @@ bool isStoreToStructureElement(Value *inst, std::string structType, std::string 
 bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar) {
 
   StoreInst *si = NULL;
-  for(Value::user_iterator ui = proxyVar->user_begin(), ue = proxyVar->user_end(); ui != ue; ++ui) {
-    User *u = *ui;
-    if (StoreInst *s = dyn_cast<StoreInst>(u)) {
-      if (s->getPointerOperand() == proxyVar) {
-        if (si == NULL) {
-          si = s;
-        } else {
-          // more than one store to proxyVar, which we do not support
-          // FIXME: this restriction may not be necessary, see below
-          return false;
-        }
-      }
-    }
+  if (!findOnlyStoreTo(proxyVar, si)) {
+    return false;
   }
   
   LoadInst *li = dyn_cast<LoadInst>(si->getValueOperand());
@@ -182,6 +171,14 @@ bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar)
       continue;
     }
     
+    if (in == ui) {
+      if (reachedStore) {
+        origVar = ovar;
+        return true;
+      }
+      return false;
+    }
+    
     // FIXME: check if the variable(s) have address taken
     if (reachedStore) {
       if (StoreInst *s = dyn_cast<StoreInst>(in)) {
@@ -190,18 +187,35 @@ bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar)
           return false;
         }
       }
-      if (in == ui) {
-        if (reachedStore) {
-          origVar = ovar;
-          return true;
+    }
+  }
+  // not reached really
+  return false;
+}
+
+bool findOnlyStoreTo(AllocaInst* var, StoreInst*& definingStore) {
+
+  StoreInst *si = NULL;
+  for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
+    User *u = *ui;
+    if (StoreInst *s = dyn_cast<StoreInst>(u)) {
+      if (s->getPointerOperand() == var) {
+        if (si == NULL) {
+          si = s;
         } else {
+          // more than one store
           return false;
         }
       }
     }
   }
-  // not reached really
-  return false;
+  
+  if (si == NULL) {
+    return false;
+  }
+  
+  definingStore = si;
+  return true;
 }
 
 bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) {

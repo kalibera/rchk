@@ -539,6 +539,37 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
   issueConditionalMessage(in, var, freshVars, msg, refinableInfos, liveVars, message);
 }
 
+static void unfreshAliasedVars(Instruction *useInst, AllocaInst *useVar, FreshVarsTy& freshVars, LineMessenger& msg) {
+
+  AllocaInst* origVar = NULL;
+  if (aliasesVariable(useInst, useVar, origVar)) {
+    freshVars.vars.erase(origVar);
+    if (msg.debug()) msg.debug(MSG_PFX + "variable " + varName(origVar) + " indirectly saved to node stack and thus assumed not fresh", useInst);    
+
+    // there may be multiple levels of aliases
+    //   this is indeed a heuristic, the definingStore may not pre-dominate the use
+    //   FIXME: this is quite rough
+    
+    bool checkAliases = true;
+    
+    while(checkAliases) {
+      checkAliases = false;
+      
+      StoreInst *definingStore = NULL;
+      if (findOnlyStoreTo(origVar, definingStore)) {
+        if (LoadInst *li = dyn_cast<LoadInst>(definingStore->getValueOperand())) {
+          if (AllocaInst *v = dyn_cast<AllocaInst>(li->getPointerOperand())) {
+            freshVars.vars.erase(v);
+            if (msg.debug()) msg.debug(MSG_PFX + "variable " + varName(v) + " indirectly saved to node stack and thus assumed not fresh", useInst);
+            checkAliases = true;
+            origVar = v;
+          }
+        }
+      }
+    }
+  }
+}
+
 static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, 
   FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
   
@@ -550,13 +581,9 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
   if (isStoreToStructureElement(in, "struct.R_bcstack_t", "union.ieee_double", protectedVar)) { // this indicates store to the node stack
     freshVars.vars.erase(protectedVar);
     if (msg.debug()) msg.debug(MSG_PFX + "variable " + varName(protectedVar) + " saved to node stack and thus assumed not fresh", in);
-    
-    AllocaInst* origVar = NULL;
-    if (aliasesVariable(in, protectedVar, origVar)) { // macros like SET_STACK use a local-copy into their temporary variable
-      freshVars.vars.erase(origVar); // conditional messages were flushed when on store to the proxy
-      if (msg.debug()) msg.debug(MSG_PFX + "variable " + varName(origVar) + " indirectly saved to node stack and thus assumed not fresh", in);
-    }
-    
+
+      // there may be multiple layers of aliases due to macros that do a local copy of its argument, to avoid repeated evaluation
+    unfreshAliasedVars(in, protectedVar, freshVars, msg);
     return ;
   }
   
