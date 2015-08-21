@@ -61,7 +61,7 @@ bool isProtectionStackTopSaveVariable(AllocaInst* var, GlobalVariable* ppStackTo
     cache.insert({var, false});
     return false;
   }
-  cache.insert({var, true});
+  cache.insert({var, usesPPStackTop});
   return usesPPStackTop;
 }
 

@@ -62,7 +62,8 @@ struct StateWithFreshVarsTy : virtual public StateBaseTy {
 };
 
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards,
-  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance);
+  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance,
+  VarBoolCacheTy& checkedVarsCache);
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars);
 

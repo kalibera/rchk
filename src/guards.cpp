@@ -308,7 +308,7 @@ void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
 
 // SEXP guard is a local variable of type SEXP
 //   that follows the heuristics included below
-//   these heuristics are important because the keep the state space small(er)
+//   these heuristics are important because they keep the state space small(er)
 
 bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
   if (!isSEXP(var)) {

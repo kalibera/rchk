@@ -47,9 +47,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "addStackArgsList"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "bcEval"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "addStackArgsList";
+const std::string ONLY_FUNCTION_NAME = "bcEval";
 const bool VERBOSE_DUMP = false;
 
 const bool PROGRESS_MARKS = false;
@@ -340,6 +340,7 @@ class FunctionChecker {
   Function *fun;
   VarBoolCacheTy saveVarsCache;
   VarBoolCacheTy counterVarsCache;
+  VarBoolCacheTy checkedVarsCache;
   IntGuardsChecker intGuardsChecker;
   SEXPGuardsChecker sexpGuardsChecker;
   BasicBlocksSetTy errorBasicBlocks;
@@ -401,7 +402,7 @@ class FunctionChecker {
    
         if (freshVarsCheckingEnabled) {
           handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &sexpGuardsChecker : NULL, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, 
-            m.msg, refinableInfos, liveVars, m.cprotect, balanceCheckingEnabled ? &s.balance : NULL);  // NOTE: must be called before balance handling
+            m.msg, refinableInfos, liveVars, m.cprotect, balanceCheckingEnabled ? &s.balance : NULL, checkedVarsCache);  // NOTE: must be called before balance handling
             
           if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
@@ -461,7 +462,7 @@ class FunctionChecker {
   
   public:
     FunctionChecker(Function *fun, ModuleCheckingStateTy& moduleState): 
-        fun(fun), saveVarsCache(), counterVarsCache(), intGuardsChecker(&moduleState.msg), 
+        fun(fun), saveVarsCache(), counterVarsCache(), checkedVarsCache(), intGuardsChecker(&moduleState.msg), 
         /* TODO: we would need "sure" allocators here instead of possible allocators! */
         sexpGuardsChecker(&moduleState.msg, &moduleState.gl, 
           USE_ALLOCATOR_DETECTION ? moduleState.cm.getContextSensitivePossibleAllocators() : NULL, moduleState.cm.getSymbolsMap(), NULL, moduleState.cm.getVrfState(), &moduleState.cm),

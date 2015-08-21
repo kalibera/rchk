@@ -86,8 +86,50 @@ static void issueConditionalMessage(Instruction *in, AllocaInst *var, FreshVarsT
   }
 }
 
+static bool isVarCheckedFresh(AllocaInst *var) {
+
+  for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
+    User *u = *ui;
+    
+    if (LoadInst::classof(u)) {
+      continue;
+    }
+    if (StoreInst::classof(u)) {
+      continue;
+    }
+    // this may e.g. be that an address of the variable is taken
+    return false;
+  }
+  
+  return true;
+}
+
+static bool isVarCheckedFresh(AllocaInst *var, VarBoolCacheTy& cache, LineMessenger& msg) {
+
+  if (!isSEXP(var)) {
+    return false;
+  }
+
+  auto vsearch = cache.find(var);
+  if (vsearch != cache.end()) {
+    return vsearch->second;
+  }
+  
+  bool isChecked = isVarCheckedFresh(var);
+  
+  if (!isChecked) {
+    // the message is here to make sure it is printed only once
+    //   the line messenger mechanism for printing unique messages won't do in practice
+    //   because generating the message is too expensive
+    msg.info(MSG_PFX + "ignoring variable " + varName(var) + " as it has address taken, results will be incomplete ", NULL);  
+  }
+  
+  cache.insert({var, isChecked});
+  return isChecked;
+}
+
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
-    LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance) {
+    LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance, VarBoolCacheTy& checkedVarsCache) {
   
   bool confused = QUIET_WHEN_CONFUSED && freshVars.confused;
 
@@ -173,12 +215,12 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
           }
         }
       }
+      
+      if (var && !isVarCheckedFresh(var, checkedVarsCache, msg)) {
+        var = NULL; // fall back below into pushing anonymous value on the stack
+      }
     
-      if (f->getName() == "R_Reprotect") {
-        if (!var) {
-          // but this perhaps should not happen
-          return;
-        }
+      if (var && f->getName() == "R_Reprotect") {
       
         auto vsearch = freshVars.vars.find(var);
         if (vsearch != freshVars.vars.end()) {
@@ -571,7 +613,7 @@ static void unfreshAliasedVars(Instruction *useInst, AllocaInst *useVar, FreshVa
 }
 
 static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, 
-  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos) {
+  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, VarBoolCacheTy& checkedVarsCache) {
   
   if (QUIET_WHEN_CONFUSED && freshVars.confused) {
     return;
@@ -603,6 +645,9 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
     return;
   }
   AllocaInst *var = cast<AllocaInst>(storePointerOp);
+  if (!isVarCheckedFresh(var, checkedVarsCache, msg)) {
+    return;
+  }
   
   // a variable is being killed by the store, erase conditional messages if any
   if (freshVars.condMsgs.erase(var)) {
@@ -678,11 +723,11 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
 }
 
 void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards,
-    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance) {
+    FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance, VarBoolCacheTy& checkedVarsCache) {
 
-  handleCall(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect, balance);
+  handleCall(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect, balance, checkedVarsCache);
   handleLoad(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
-  handleStore(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos);
+  handleStore(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, checkedVarsCache);
 }
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
