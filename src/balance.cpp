@@ -281,7 +281,7 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
         return;
       }
     }
-    msg.info(MSG_PFX + "has an unsupported form of unprotect (not constant, not variable " + CONFUSION_DISCLAIMER, in);
+    msg.info(MSG_PFX + "has an unsupported form of unprotect (not constant, not variable), " + CONFUSION_DISCLAIMER, in);
     if (QUIET_WHEN_CONFUSED) {
       b.confused = true;
       if (msg.trace()) msg.trace(MSG_PFX + "confused, will not print more messages", in);
