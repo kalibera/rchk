@@ -220,7 +220,12 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
         var = NULL; // fall back below into pushing anonymous value on the stack
       }
     
-      if (var && f->getName() == "R_Reprotect") {
+      if (f->getName() == "R_Reprotect") {
+      
+        if (!var) {
+          if (msg.debug()) msg.debug(MSG_PFX + "ignoring reprotect of unknown variable", in);
+          return;
+        }
       
         auto vsearch = freshVars.vars.find(var);
         if (vsearch != freshVars.vars.end()) {

@@ -47,9 +47,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "bcEval"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "list_dirs"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "bcEval";
+const std::string ONLY_FUNCTION_NAME = "list_dirs";
 const bool VERBOSE_DUMP = false;
 
 const bool PROGRESS_MARKS = false;
