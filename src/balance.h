@@ -30,18 +30,19 @@ struct BalanceStateTy {
   int savedDepth;	// number of pointers on the protection stack when saved to a local store variable (e.g. savestack = R_PPStackTop)
   int count;		// value of a local counter for the number of protected pointers (or -1 when not used) (e.g. nprotect)
   CountState countState;
-  AllocaInst* counterVar;
+  AllocaInst* counterVar; // the protection counter variable
+  AllocaInst* topSaveVar; // variable (now) holding the saved state (when savedDepth >= 0)
   bool confused; 	// the tool is confused an additional messages in the function will be incorrect/incomplete
   
-  BalanceStateTy(int depth, int savedDepth, int count, CountState countState, AllocaInst* counterVar, bool confused):
-    depth(depth), savedDepth(savedDepth), count(count), countState(countState), counterVar(counterVar), confused(confused) {};
+  BalanceStateTy(int depth, int savedDepth, int count, CountState countState, AllocaInst* counterVar, AllocaInst* topSaveVar, bool confused):
+    depth(depth), savedDepth(savedDepth), count(count), countState(countState), counterVar(counterVar), topSaveVar(topSaveVar), confused(confused) {};
 };
 
 struct StateWithBalanceTy : virtual public StateBaseTy {
   BalanceStateTy balance;
   
   StateWithBalanceTy(BasicBlock *bb, BalanceStateTy& balance): StateBaseTy(bb), balance(balance) {};
-  StateWithBalanceTy(BasicBlock *bb): StateBaseTy(bb), balance(0, -1, -1, CS_NONE, NULL, false) {};
+  StateWithBalanceTy(BasicBlock *bb): StateBaseTy(bb), balance(0, -1, -1, CS_NONE, NULL, NULL, false) {};
   
   virtual StateWithBalanceTy* clone(BasicBlock *newBB) = 0;
   

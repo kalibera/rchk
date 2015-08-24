@@ -324,7 +324,8 @@ static void handleLoad(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
               return;
             }
             b.savedDepth = b.depth;
-            if (msg.debug()) msg.debug(MSG_PFX + "saving value of PPStackTop", in);
+            b.topSaveVar = topStore;
+            if (msg.debug()) msg.debug(MSG_PFX + "saving value of PPStackTop into " + varName(topStore), in);
           }
         }
       }
@@ -343,9 +344,8 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
   
   if (storePointerOp == g.ppStackTopVariable) { // R_PPStackTop = savestack
     if (LoadInst::classof(storeValueOp)) {          
-      Value *varValue = cast<LoadInst>(storeValueOp)->getPointerOperand();
-      if (AllocaInst::classof(varValue) && 
-        isProtectionStackTopSaveVariable(cast<AllocaInst>(varValue), g.ppStackTopVariable, saveVarsCache)) {
+      AllocaInst *savevar = dyn_cast<AllocaInst>(cast<LoadInst>(storeValueOp)->getPointerOperand());
+      if (savevar == b.topSaveVar) {
 
         if (b.countState == CS_DIFF) {
           msg.info(MSG_PFX + "restoring value of PPStackTop while in differential count state " + CONFUSION_DISCLAIMER, in);
@@ -356,11 +356,13 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
           return;
         }
         if (msg.debug()) msg.debug(MSG_PFX + "restoring value of PPStackTop", in);
-        if (b.savedDepth < 0) {
+
+        if (b.savedDepth < 0 || !savevar) { // both alternatives should be equivalent
           msg.info(MSG_PFX + "restores PPStackTop from uninitialized local variable", in);
           refinableInfos++;
         } else {
           b.depth = b.savedDepth;
+          // NOTE: could reset topSaveVar and savedDepth
         }
         return;
       }

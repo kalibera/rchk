@@ -113,6 +113,7 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
       hash_combine(res, balance.depth);
       hash_combine(res, balance.count);
       hash_combine(res, balance.savedDepth);
+      // not including topSaveVar
       hash_combine(res, (int) balance.countState);
       hash_combine(res, intGuards.size());
       for(IntGuardsTy::const_iterator gi = intGuards.begin(), ge = intGuards.end(); gi != ge; ++gi) {
@@ -198,6 +199,7 @@ struct StateTy_equal {
       res = lhs->bb == rhs->bb && 
       lhs->balance.depth == rhs->balance.depth && lhs->balance.savedDepth == rhs->balance.savedDepth && lhs->balance.count == rhs->balance.count &&
       lhs->balance.countState == rhs->balance.countState && lhs->balance.counterVar == rhs->balance.counterVar && lhs->balance.confused == rhs->balance.confused &&
+      lhs->balance.topSaveVar == rhs->balance.topSaveVar &&
       lhs->intGuards == rhs->intGuards && lhs->sexpGuards == rhs->sexpGuards &&
       lhs->freshVars.vars == rhs->freshVars.vars && lhs->freshVars.condMsgs == rhs->freshVars.condMsgs && lhs->freshVars.pstack == rhs->freshVars.pstack
          && lhs->freshVars.confused == rhs->freshVars.confused;
@@ -402,7 +404,10 @@ class FunctionChecker {
    
         if (freshVarsCheckingEnabled) {
           handleFreshVarsForNonTerminator(in, &m.cm, sexpGuardsEnabled ? &sexpGuardsChecker : NULL, sexpGuardsEnabled ? &s.sexpGuards : NULL, s.freshVars, 
-            m.msg, refinableInfos, liveVars, m.cprotect, balanceCheckingEnabled ? &s.balance : NULL, checkedVarsCache);  // NOTE: must be called before balance handling
+            m.msg, refinableInfos, liveVars, m.cprotect, balanceCheckingEnabled ? &s.balance : NULL, checkedVarsCache);
+              // NOTE: must be called before balance handling
+              //  because it uses some state of balance handling that will be removed by the call to
+              //  handleBalanceForNonTerminator, e.g. re protection counter or topsave variable
             
           if (restartable && refinableInfos > 0) { clearStates(); return; }
         }
