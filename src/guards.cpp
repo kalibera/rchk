@@ -309,6 +309,8 @@ void IntGuardsChecker::hash(size_t& res, const IntGuardsTy& intGuards) {
 // SEXP guard is a local variable of type SEXP
 //   that follows the heuristics included below
 //   these heuristics are important because they keep the state space small(er)
+//   but also they are fragile - if something important is not a guard, the results will be less
+//     precise, may have more false alarms
 
 bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
   if (!isSEXP(var)) {
@@ -321,6 +323,8 @@ bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
   unsigned nStoresFromFunction = 0;
   unsigned nEscapesToCalls = 0;
   unsigned nGEPs = 0;
+  unsigned nVectorTests = 0;
+  
   for(Value::user_iterator ui = var->user_begin(), ue = var->user_end(); ui != ue; ++ui) {
     User *u = *ui;
 
@@ -352,8 +356,12 @@ bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
       }
       CallSite cs(cast<Value>(uu));
       if (cs) {
-        if (isTypeTest(cs.getCalledFunction(), g) || isVectorGuard(cs.getCalledFunction())) {
-          // isNull(guard);
+        if (isVectorGuard(cs.getCalledFunction())) {
+          nVectorTests++;
+          // FIXME: could perhaps increment only if one of the branches is an error block?
+        }
+        
+        if (isTypeTest(cs.getCalledFunction(), g) || isVectorGuard(cs.getCalledFunction())) { // isNull(guard);
           nComparisons++;
         } else if (cs.getCalledFunction()) {
           nEscapesToCalls++;
@@ -393,7 +401,7 @@ bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
     return false;
   } 
   
-  return nComparisons >= 2 || ((nComparisons == 1 || nGEPs > 0 || nEscapesToCalls > 0) && (nNilAssignments + nCopies + nStoresFromArgument + nStoresFromFunction > 0));
+  return nVectorTests >= 1 || nComparisons >= 2 || ((nComparisons == 1 || nGEPs > 0 || nEscapesToCalls > 0) && (nNilAssignments + nCopies + nStoresFromArgument + nStoresFromFunction > 0));
 }
 
 bool SEXPGuardsChecker::isGuard(AllocaInst* var) {

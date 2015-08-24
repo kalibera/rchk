@@ -47,9 +47,9 @@ const bool DEBUG = false;
 const bool TRACE = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "list_dirs"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "do_split"; // only dump states in this function
 const bool ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "list_dirs";
+const std::string ONLY_FUNCTION_NAME = "do_split";
 const bool VERBOSE_DUMP = false;
 
 const bool PROGRESS_MARKS = false;
@@ -453,7 +453,7 @@ class FunctionChecker {
         {
           StateTy* state = s.clone(succ);
           if (state->add()) {
-            m.msg.trace("added successor of", t);
+            m.msg.trace("added (conservatively) successor of", t);
           }
         }
       }
