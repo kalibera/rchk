@@ -128,6 +128,38 @@ static bool isVarCheckedFresh(AllocaInst *var, VarBoolCacheTy& cache, LineMessen
   return isChecked;
 }
 
+static void unprotectOne(FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, Instruction *in) {
+
+  AllocaInst* var = freshVars.pstack.back();
+  freshVars.pstack.pop_back();
+
+  if (!var) {
+    return;
+  }
+  
+  auto vsearch = freshVars.vars.find(var);
+  if (vsearch != freshVars.vars.end()) {  // decrement protect count of a possibly fresh variable
+    int nProtects = vsearch->second;
+    nProtects--;
+    if (nProtects < 0) {
+      // this happens quite commonly without necessarily being an error, e.g.
+      // 
+      // PROTECT(x);
+      // x = foo(x);
+      // UNPROTECT(1);
+      // PROTECT(x);
+
+    if (msg.debug()) msg.debug(MSG_PFX + "protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
+      nProtects = 0;
+      refinableInfos++;
+    } else {
+      if (msg.debug()) msg.debug(MSG_PFX + "decremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in);
+    }
+    vsearch->second = nProtects;
+  }
+  if (msg.debug()) msg.debug(MSG_PFX + "unprotected variable " + varName(var), in);
+}
+
 static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, FreshVarsTy& freshVars,
     LineMessenger& msg, unsigned& refinableInfos, LiveVarsTy& liveVars, CProtectInfo& cprotect, BalanceStateTy* balance, VarBoolCacheTy& checkedVarsCache) {
   
@@ -320,34 +352,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
           return;
         }
         while(unprotectCount-- > 0) {
-          AllocaInst* var = freshVars.pstack.back();
-          freshVars.pstack.pop_back();
-          
-          if (!var) {
-            continue;
-          }
-          auto vsearch = freshVars.vars.find(var);
-          if (vsearch != freshVars.vars.end()) {  // decrement protect count of a possibly fresh variable
-            int nProtects = vsearch->second;
-            nProtects--;
-            if (nProtects < 0) {
-              // this happens quite common without necessarily being an error, e.g.
-              // 
-              // PROTECT(x);
-              // x = foo(x);
-              // UNPROTECT(1);
-              // PROTECT(x);
-                                           
-              if (msg.debug()) msg.debug(MSG_PFX + "protect count of variable " + varName(var) + " went negative, set to zero (error?)", in);
-              nProtects = 0;
-              refinableInfos++;
-            } else {
-              if (msg.debug()) msg.debug(MSG_PFX + "decremented protect count of variable " + varName(var) + " to " + std::to_string(nProtects), in);
-            }
-            vsearch->second = nProtects;
-          }
-          if (msg.debug()) msg.debug(MSG_PFX + "unprotected variable " + varName(var), in);
-          
+          unprotectOne(freshVars, msg, refinableInfos, in);
         }
       
       } else {
@@ -618,7 +623,7 @@ static void unfreshAliasedVars(Instruction *useInst, AllocaInst *useVar, FreshVa
 }
 
 static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, 
-  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, VarBoolCacheTy& checkedVarsCache) {
+  FreshVarsTy& freshVars, LineMessenger& msg, unsigned& refinableInfos, BalanceStateTy* balance, VarBoolCacheTy& checkedVarsCache) {
   
   if (QUIET_WHEN_CONFUSED && freshVars.confused) {
     return;
@@ -642,6 +647,35 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
   Value* storeValueOp = cast<StoreInst>(in)->getValueOperand();
 
   if (storePointerOp == cm->getGlobals()->ppStackTopVariable) {
+    // R_PPStackTop = var
+    
+    if (LoadInst *li = dyn_cast<LoadInst>(storeValueOp)) {
+      if (AllocaInst *saveVar = dyn_cast<AllocaInst>(li->getPointerOperand())) {
+        if (balance && balance->topSaveVar == saveVar) {
+          // handle restore of pointer protection stack top
+      
+          int newDepth = balance->savedDepth;
+          assert(newDepth >= 0);
+      
+          int curDepth = freshVars.pstack.size();
+          if (newDepth > curDepth) {
+            msg.info(MSG_PFX + "attempt to restore protection stack to higher depth than it has now, " + CONFUSION_DISCLAIMER, in);
+            if (QUIET_WHEN_CONFUSED) freshVars.confused = true;
+            return;
+          }
+          if (newDepth == curDepth) {
+            if (msg.debug()) msg.debug(MSG_PFX + "restoring protection stack to the depth it has now (doing nothing)", in);
+            return;
+          }
+      
+          while(freshVars.pstack.size() != newDepth) {
+            unprotectOne(freshVars, msg, refinableInfos, in);
+          }
+          return;
+        }
+      }
+    }
+  
     msg.info(MSG_PFX + "manipulates PPStackTop directly, " + CONFUSION_DISCLAIMER, in);
     if (QUIET_WHEN_CONFUSED) freshVars.confused = true;
     return;
@@ -732,7 +766,7 @@ void handleFreshVarsForNonTerminator(Instruction *in, CalledModuleTy *cm, SEXPGu
 
   handleCall(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect, balance, checkedVarsCache);
   handleLoad(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, liveVars, cprotect);
-  handleStore(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, checkedVarsCache);
+  handleStore(in, cm, sexpGuardsChecker, sexpGuards, freshVars, msg, refinableInfos, balance, checkedVarsCache);
 }
 
 void handleFreshVarsForTerminator(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& liveVars) {
