@@ -248,21 +248,6 @@ bool isPointerToStruct(Type* type, std::string name) {
   return true;
 }
 
-/*bool isPointerToUnion(Type* type, std::string name) {
-  if (!PointerType::classof(type)) {
-    return false;
-  }
-  Type *etype = (cast<PointerType>(type))->getPointerElementType();
-  if (!UnionType::classof(etype)) {
-    return false;
-  }
-  UnionType *euni = cast<UnionType>(etype);
-  if (!euni->hasName() || euni->getName() != name) {
-    return false;
-  }
-  return true;
-}
-*/
 bool isSEXP(Type* type) {
   return isPointerToStruct(type, "struct.SEXPREC");
 }
