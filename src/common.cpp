@@ -8,6 +8,8 @@
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
+#include <llvm/IR/IntrinsicInst.h>
+#include <llvm/IR/InstIterator.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
@@ -159,8 +161,7 @@ bool sourceLocation(const Instruction *in, std::string& path, unsigned& line) {
 
   line = debugLoc.getLine();  
   
-  
-  DIScope scope(debugLoc. getScope());
+  DIScope scope(debugLoc.getScope());
   if (scope) {
     if (sys::path::is_absolute(scope.getFilename())) {
       path = scope.getFilename().str();
@@ -216,6 +217,26 @@ std::string computeVarName(const AllocaInst *var) {
   if (!name.empty()) {
     return name;
   }
+
+  const Function *f = var->getParent()->getParent();
+
+  // there ought be a simpler way in LLVM, but it seems there is not  
+  for(const_inst_iterator ii = inst_begin(*f), ie = inst_end(*f); ii != ie; ++ii) {
+    const Instruction *in = &*ii;
+  
+    if (const DbgDeclareInst *ddi = dyn_cast<DbgDeclareInst>(in)) {
+      if (ddi->getAddress() == var) {
+        DIVariable dvar(ddi->getVariable());
+        return dvar.getName();
+      }
+    } else if (const DbgValueInst *dvi = dyn_cast<DbgValueInst>(in)) {
+      if (dvi->getValue() == var) {
+        DIVariable dvar(dvi->getVariable());
+        return dvar.getName();
+      }
+    }
+  }
+  
   return "<unnamed var: " + instructionAsString(var) + ">";
 }
 
