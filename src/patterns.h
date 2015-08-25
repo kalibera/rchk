@@ -3,7 +3,10 @@
 
 #include "common.h"
 
+#include <unordered_map>
+
 #include <llvm/IR/Instruction.h>
+#include <llvm/IR/BasicBlock.h>
 
 using namespace llvm;
 
@@ -28,5 +31,9 @@ bool isStoreToStructureElement(Value *inst, std::string structType, std::string 
 bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar);
 
 bool findOnlyStoreTo(AllocaInst* var, StoreInst*& definingStore);
+
+typedef std::unordered_map<BasicBlock*, unsigned> TypeSwitchInfoTy;
+// FIXME: would a vector suffice?
+bool isTypeSwitch(Value *inst, AllocaInst*& var, BasicBlock*& defaultSucc, TypeSwitchInfoTy& info);
 
 #endif

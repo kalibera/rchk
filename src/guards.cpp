@@ -728,7 +728,76 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXP
   
 }
 
+bool SEXPGuardsChecker::handleTypeSwitch(TerminatorInst* t, StateWithGuardsTy& s) {
+  AllocaInst *var;
+  BasicBlock *defaultSucc;
+  TypeSwitchInfoTy info;
+  
+  if (!isTypeSwitch(t, var, defaultSucc, info) || !isGuard(var)) {
+    return false;
+  }
+
+  // add default case
+  { 
+    // FIXME: sometimes could infer something about types
+    StateWithGuardsTy* state = s.clone(defaultSucc);
+    if (state->add()) {
+      msg->trace("added default case for type switch", t);
+    }
+  }  
+  
+  // add type cases
+  for(TypeSwitchInfoTy::iterator ii = info.begin(), ie = info.end(); ii != ie; ++ii) {
+    BasicBlock *succ = ii->first;
+    unsigned type = ii->second;
+    
+    SEXPGuardState gs = getGuardState(s.sexpGuards, var);
+
+    // rule out impossible successors
+        
+    if (gs == SGS_SYMBOL && type != RT_SYMBOL) {
+      continue;
+    } else if (gs == SGS_VECTOR && !isVectorType(type)) {
+      continue;
+    } else if (gs == SGS_NONNIL && type == RT_NIL) {
+      continue;
+    } else if (gs == SGS_NIL && type != RT_NIL) {
+      continue;
+    }
+
+    // compute new guard state
+    
+    SEXPGuardState newgs = gs;
+    if (gs == SGS_SYMBOL) {
+      // keep it
+    } else if (isVectorType(type)) {
+      newgs = SGS_VECTOR;
+    } else if (type == RT_NIL) {
+      newgs = SGS_NIL;
+    }
+    
+    { 
+      StateWithGuardsTy* state = s.clone(succ);
+      if (newgs != gs) {
+        SEXPGuardTy ng(newgs);
+        state->sexpGuards[var] = ng;
+      }
+
+      if (state->add()) {
+        msg->trace("added case " + std::to_string(type) + " for switch", t);
+      }
+    }      
+  }
+  
+  return true;  
+}
+
 bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy& s) {
+
+  // handle (inlined) type switch
+  if (handleTypeSwitch(t, s)) {
+    return true;
+  }
   
   if (!BranchInst::classof(t)) {
     return false;

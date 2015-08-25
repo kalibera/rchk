@@ -218,43 +218,25 @@ bool findOnlyStoreTo(AllocaInst* var, StoreInst*& definingStore) {
   return true;
 }
 
-bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) {
+
+// just does part of a type check
+static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
 
   // %33 = load %struct.SEXPREC** %2, align 8, !dbg !21240 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 1097:0]
   // %34 = getelementptr inbounds %struct.SEXPREC* %33, i32 0, i32 0, !dbg !21240 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 1097:0]
   // %35 = bitcast %struct.sxpinfo_struct* %34 to i32*, !dbg !21240 ; [#uses=1 type=i32*] [debug line = 1097:0]
   // %36 = load i32* %35, align 4, !dbg !21240       ; [#uses=1 type=i32] [debug line = 1097:0]
   // %37 = and i32 %36, 31, !dbg !21240              ; [#uses=1 type=i32] [debug line = 1097:0]
-  // %38 = icmp eq i32 %37, 22, !dbg !21240          ; [#uses=1 type=i1] [debug line = 1097:0]
 
-  if (!CmpInst::classof(inst)) {
-    return false;
-  }
-  CmpInst *ci = cast<CmpInst>(inst);
-  if (!ci->isEquality()) {
-    return false;
-  }
-  
-  positive = ci->isTrueWhenEqual();
-  
-  ConstantInt* ctype;
-  BinaryOperator* andv;
-  
-  if (ConstantInt::classof(ci->getOperand(0)) && BinaryOperator::classof(ci->getOperand(1))) {
-    ctype = cast<ConstantInt>(ci->getOperand(0));
-    andv = cast<BinaryOperator>(ci->getOperand(1));
-  } else if (ConstantInt::classof(ci->getOperand(1)) && BinaryOperator::classof(ci->getOperand(0))) {
-    ctype = cast<ConstantInt>(ci->getOperand(1));
-    andv = cast<BinaryOperator>(ci->getOperand(0));  
-  } else {
+
+  BinaryOperator* andv = dyn_cast<BinaryOperator>(inst);
+  if (!andv) {
     return false;
   }
   
   if (andv->getOpcode() != Instruction::And) {
     return false;
   }
-  
-  type = ctype->getZExtValue();
   
   LoadInst* bitsLoad;
   ConstantInt* cmask;
@@ -297,6 +279,89 @@ bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) 
   }
   
   var = cast<AllocaInst>(varv);
+  return true;
+
+}
+
+bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) {
+
+  // %33 = load %struct.SEXPREC** %2, align 8, !dbg !21240 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 1097:0]
+  // %34 = getelementptr inbounds %struct.SEXPREC* %33, i32 0, i32 0, !dbg !21240 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 1097:0]
+  // %35 = bitcast %struct.sxpinfo_struct* %34 to i32*, !dbg !21240 ; [#uses=1 type=i32*] [debug line = 1097:0]
+  // %36 = load i32* %35, align 4, !dbg !21240       ; [#uses=1 type=i32] [debug line = 1097:0]
+  // %37 = and i32 %36, 31, !dbg !21240              ; [#uses=1 type=i32] [debug line = 1097:0]
+  
+  // %38 = icmp eq i32 %37, 22, !dbg !21240          ; [#uses=1 type=i1] [debug line = 1097:0]
+
+  if (!CmpInst::classof(inst)) {
+    return false;
+  }
+  CmpInst *ci = cast<CmpInst>(inst);
+  if (!ci->isEquality()) {
+    return false;
+  }
+  
+  positive = ci->isTrueWhenEqual();
+  
+  ConstantInt* ctype;
+  BinaryOperator* andv;
+  
+  if (ConstantInt::classof(ci->getOperand(0)) && BinaryOperator::classof(ci->getOperand(1))) {
+    ctype = cast<ConstantInt>(ci->getOperand(0));
+    andv = cast<BinaryOperator>(ci->getOperand(1));
+  } else if (ConstantInt::classof(ci->getOperand(1)) && BinaryOperator::classof(ci->getOperand(0))) {
+    ctype = cast<ConstantInt>(ci->getOperand(1));
+    andv = cast<BinaryOperator>(ci->getOperand(0));  
+  } else {
+    return false;
+  }
+  
+  if (isTypeExtraction(andv, var)) {
+    type = ctype->getZExtValue();
+    return true;
+  }
+  
+  return false;
+}
+
+bool isTypeSwitch(Value *inst, AllocaInst*& var, BasicBlock*& defaultSucc, TypeSwitchInfoTy& info) {
+
+  //  switch (TYPEOF(var)) {
+  //    case ...
+  //    case ....
+
+  // %187 = load %struct.SEXPREC** %4, align 8, !dbg !195121 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 407:13]
+  // %188 = getelementptr inbounds %struct.SEXPREC* %187, i32 0, i32 0, !dbg !195121 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 407:13]
+  // %189 = bitcast %struct.sxpinfo_struct* %188 to i32*, !dbg !195121 ; [#uses=1 type=i32*] [debug line = 407:13]
+  // %190 = load i32* %189, align 4, !dbg !195121    ; [#uses=1 type=i32] [debug line = 407:13]
+  // %191 = and i32 %190, 31, !dbg !195121           ; [#uses=1 type=i32] [debug line = 407:13]
+  // switch i32 %191, label %224 [
+  //   i32 0, label %192 <==== NILSXP
+  //   i32 2, label %192 <==== LISTSXP
+  //   i32 19, label %193 <=== VECSXP
+  // ], !dbg !195122                                 ; [debug line = 407:5]
+
+  SwitchInst *si = dyn_cast<SwitchInst>(inst);
+  if (!si) {
+    return false;
+  }
+
+  if (!isTypeExtraction(si->getCondition(), var)) {
+    return false;
+  }
+
+  info.clear();
+
+  for(SwitchInst::CaseIt ci = si->case_begin(), ce = si->case_end(); ci != ce; ++ci) {
+  
+    ConstantInt *val = ci.getCaseValue();
+    BasicBlock *succ = ci.getCaseSuccessor();
+    
+    info.insert({succ, val->getZExtValue()});
+  }
+  
+  defaultSucc = si->getDefaultDest();
+  
   return true;
 }
 
