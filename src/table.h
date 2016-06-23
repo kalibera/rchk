@@ -12,7 +12,7 @@ template <
   
 > class InterningTable {
 
-  typedef std::unordered_set<const Member, Hash, KeyEqual, Allocator> Table;
+  typedef std::unordered_set<Member, Hash, KeyEqual, Allocator> Table;
   Table table;
   
   public:
@@ -41,7 +41,7 @@ template <
   
 > class IndexedInterningTable {
 
-  typedef std::unordered_set<const Member, Hash, KeyEqual, Allocator> Table;
+  typedef std::unordered_set<Member, Hash, KeyEqual, Allocator> Table;
   typedef std::vector<const Member*> Index;
 
   Table table;
