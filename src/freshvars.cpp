@@ -746,13 +746,43 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
       int nProtects = 0;
       auto vsearch = freshVars.vars.find(var);
       if (vsearch == freshVars.vars.end()) {
-        freshVars.vars.insert({var, nProtects}); // remember, insert won't overwrite std::map value for an existing key
+        freshVars.vars.insert({var, nProtects});
+        // remember, insert won't overwrite std::map value for an existing key
       } else {
         vsearch->second = nProtects;
       }
       if (msg.debug()) msg.debug(MSG_PFX + "initialized fresh SEXP variable " + varName(var) + " with protect count " + std::to_string(nProtects) +
         " allocated by " + funName(srcFun), in);
       return;
+    }
+  }
+  if (LoadInst *dli = dyn_cast<LoadInst>(storeValueOp)) {
+    if (GetElementPtrInst *dgep  = dyn_cast<GetElementPtrInst>(dli->getPointerOperand())) {
+      if (dgep->isInBounds()) {
+        if (LoadInst *dlis = dyn_cast<LoadInst>(dgep->getOperand(0))) {
+          if (AllocaInst *dvars = dyn_cast<AllocaInst>(dlis->getPointerOperand())) {
+            if (isVarCheckedFresh(dvars, checkedVarsCache, msg)) {
+              auto vssearch = freshVars.vars.find(dvars);
+              if (vssearch != freshVars.vars.end() && vssearch->second == 0) {
+                // handle var = ATTRIB(var1) where var1 is fresh
+                // NOTE: this is only an approximation and can cause false alarms
+                //   if var1 later is protected, var still will be deemed fresh
+                int nProtects = 0;
+                auto vsearch = freshVars.vars.find(var);
+                if (vsearch == freshVars.vars.end()) {
+                  freshVars.vars.insert({var, nProtects});
+                  // remember, insert won't overwrite std::map value for an existing key
+                } else {
+                  vsearch->second = nProtects;
+                }
+                if (msg.debug()) msg.debug(MSG_PFX + "initialized fresh SEXP variable " + varName(var) + " with protect count " + std::to_string(nProtects) +
+                  " based on derived assignment from fresh variable " + varName(dvars), in);
+                return;
+              }
+            }
+          }
+        }
+      }
     }
   }
   
