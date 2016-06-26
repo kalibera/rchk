@@ -504,13 +504,15 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
           if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs.getArgument(0))) {
             if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
             
-              auto vsearch = freshVars.vars.find(firstArg);
-              if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
-                // first argument of the setter is not fresh
+              if (firstArg != var) {
+                auto vsearch = freshVars.vars.find(firstArg);
+                if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
+                  // first argument of the setter is not fresh
                 
-                if (msg.debug()) msg.debug(MSG_PFX + "fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);
-                freshVars.vars.erase(var);
-                break;
+                  if (msg.debug()) msg.debug(MSG_PFX + "fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) " + funName(tgt) + " and thus no longer fresh" , in);
+                  freshVars.vars.erase(var);
+                  break;
+                }
               }
             }
           }
