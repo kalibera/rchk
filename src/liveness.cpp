@@ -80,8 +80,6 @@ LiveVarsTy findLiveVariables(Function *f) {
     BasicBlock* bb = *bi;
     changed.erase(bi);
     
-    assert(usedAfter.find(bb) != usedAfter.end());
-    
     auto bsearch = blockStates.find(bb);
     assert(bsearch != blockStates.end());
     BlockStateTy& s = bsearch->second;

@@ -400,7 +400,7 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
       if (b.count > MAX_COUNT) {
         // turn the counter to differential state
         if (msg.debug()) msg.debug(MSG_PFX + "setting counter to a large constant, switching to differential state", in);
-        assert(s.balance.countState == CS_EXACT);
+        assert(b.countState == CS_EXACT);
         b.countState = CS_DIFF;
         b.depth -= b.count;
         b.count = -1;

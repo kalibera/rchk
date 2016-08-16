@@ -17,8 +17,8 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#undef NDEBUG
-#include <assert.h>
+// #undef NDEBUG
+// #include <assert.h>
 
 using namespace llvm;
 

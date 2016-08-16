@@ -5,7 +5,7 @@
 #ifdef NDEBUG
   //#undef NDEBUG
 #else
-   #define NDEBUG
+  #define NDEBUG
 #endif
 
 #include <assert.h>
