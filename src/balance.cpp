@@ -400,7 +400,7 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
       if (b.count > MAX_COUNT) {
         // turn the counter to differential state
         if (msg.debug()) msg.debug(MSG_PFX + "setting counter to a large constant, switching to differential state", in);
-        assert(s.balance.countState == CS_EXACT);
+        assert(b.countState == CS_EXACT);
         b.countState = CS_DIFF;
         b.depth -= b.count;
         b.count = -1;
@@ -607,7 +607,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
 
   // ... loads a protection counter variable first
   LoadInst *loadInst = NULL;
-  if (it != unprotectSucc->end() && LoadInst::classof(it)) {
+  if (it != unprotectSucc->end() && LoadInst::classof(cast<Value>(it))) {
     loadInst = cast<LoadInst>(it);
   } else {
     return false;
@@ -628,7 +628,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   ++it;
 
   // ... and then merges back from the branch    
-  if (it == unprotectSucc->end() || !BranchInst::classof(it)) {
+  if (it == unprotectSucc->end() || !BranchInst::classof(cast<Value>(it))) {
     return false;
   }
   BranchInst *bi = cast<BranchInst>(it);
@@ -680,6 +680,7 @@ std::string cs_name(CountState cs) {
     case CS_EXACT: return "exact";
     case CS_DIFF: return "differential";
   }
+  assert(false);
 }
 
 void StateWithBalanceTy::dump(bool verbose) {

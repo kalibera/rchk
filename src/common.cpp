@@ -86,7 +86,8 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   if (argc == 1 || argc == 2) {
     // only a single input file
     for(Module::iterator f = base->begin(), fe = base->end(); f != fe; ++f) {
-      functionsOfInterestSet.insert(f);
+      Function *fun = &*f;
+      functionsOfInterestSet.insert(fun);
     }
     sortFunctionsByName(functionsOfInterestSet, functionsOfInterestVector);
     return base;
@@ -94,7 +95,7 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   
   // have two input files
   std::string moduleFname = argv[2];
-  Module *module = parseIRFile(moduleFname, error, context).release();
+  std::unique_ptr<Module> module = parseIRFile(moduleFname, error, context);
   if (!module) {
     errs() << "ERROR: Cannot read module IR file " << moduleFname << "\n";
     error.print(argv[0], errs());
@@ -122,7 +123,7 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   }  
   
   
-  if (Linker::LinkModules(base, module)) {
+  if (Linker::linkModules(*base, move(module))) {
     errs() << "Linking module " << moduleFname << " with base " << baseFname << " resulted in an error.\n";
   }
   
@@ -131,7 +132,6 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
     functionsOfInterestSet.insert(base->getFunction(name));
   }  
 
-  delete module;
   sortFunctionsByName(functionsOfInterestSet, functionsOfInterestVector);
   return base;
 }
@@ -153,20 +153,18 @@ bool sourceLocation(const Instruction *in, std::string& path, unsigned& line) {
   }
   const DebugLoc& debugLoc = in->getDebugLoc();
   
-  if (debugLoc.isUnknown()) {
+  if (!debugLoc) {
     path = "/unknown";
     line = 0;
     return false;
   }
 
   line = debugLoc.getLine();  
-  
-  DIScope scope(debugLoc.getScope());
-  if (scope) {
-    if (sys::path::is_absolute(scope.getFilename())) {
-      path = scope.getFilename().str();
+  if (DIScope *scope = dyn_cast<DIScope>(debugLoc.getScope())) {
+    if (sys::path::is_absolute(scope->getFilename())) {
+      path = scope->getFilename().str();
     } else {
-      path = scope.getDirectory().str() + "/" + scope.getFilename().str();
+      path = scope->getDirectory().str() + "/" + scope->getFilename().str();
     }
   }
   return true;
@@ -187,8 +185,8 @@ std::string funLocation(const Function *f) {
   const Instruction *instWithDI = NULL;
   for(Function::const_iterator bb = f->begin(), bbe = f->end(); !instWithDI && bb != bbe; ++bb) {
     for(BasicBlock::const_iterator in = bb->begin(), ine = bb->end(); !instWithDI && in != ine; ++in) {
-      if (!in->getDebugLoc().isUnknown()) {
-        instWithDI = in;
+      if (in->getDebugLoc()) {
+        instWithDI = &*in;
       }
     }
   }
@@ -226,17 +224,14 @@ std::string computeVarName(const AllocaInst *var) {
   
     if (const DbgDeclareInst *ddi = dyn_cast<DbgDeclareInst>(in)) {
       if (ddi->getAddress() == var) {
-        DIVariable dvar(ddi->getVariable());
-        return dvar.getName();
+        return ddi->getVariable()->getName();
       }
     } else if (const DbgValueInst *dvi = dyn_cast<DbgValueInst>(in)) {
       if (dvi->getValue() == var) {
-        DIVariable dvar(dvi->getVariable());
-        return dvar.getName();
+        return dvi->getVariable()->getName();
       }
     }
   }
-  
   return "<unnamed var: " + instructionAsString(var) + ">";
 }
 

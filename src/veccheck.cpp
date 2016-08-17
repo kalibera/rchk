@@ -27,6 +27,7 @@ int main(int argc, char* argv[])
   
     // FIXME: this will not discover many call-sites (will not include many interesting contexts)
   printVectorReturningFunctions(cm);
-    
+
+  CalledModuleTy::release(cm);
   delete m;
 }

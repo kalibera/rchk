@@ -63,10 +63,10 @@ LiveVarsTy findLiveVariables(Function *f) {
   
   // add basic blocks with return statement
   for(Function::iterator bi = f->begin(), be = f->end(); bi != be; ++bi) {
-    BasicBlock *bb = bi;
+    BasicBlock *bb = &*bi;
     
     // note: ignoring "error blocks" (unreachable terminators)
-    if (ReturnInst *ri = dyn_cast<ReturnInst>(bb->getTerminator())) {
+    if (ReturnInst::classof(bb->getTerminator())) {
       VarMapTy usedAfter = VarMapTy(nvars, false);
       VarMapTy killedAfter = VarMapTy(nvars, true);
       blockStates.insert({bb, BlockStateTy(usedAfter, killedAfter)});
@@ -79,8 +79,6 @@ LiveVarsTy findLiveVariables(Function *f) {
     BlockSetTy::iterator bi = changed.begin();
     BasicBlock* bb = *bi;
     changed.erase(bi);
-    
-    assert(usedAfter.find(bb) != usedAfter.end());
     
     auto bsearch = blockStates.find(bb);
     assert(bsearch != blockStates.end());

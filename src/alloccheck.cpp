@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
       continue;
     }
     auto fsearch = cprotect.map.find(fun);
-    assert(fsearch != map.end()); 
+    assert(fsearch != cprotect.map.end());
     CPArgsTy& cpargs = fsearch->second;
   
     unsigned nargs = cpargs.size();
@@ -89,8 +89,6 @@ int main(int argc, char* argv[])
         case CP_CALLEE_SAFE: outs() << "S"; break;
         case CP_CALLEE_PROTECT: outs() << "P"; break;
         case CP_CALLER_PROTECT: outs() << "!"; break;
-        default:
-          assert(false);
       }
     }
     outs() << "\n";

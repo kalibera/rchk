@@ -209,10 +209,10 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
   FunctionsSetTy* possibleAllocators, FunctionsSetTy* allocatingFunctions):
   
   m(m), symbolsMap(symbolsMap), errorFunctions(errorFunctions), globals(globals), possibleAllocators(possibleAllocators), allocatingFunctions(allocatingFunctions),
-  callSiteTargets(), gcFunction(getCalledFunction(getGCFunction(m))), vrfState(NULL) {
+  callSiteTargets(), vrfState(NULL), gcFunction(getCalledFunction(getGCFunction(m)))  {
 
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-    Function *fun = fi;
+    Function *fun = &*fi;
 
     assert(fun);
     getCalledFunction(fun); // make sure each function has a called function counterpart
@@ -220,10 +220,12 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
       User *u = *ui;
       getCalledFunction(cast<Value>(u)); // NOTE: this only gets contexts that are constant, more are gotten during allocators computation
     }
-  }  
+  }
     // only compute on demand - it takes a bit of time
   possibleCAllocators = NULL;
   allocatingCFunctions = NULL;
+  contextSensitivePossibleAllocators = NULL;
+  contextSensitiveAllocatingFunctions = NULL;
 }
 
 CalledModuleTy::~CalledModuleTy() {
@@ -251,7 +253,6 @@ CalledModuleTy* CalledModuleTy::create(Module *m) {
 
   FunctionsSetTy *errorFunctions = new FunctionsSetTy();
   findErrorFunctions(m, *errorFunctions);
-  
   GlobalsTy *globals = new GlobalsTy(m);
   
   FunctionsSetTy *possibleAllocators = new FunctionsSetTy();
@@ -259,7 +260,7 @@ CalledModuleTy* CalledModuleTy::create(Module *m) {
 
   FunctionsSetTy *allocatingFunctions = new FunctionsSetTy();
   findAllocatingFunctions(m, *allocatingFunctions);
-  
+
   return new CalledModuleTy(m, symbolsMap, errorFunctions, globals, possibleAllocators, allocatingFunctions);
 }
 
@@ -304,7 +305,7 @@ struct CAllocPackedStateTy : public PackedStateWithGuardsTy {
   CAllocPackedStateTy(size_t hashcode, BasicBlock* bb, const PackedIntGuardsTy& intGuards, const PackedSEXPGuardsTy& sexpGuards,
     const InternedVarOriginsTy& varOrigins, const CalledFunctionsOrderedSetTy *called):
     
-    hashcode(hashcode), PackedStateBaseTy(bb), PackedStateWithGuardsTy(bb, intGuards, sexpGuards), varOrigins(varOrigins), called(called) {};
+    PackedStateBaseTy(bb), PackedStateWithGuardsTy(bb, intGuards, sexpGuards), hashcode(hashcode), called(called), varOrigins(varOrigins)  {};
     
   static CAllocPackedStateTy create(CAllocStateTy& us, IntGuardsChecker& intGuardsChecker, SEXPGuardsChecker& sexpGuardsChecker);
 };
@@ -395,7 +396,7 @@ CAllocPackedStateTy CAllocPackedStateTy::create(CAllocStateTy& us, IntGuardsChec
     
   hash_combine(res, internedOrigins.size());
   for(InternedVarOriginsTy::const_iterator oi = internedOrigins.begin(), oe = internedOrigins.end(); oi != oe; ++oi) {
-    AllocaInst* var = oi->first;
+    //AllocaInst* var = oi->first;
     const CalledFunctionsOrderedSetTy* srcs = oi->second;
     hash_combine(res, (const void *)srcs); // interned
   } // ordered map
@@ -506,7 +507,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     workList.pop();    
 
     if (DUMP_STATES && (DUMP_STATES_FUNCTION.empty() || DUMP_STATES_FUNCTION == f->getName())) {
-      msg.trace("going to work on this state:", s.bb->begin());
+      msg.trace("going to work on this state:", &*s.bb->begin());
       s.dump("worklist top");
     }    
 
@@ -515,7 +516,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     }      
 
     if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
-      msg.debug("ignoring basic block on error path", s.bb->begin());
+      msg.debug("ignoring basic block on error path", &*s.bb->begin());
       continue;
     }
       
@@ -578,7 +579,8 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     // process a single basic block
     // FIXME: phi nodes
       
-    for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
+    for(BasicBlock::iterator ini = s.bb->begin(), ine = s.bb->end(); ini != ine; ++ini) {
+      Instruction *in = &*ini;
       msg.trace("visiting", in);
    
       if (intGuardsEnabled) {
@@ -775,7 +777,7 @@ static void resize(BoolMatrixTy& matrix, unsigned n) {
     return;
   }
   matrix.resize(n);
-  for (int i = 0; i < n; i++) {
+  for (unsigned i = 0; i < n; i++) {
     matrix[i].resize(n);
   }
 }

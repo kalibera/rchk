@@ -670,7 +670,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
             return;
           }
       
-          while(freshVars.pstack.size() != newDepth) {
+          while((int)freshVars.pstack.size() != newDepth) {
             unprotectOne(freshVars, msg, refinableInfos, in);
           }
           return;

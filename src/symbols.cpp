@@ -55,7 +55,7 @@ bool isInstallConstantCall(Value *inst, std::string& symbolName) {
 void findSymbols(Module *m, SymbolsMapTy* symbolsMap) {
 
   for(Module::global_iterator gi = m->global_begin(), ge = m->global_end(); gi != ge ; ++gi) {
-    GlobalVariable *gv = gi;
+    GlobalVariable *gv = &*gi;
     if (!isSEXP(gv)) {
       continue;
     }

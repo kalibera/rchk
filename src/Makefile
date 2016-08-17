@@ -4,8 +4,10 @@
 HOST := $(shell hostname -s)
 
 ifeq ($(HOST), prg)
-  LLVM := /home/tomas/work/opt/clang+llvm-3.6.2-x86_64-linux-gnu-ubuntu-15.04
-  CXX := g++-4.8
+  #LLVM := /home/tomas/work/opt/clang+llvm-3.6.2-x86_64-linux-gnu-ubuntu-15.04
+  LLVM := /home/tomas/work/opt/clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-16.04
+  CXX := g++
+#  CXX := $(LLVM)/bin/clang++
   BCHECK_MAX_STATES := 800000
   CALLOCATORS_MAX_STATES := 1000000
 
@@ -40,11 +42,16 @@ HOSTFLAGS := -DBCHECK_MAX_STATES=$(BCHECK_MAX_STATES) -DCALLOCATORS_MAX_STATES=$
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
 
 CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
+
+# for GCC, which does not support this warning
+CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))
+
 #CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS)
 
-# for address sanitizer
+# For address sanitizer
+#   also have to set environment variable,
+#   export ASAN_SYMBOLIZER_PATH = $(LLVM)/bin/llvm-symbolizer
 #CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O1 -g3 -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -MMD $(HOSTFLAGS)
-#CXX := clang++
 
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
@@ -82,5 +89,9 @@ glcheck: glcheck.o $(SOBJECTS)
 
 clean:
 	rm -f $(OBJECTS) $(DEPENDS) $(TOOLS)
+
+info:
+	@echo "CPPFLAGS: $(CPPFLAGS)"
+	@echo "CXXFLAGS: $(CXXFLAGS)"
 
 -include $(DEPENDS)

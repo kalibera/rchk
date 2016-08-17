@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
   findSymbols(m, &symbolsMap); // symbols are globals which hold SEXPs, but are safe
   
   for(Module::global_iterator gi = m->global_begin(), ge = m->global_end(); gi != ge ; ++gi) {
-    GlobalVariable *gv = gi;
+    GlobalVariable *gv = &*gi;
     
     if (isSEXP(gv)) {
       if (symbolsMap.find(gv) != symbolsMap.end()) {

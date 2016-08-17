@@ -17,6 +17,6 @@ void StateBaseTy::dump(bool verbose) {
     errs() << "=== Basic block:\n" << *bb << "\n";
   }
       
-  Instruction *in = bb->begin();
+  Instruction *in = &*bb->begin();
   errs() << "=== Basic block " << bb << " src: " << sourceLocation(in) << "\n";
 }

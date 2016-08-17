@@ -26,6 +26,7 @@ struct ArgInfoTy {
 
   virtual bool isSymbol() const { return false; }; /* this means a specific symbol, defined by its string name */
   virtual bool isVector() const { return false; }; /* this means anything LENGTH could be called on */
+  virtual ~ArgInfoTy() = default; // to make the compiler happy :(
 };
 
 
@@ -116,7 +117,7 @@ typedef InterningTable<ArgInfosVectorTy, ArgInfosVectorTy_hash> ArgInfoVectorsTa
 
   // yikes, need forward type def
 struct SEXPGuardTy;
-struct SEXPGuardsChecker;
+class SEXPGuardsChecker;
 typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 
 typedef std::map<Value*, CalledFunctionsSetTy> CallSiteTargetsTy;
@@ -125,8 +126,8 @@ class CalledModuleTy {
   CalledFunctionsTableTy calledFunctionsTable; // intern table
   ArgInfoVectorsTableTy argInfoVectorsTable; // intern table
   
-  SymbolsMapTy* symbolsMap;
   Module *m;
+  SymbolsMapTy* symbolsMap;
   FunctionsSetTy* errorFunctions;
   GlobalsTy* globals;
   FunctionsSetTy* possibleAllocators;

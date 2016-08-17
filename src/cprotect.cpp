@@ -12,8 +12,8 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-// #undef NDEBUG
-// #include <assert.h>
+//#undef NDEBUG
+//#include <assert.h>
 
 using namespace llvm;
 
@@ -47,10 +47,10 @@ static bool isSEXPParam(Function *fun, unsigned pidx) {
 
 struct FunctionState {
 
-  bool dirty; 			// needs to be re-analyzed
+  Function *fun;
   ArgsTy exposed;		// true for arguments that are (possibly) not protected explicitly at an allocating call
   ArgsTy usedAfterExposure;	// true for arguments that are (possibly) used after being exposed [approximation, due to merge the order of events is not fixed]
-  Function *fun;
+  bool dirty; 			// needs to be re-analyzed
   VarIndexTy varIndex;		// variable numbering
   ArgIndexTy argIndex;		// argument numbering
   bool confused;
@@ -349,7 +349,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
     
     
     for(BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie; ++ii) {
-      Instruction *in = ii;
+      Instruction *in = &*ii;
       
       if (StoreInst *si = dyn_cast<StoreInst>(in)) {
         if (AllocaInst *var = dyn_cast<AllocaInst>(si->getPointerOperand())) {
@@ -613,7 +613,7 @@ CProtectInfo findCalleeProtectFunctions(Module *m, FunctionsSetTy& allocatingFun
   
   if (DEBUG) errs() << "adding functions..\n";
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-    Function *f = fi;
+    Function *f = &*fi;
     FunctionState fstate(f);
     auto finsert = functions.insert({f, fstate});
     assert(finsert.second);
