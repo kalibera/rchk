@@ -9,7 +9,7 @@ We have not been fixing the CRAN/BIOC packages, where a number of errors can
 be found as well. We are happy to give advice to interested package
 maintainers on how to use the tool.
 
-Manual installation on Ubuntu 15.04:
+Manual installation on Ubuntu 15.04/16.04:
 
 0. Install build dependencies for GNU-R: `apt-get build-dep -y r-base-dev`
 1. Install a binary version of [CLANG+LLVM 3.6.1](http://llvm.org/releases/download.html#3.6.1).
@@ -17,6 +17,12 @@ Manual installation on Ubuntu 15.04:
 3. Install [rchk](https://github.com/kalibera/rchk.git):
   1. `make LLVM=<llvm_root> CXX=g++-4.8`
   2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk)
+
+The master version of the tool does not work with LLVM 3.7 or newer. A
+version for LLVM 3.8 is available in branch `llvm-38` (it has been tested on
+Ubuntu 16.04 and Fedora Core 23 using the system versions of GCC C++
+compiler; it does not work with the CLANG compiler). We used again LLVM 3.8
+(3.8.0 and 3.8.1) [binary distributions](http://llvm.org/releases/download.html).
 
 Alternatively, one can install automatically into a VirtualBox image:
 
