@@ -12,8 +12,9 @@ ifeq ($(HOST), prg)
   CALLOCATORS_MAX_STATES := 1000000
 
 else ifeq ($(HOST), r-lnx400)
-  LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.6.2-x86_64-fedora21
+  LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.8.0-x86_64-fedora23
   CXX := g++
+#  CXX := $(LLVM)/bin/clang++
   BCHECK_MAX_STATES := 6000000
   CALLOCATORS_MAX_STATES := 1000000
 
@@ -42,11 +43,10 @@ HOSTFLAGS := -DBCHECK_MAX_STATES=$(BCHECK_MAX_STATES) -DCALLOCATORS_MAX_STATES=$
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
 
 CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS)
 
 # for GCC, which does not support this warning
 CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))
-
-#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS)
 
 # For address sanitizer
 #   also have to set environment variable,
