@@ -119,18 +119,20 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
         targetFunctionInfo = &search->second;
       }
       
-      if (targetFun->doesNotReturn()) {
+      if (ignoreErrorPaths && targetFun->doesNotReturn()) {
         if (DEBUG) errs() << " ignoring edge to function " << funName(targetFun) << " as it does not return.\n";
         continue;
       }
       
-      BasicBlock *bb = callInst->getParent();
-      if (errorBlocks.find(bb) != errorBlocks.end()) {
-        if (DEBUG) {
-          errs() << " in function " << funName(fun) << " ignoring edge to function " << 
-            funName(targetFun) << " as it is called from a basic block that always results in error.\n";
+      if (ignoreErrorPaths) {
+        BasicBlock *bb = callInst->getParent();
+        if (errorBlocks.find(bb) != errorBlocks.end()) {
+          if (DEBUG) {
+            errs() << " in function " << funName(fun) << " ignoring edge to function " << 
+              funName(targetFun) << " as it is called from a basic block that always results in error.\n";
+          }
+          continue;
         }
-        continue;
       }
       
       // create callinfo for this instruction

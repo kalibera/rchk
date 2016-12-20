@@ -63,7 +63,7 @@ DEPENDS := $(SOURCES:.cpp=.d)
 OBJECTS := $(SOURCES:.cpp=.o)
 SOBJECTS := $(filter-out %check.o, $(OBJECTS))
 
-TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck
+TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck cgcheck
 
 all: $(TOOLS)
 
@@ -72,6 +72,8 @@ alloccheck: alloccheck.o $(SOBJECTS)
 errcheck: errcheck.o $(SOBJECTS)
 
 sfpcheck: sfpcheck.o $(SOBJECTS)
+
+cgcheck: cgcheck.o $(SOBJECTS)
 
 csfpcheck: csfpcheck.o $(SOBJECTS)
 
