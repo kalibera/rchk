@@ -3,34 +3,35 @@ This project consists of several bug-finding tools that look for memory
 protection errors in the C source code of [GNU
 R](http://www.r-project.org/) and packages.  
 
-We are fixing bugs in [R-devel](https://svn.r-project.org/R/trunk/),
-both in the core R and in some packages that are part of the distribution. 
-We have not been fixing the CRAN/BIOC packages, where a number of errors can
-be found as well. We are happy to give advice to interested package
-maintainers on how to use the tool.
+A number of bugs have been found in [R-devel](https://svn.r-project.org/R/trunk/)
+using this tool and later fixed. The tool can also be used to find errors in
+R packages (e.g. from CRAN/BIOC).
 
-Manual installation on Ubuntu 15.04/16.04:
+Manual installation on Ubuntu 16.04.2:
 
 0. Install build dependencies for GNU-R: `apt-get build-dep -y r-base-dev`
-1. Install a binary version of [CLANG+LLVM 3.6.1](http://llvm.org/releases/download.html#3.6.1).
-2. Install (download) [WLLVM scripts](https://github.com/travitch/whole-program-llvm).
+1. Install clang and llvm: `apt-get install clang clang++ llvm-dev`
+2. Install (download, `pip install --upgrade pip`, `pip install --user .`) [WLLVM scripts](https://github.com/travitch/whole-program-llvm).
 3. Install [rchk](https://github.com/kalibera/rchk.git):
-  1. `make LLVM=<llvm_root> CXX=g++-4.8`
+  1. `make`
   2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk)
 
-The master version of the tool does not work with LLVM 3.7 or newer. A
-version for LLVM 3.8 is available in branch `llvm-38` (it has been tested on
-Ubuntu 16.04 and Fedora Core 23 using the system versions of GCC C++
-compiler; it does not work with the CLANG compiler). We used again LLVM 3.8
-(3.8.0 and 3.8.1) [binary distributions](http://llvm.org/releases/download.html).
+The clang/llvm version on Ubuntu is 3.8. The tool can be used also with
+[binary distributions](http://llvm.org/releases/download.html) of LLVM. It
+is extremely unlikely that the `master` version of the tool will work with
+another version of LLVM due to frequent changes in LLVM API. An older
+version working with LLVM 3.6 is available on the `llvm-36` branch but is no
+longer updated. 
 
-Alternatively, one can install automatically into a VirtualBox image:
+Alternatively, one can install automatically into a VirtualBox image
+(this is not working at the moment - **I am in the process of updating
+this**)
 
 1. Install (manually) [VirtualBox](https://www.virtualbox.org/wiki/Downloads)
 2. Install (manually) [Vagrant](https://www.vagrantup.com/).
 3. Install (automatically) R build dependencies, LLVM, WLLVM and rchk: run
 `vagrant up` from `image` directory.  Note that the installation will take
-long, as it will be downloading an Ubuntu 15.04 image and installing indeed
+long, as it will be downloading an Ubuntu 16.04.2 image and installing indeed
 the R build dependencies onto a fresh Ubuntu image.  Log in to the machine
 by `vagrant ssh`.
 
