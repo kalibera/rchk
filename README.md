@@ -13,8 +13,8 @@ Manual installation on Ubuntu 16.04.2:
 1. Install clang and llvm: `apt-get install clang clang++ llvm-dev`
 2. Install (download, `pip install --upgrade pip`, `pip install --user .`) [WLLVM scripts](https://github.com/travitch/whole-program-llvm).
 3. Install [rchk](https://github.com/kalibera/rchk.git):
-  1. `make`
-  2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk)
+	1. `make`
+	2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk)
 
 The clang/llvm version on Ubuntu is 3.8. The tool can be used also with
 [binary distributions](http://llvm.org/releases/download.html) of LLVM. It
