@@ -104,7 +104,7 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
           if (onlyTargets->find(targetFun) == onlyTargets->end()) {
             continue;
           }
-        }
+        } else continue;
       }
       // find or create FunctionInfo for the target      
       FunctionInfo *targetFunctionInfo;
