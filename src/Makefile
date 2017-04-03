@@ -4,7 +4,6 @@
 HOST := $(shell hostname -s)
 
 ifeq ($(HOST), prg)
-  #LLVM := /home/tomas/work/opt/clang+llvm-3.6.2-x86_64-linux-gnu-ubuntu-15.04
   LLVM := /home/tomas/work/opt/clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-16.04
   CXX := g++
 #  CXX := $(LLVM)/bin/clang++
@@ -23,10 +22,9 @@ else
   # or provide these variables to make
   
   ifeq ($(wildcard $(LLVM)),)
-    $(error Please customize your Makefile here. Please set the home directory for LLVM 3.6.1)
+    $(error Please customize your Makefile here. Please set the home directory for LLVM 3.8)
   endif
 
-  #LLVM := /home/tomas/work/opt/clang+llvm-3.6.1-x86_64-linux-gnu
   # please update the "MAX_STATES", these defaults seem to work fine for 8G RAM laptop
 
   CXX ?= g++
