@@ -14,6 +14,7 @@ struct StateBaseTy {
   virtual StateBaseTy* clone(BasicBlock *newBB) = 0;
   virtual bool add() = 0;
   void dump(bool verbose);
+  virtual ~StateBaseTy() = default;
 };
 
 struct PackedStateBaseTy {

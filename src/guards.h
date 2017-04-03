@@ -151,7 +151,7 @@ class SEXPGuardsChecker {
   private:
     bool uncachedIsGuard(AllocaInst* var);
     bool handleNullCheck(bool positive, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s);
-    bool handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s);
+    bool handleTypeCheck(bool positive, int testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s);
     bool handleTypeSwitch(TerminatorInst* t, StateWithGuardsTy& s);
 };
 

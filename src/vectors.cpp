@@ -17,8 +17,8 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-// #undef NDEBUG
-// #include <assert.h>
+//#undef NDEBUG
+//#include <assert.h>
 
 using namespace llvm;
 
@@ -376,7 +376,6 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
   Function *fun = fstate.fun;
   ArgsTy context = fstate.contextIndex.at(contextIdx);
 
-  bool returnsVector = false; // only look at functions that we see may actually return
   unsigned nvars = fstate.varIndex.size();
   
   BlocksTy blocks;
@@ -398,7 +397,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
     BlockState s = bsearch->second; // copy
     
     for(BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie; ++ii) {
-      Instruction *in = ii;
+      Instruction *in = &*ii;
       
       if (StoreInst *si = dyn_cast<StoreInst>(in)) {
         if (AllocaInst *var = dyn_cast<AllocaInst>(si->getPointerOperand())) {
@@ -425,7 +424,6 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
     if (ReturnInst *r = dyn_cast<ReturnInst>(t)) {
     
       if (valueIsVector(r->getReturnValue(), fstate, s, context, functions, functionsWorkList, cm)) {
-        returnsVector = true;
         continue;
       }
 
@@ -512,7 +510,7 @@ void findVectorReturningFunctions(CalledModuleTy *cm) {
   // add some functions to the worklist, with default contexts  
   Module *m = cm->getModule();
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
-    Function *f = fi;
+    Function *f = &*fi;
     if (!isSEXP(f->getReturnType())) {
       continue;
       // if a function does not return an SEXP, it definitely does not return a vector
@@ -523,7 +521,7 @@ void findVectorReturningFunctions(CalledModuleTy *cm) {
 
     fstate.addToWorkList(workList);
   }
-  
+
   while(!workList.empty()) {
     FunctionState& fstate = FunctionState::get(functions, workList.back());
     workList.pop_back();
@@ -542,7 +540,6 @@ void printVectorReturningFunctions(FunctionTableTy *functionsPtr) {
     Function* fun = fi->first;
     FunctionState& fstate = fi->second;
     
-    unsigned nargs = fstate.argIndex.size();
     unsigned ncontexts = fstate.contextIndex.size();
     assert(ncontexts == fstate.returnsOnlyVector.size());
     

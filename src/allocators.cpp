@@ -115,7 +115,7 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
       }
     }
     if (StoreInst::classof(u)) {
-      Value* storeValue = cast<StoreInst>(u)->getValueOperand();
+      //Value* storeValue = cast<StoreInst>(u)->getValueOperand();
       Value* storePointer = cast<StoreInst>(u)->getPointerOperand();
       if (u == storePointer) {
         // the variable is overwritten
@@ -145,7 +145,7 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
       
   for(Function::iterator bb = f->begin(), bbe = f->end(); bb != bbe; ++bb) {
     for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
-      Value *v = in;
+      Value *v = &*in;
       CallSite cs(v);
       if (!cs) continue;
       Function *tgt = cs.getCalledFunction();
@@ -181,7 +181,8 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   Function* gcFunction = getGCFunction(m);
 
   onlyFunctions.insert(gcFunction);
-  for(Module::iterator f = m->begin(), fe = m->end(); f != fe; ++f) {
+  for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
+    Function *f = &*fi;
 
     if (isKnownNonAllocator(f) || isAssertedNonAllocating(f)) {
       continue;
@@ -233,8 +234,8 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
 
   FunctionsSetTy onlyFunctions;
 
-  for(Module::iterator f = m->begin(), fe = m->end(); f != fe; ++f) {
-
+  for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
+    Function *f = &*fi;
     if (!isAssertedNonAllocating(f)) {
       onlyFunctions.insert(f);
     }
@@ -253,6 +254,5 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
       allocatingFunctions.insert(f);
     }
   }
-  
   allocatingFunctions.insert(getGCFunction(m));
 }

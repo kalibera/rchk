@@ -36,7 +36,6 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
   
   for (CallGraph::const_iterator MI = cg->begin(), ME = cg->end(); MI != ME; ++MI) {
     Function* fun = const_cast<Function*>(MI->first);
-    const CallGraphNode* sourceCGN = MI->second;
     if (!fun) continue;
     
     if (onlyFunctions && onlyFunctions->find(fun) == onlyFunctions->end()) {
@@ -47,7 +46,7 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
      
   for (CallGraph::const_iterator MI = cg->begin(), ME = cg->end(); MI != ME; ++MI) {
     Function* fun = const_cast<Function*>(MI->first);
-    const CallGraphNode* sourceCGN = MI->second;
+    const CallGraphNode* sourceCGN = MI->second.get();
     if (!fun) continue;
     
     if (onlyFunctions && onlyFunctions->find(fun) == onlyFunctions->end()) {
@@ -72,11 +71,11 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
     if (ignoreErrorPaths) {
       findErrorBasicBlocks(fun, &errorFunctions, errorBlocks);
     }
-    
-    for(CallGraphNode::const_iterator RI = sourceCGN->begin(), RE = sourceCGN->end(); RI != RE; ++RI) {
 
-      Value *callVal = RI->first;
-      const CallGraphNode* const targetCGN = RI->second;
+    for(CallGraphNode::const_iterator RI = sourceCGN->begin(), RE = sourceCGN->end(); RI != RE; ++RI) {
+      const CallGraphNode::CallRecord *cr = &*RI;
+      Value *callVal = cr->first;
+      CallGraphNode* targetCGN = cr->second;
       
       if (!callVal || !Instruction::classof(callVal)) {
         // value can be null
@@ -105,7 +104,7 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
           if (onlyTargets->find(targetFun) == onlyTargets->end()) {
             continue;
           }
-        }
+        } else continue;
       }
       // find or create FunctionInfo for the target      
       FunctionInfo *targetFunctionInfo;
@@ -120,18 +119,20 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
         targetFunctionInfo = &search->second;
       }
       
-      if (targetFun->doesNotReturn()) {
+      if (ignoreErrorPaths && targetFun->doesNotReturn()) {
         if (DEBUG) errs() << " ignoring edge to function " << funName(targetFun) << " as it does not return.\n";
         continue;
       }
       
-      BasicBlock *bb = callInst->getParent();
-      if (errorBlocks.find(bb) != errorBlocks.end()) {
-        if (DEBUG) {
-          errs() << " in function " << funName(fun) << " ignoring edge to function " << 
-            funName(targetFun) << " as it is called from a basic block that always results in error.\n";
+      if (ignoreErrorPaths) {
+        BasicBlock *bb = callInst->getParent();
+        if (errorBlocks.find(bb) != errorBlocks.end()) {
+          if (DEBUG) {
+            errs() << " in function " << funName(fun) << " ignoring edge to function " << 
+              funName(targetFun) << " as it is called from a basic block that always results in error.\n";
+          }
+          continue;
         }
-        continue;
       }
       
       // create callinfo for this instruction

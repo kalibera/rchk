@@ -72,6 +72,7 @@ class BaseLineMessenger {
     
     void emit(const std::string& kind, const std::string& message, Instruction *in);
     virtual void emit(const LineInfoTy* li) = 0;
+    virtual ~BaseLineMessenger() = default;
 };
 
 class LineMessenger : public BaseLineMessenger {
@@ -84,11 +85,12 @@ class LineMessenger : public BaseLineMessenger {
   
   Function *lastFunction;
   std::string lastChecksName;
-  const LLVMContext& context;
+//  const LLVMContext& context;
   
   public:
     LineMessenger(LLVMContext& context, bool DEBUG, bool TRACE, bool UNIQUE_MSG):
-      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName(), context(context)  {};
+      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName() {};
+//      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName(), context(context)  {};
       
     void flush();
     void clear();
@@ -117,7 +119,7 @@ struct DelayedLineMessenger : public BaseLineMessenger {
     // is more important than the speed of inserting into the buffer
     
   DelayedLineMessenger(LineMessenger *msg):
-    BaseLineMessenger(msg->debug(), msg->trace(), msg->uniqueMsg()), delayedLineBuffer(), msg(msg) {};
+    BaseLineMessenger(msg->debug(), msg->trace(), msg->uniqueMsg()), msg(msg), delayedLineBuffer() {};
       
   void flush();
   bool operator==(const DelayedLineMessenger& other) const;

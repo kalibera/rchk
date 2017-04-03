@@ -52,6 +52,7 @@ bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname) {
   
   var = cast<AllocaInst>(lvar);
   fname = tgt->getName();
+  return true;
 }
 
 bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type) {
@@ -124,10 +125,10 @@ bool isStoreToStructureElement(Value *inst, std::string structType, std::string 
 //
 // this is very primitive form of alias analysis, intended for cases like
 //
-// #define SETSTACK_PTR(s, v) do { \
-//    SEXP __v__ = (v); \
-//    (s)->tag = 0; \
-//    (s)->u.sxpval = __v__; \
+// #define SETSTACK_PTR(s, v) do {
+//    SEXP __v__ = (v);
+//    (s)->tag = 0;
+//    (s)->u.sxpval = __v__;
 // } while (0)
 //
 // when we need to know the real name of variable "v"
@@ -164,7 +165,7 @@ bool aliasesVariable(Value *useInst, AllocaInst *proxyVar, AllocaInst*& origVar)
   
   bool reachedStore = false;
   for(BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie; ++ii) {
-    Instruction *in = ii;
+    Instruction *in = &*ii;
     
     if (in == si) {
       reachedStore = true;

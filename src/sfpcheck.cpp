@@ -41,7 +41,6 @@ int main(int argc, char* argv[])
 
   std::string lastFile = "";
   std::string lastDirectory = "";
-  unsigned lastLine = 0;
 
   LinesTy sfpLines;
     

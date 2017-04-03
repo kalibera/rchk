@@ -97,6 +97,7 @@ std::string igs_name(IntGuardState gs) {
     case IGS_NONZERO: return "nonzero";
     case IGS_UNKNOWN: return "unknown";
   }
+  assert(false);
 }
 
 IntGuardState IntGuardsChecker::getGuardState(const IntGuardsTy& intGuards, AllocaInst* var) {
@@ -426,6 +427,7 @@ std::string sgs_name(SEXPGuardTy& g) {
     case SGS_SYMBOL: return "symbol \"" + g.symbolName + "\"";
     case SGS_VECTOR: return "vector";
   }
+  assert(false);
 }
 
 SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName) {
@@ -537,7 +539,6 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
     const CalledFunctionTy *atgt = msg->debug() ? cm->getCalledFunction(storeValueOp, this, &sexpGuards, true) : NULL; // just for debugging - seeing the context
 
     if (acs && isVectorProducingCall(storeValueOp, cm, this, &sexpGuards)) {
-      Function *afun = acs.getCalledFunction();        
       SEXPGuardTy newGS(SGS_VECTOR);
       sexpGuards[storePointerVar] = newGS;
       if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector (created by " + funName(atgt) +  ")", store);
@@ -547,7 +548,6 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
     if (acs) {
       std::string symbolName;
       if (isInstallConstantCall(storeValueOp, symbolName)) {
-        Function *afun = acs.getCalledFunction();        
         SEXPGuardTy newGS(SGS_SYMBOL, symbolName);
         sexpGuards[storePointerVar] = newGS;
         if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" + symbolName + "\" at install call " + funName(atgt), store);
@@ -633,7 +633,7 @@ bool SEXPGuardsChecker::handleNullCheck(bool positive, SEXPGuardState gs, Alloca
   return true;
 }
 
-bool SEXPGuardsChecker::handleTypeCheck(bool positive, unsigned testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s) {
+bool SEXPGuardsChecker::handleTypeCheck(bool positive, int testedType, SEXPGuardState gs, AllocaInst *guard, BranchInst* branch, StateWithGuardsTy& s) {
 
   // SGS_NONNIL and SGS_UNKNOWN are special states
   // SGS_NIL corresponds to a tested type and has a complement SGS_NONNIL

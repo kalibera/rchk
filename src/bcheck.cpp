@@ -378,10 +378,10 @@ class FunctionChecker {
 
       StateTy s(*workList.top());
       workList.pop();
-      m.msg.trace("going to work on this state:", s.bb->begin());
+      m.msg.trace("going to work on this state:", &*s.bb->begin());
       
       if (errorBasicBlocks.find(s.bb) != errorBasicBlocks.end()) {
-        m.msg.debug("ignoring basic block on error path", s.bb->begin());
+        m.msg.debug("ignoring basic block on error path", &*s.bb->begin());
         continue;
       }
       
@@ -399,7 +399,8 @@ class FunctionChecker {
       }      
       
       // process a single basic block
-      for(BasicBlock::iterator in = s.bb->begin(), ine = s.bb->end(); in != ine; ++in) {
+      for(BasicBlock::iterator ini = s.bb->begin(), ine = s.bb->end(); ini != ine; ++ini) {
+        Instruction *in = &*ini;
         m.msg.trace("visiting", in);
    
         if (freshVarsCheckingEnabled) {

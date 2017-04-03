@@ -19,7 +19,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
   for(Function::iterator bb = fun->begin(), bbe = fun->end(); bb != bbe; ++bb) {
     if (UnreachableInst::classof(bb->getTerminator())) {
       // this block ends by a call to a function with noreturn attribute
-      errorBlocks.insert(bb);
+      errorBlocks.insert(&*bb);
       goto classified_block;
     }
     for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
@@ -29,7 +29,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
         if (knownErrorFunctions->find(tgt) != knownErrorFunctions->end()) {
           // this block calls into a function that does not return,
           // but does not have the noreturn attribute
-          errorBlocks.insert(bb);
+          errorBlocks.insert(&*bb);
           goto classified_block;
         }
       }
@@ -39,7 +39,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
       if (onlyCheck && entry == bb) {
         return false;
       }
-      returningBlocks.insert(bb);
+      returningBlocks.insert(&*bb);
       goto classified_block;
     }
     
@@ -53,8 +53,8 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
 
     addedReturningBlock = false;
     for(Function::iterator bb = fun->begin(), bbe = fun->end(); bb != bbe; ++bb) {
-      if (errorBlocks.find(bb) == errorBlocks.end() && 
-        returningBlocks.find(bb) == returningBlocks.end()) {
+      if (errorBlocks.find(&*bb) == errorBlocks.end() &&
+        returningBlocks.find(&*bb) == returningBlocks.end()) {
         
         TerminatorInst *t = bb->getTerminator();
         for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
@@ -63,7 +63,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
             if (onlyCheck && entry == bb) {
               return false;
             }          
-            returningBlocks.insert(bb);
+            returningBlocks.insert(&*bb);
             addedReturningBlock = true;
             break;
           }
@@ -94,8 +94,8 @@ void findErrorBasicBlocks(Function *fun, FunctionsSetTy *knownErrorFunctions, Ba
   checkAndAnalyzeErrorFunction(fun, knownErrorFunctions, returningBlocks, false);
 
   for(Function::iterator bb = fun->begin(), bbe = fun->end(); bb != bbe; ++bb) {
-    if (returningBlocks.find(bb) == returningBlocks.end()) {
-      errorBlocks.insert(bb);
+    if (returningBlocks.find(&*bb) == returningBlocks.end()) {
+      errorBlocks.insert(&*bb);
     }
   }
 }
@@ -109,7 +109,7 @@ void findErrorFunctions(Module *m, FunctionsSetTy& errorFunctions) {
   while(addedErrorFunction) {
     addedErrorFunction = false;
     for(Module::iterator FI = m->begin(), FE = m->end(); FI != FE; ++FI) {
-      Function *fun = FI;
+      Function *fun = &*FI;
 
       if (!fun) continue;
       if (!fun->size()) continue;
