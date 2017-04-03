@@ -1,4 +1,6 @@
 
+This branch **is not going to be updated anymore**, it is for LLVM 3.6.
+
 This project consists of several bug-finding tools that look for memory
 protection errors in the C source code of [GNU
 R](http://www.r-project.org/) and packages.  
@@ -18,11 +20,14 @@ Manual installation on Ubuntu 15.04/16.04:
   1. `make LLVM=<llvm_root> CXX=g++-4.8`
   2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk)
 
-The master version of the tool does not work with LLVM 3.7 or newer. A
-version for LLVM 3.8 is available in branch `llvm-38` (it has been tested on
-Ubuntu 16.04 and Fedora Core 23 using the system versions of GCC C++
-compiler; it does not work with the CLANG compiler). We used again LLVM 3.8
-(3.8.0 and 3.8.1) [binary distributions](http://llvm.org/releases/download.html).
+The `llvm-36` branch is for LLVM 3.6 and is not going to be updated anymore. 
+The virtual installation as mentioned below no longer works, but if needed,
+it could be fixed following fixes in master.  The manual installation still
+seems to be working.  A version for LLVM 3.8 is available in branch
+`llvm-38` (it has been tested on Ubuntu 16.04 and Fedora Core 23 using the
+system versions of GCC C++ compiler; it does not work with the CLANG
+compiler).  We used again LLVM 3.8 (3.8.0 and 3.8.1) [binary
+distributions](http://llvm.org/releases/download.html).
 
 Alternatively, one can install automatically into a VirtualBox image:
 
