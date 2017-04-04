@@ -23,16 +23,17 @@ fi
 
 mkdir -p $R_LIBS
 
-# patch R to support PKG_BUILD_DIR
+ # patch R to support PKG_BUILD_DIR
+ # (no longer needed, now part of R)
 
-if ! grep -q 'PKG_BUILD_DIR' src/library/tools/R/install.R ; then
+ if ! grep -q 'PKG_BUILD_DIR' src/library/tools/R/install.R ; then
   patch -p0 < $RCHK/scripts/installr_build_dir.diff || exit 1  
 fi
 
 # build R creating bitcode files for modules (.o files)
 
 ./tools/rsync-recommended
-./configure --with-blas --with-lapack --enable-R-static-lib
+./configure --with-blas=no --with-lapack=no --enable-R-static-lib
 make
 
 # create bitcode for R binary (R.bin) and shared objects (.so files)

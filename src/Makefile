@@ -4,7 +4,7 @@
 HOST := $(shell hostname -s)
 
 ifeq ($(HOST), prg)
-  LLVM := /home/tomas/work/opt/clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-16.04
+  LLVM := /usr
   CXX := g++
 #  CXX := $(LLVM)/bin/clang++
   BCHECK_MAX_STATES := 800000
@@ -20,6 +20,9 @@ else ifeq ($(HOST), r-lnx400)
 else
   # ------  CUSTOMIZE HERE --------- 
   # or provide these variables to make
+  
+  # use LLVM=/usr with Ubuntu 16.04 (to use system installation of LLVM)
+  LLVM ?= /usr
   
   ifeq ($(wildcard $(LLVM)),)
     $(error Please customize your Makefile here. Please set the home directory for LLVM 3.8)
@@ -40,8 +43,8 @@ HOSTFLAGS := -DBCHECK_MAX_STATES=$(BCHECK_MAX_STATES) -DCALLOCATORS_MAX_STATES=$
 
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
 
-CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS)
-#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS)
+CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS) -I/usr/include/llvm-3.8/
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS) -I/usr/include/llvm-3.8/
 
 # for GCC, which does not support this warning
 CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))
