@@ -51,30 +51,30 @@ should the installation fail.
 
 For both native and virtual installation, to check GNU-R:
 
-4. Get latest version of GNU-R: `svn checkout http://svn.r-project.org/R/trunk`
+4. Get latest version of GNU-R: `svn checkout https://svn.r-project.org/R/trunk`
 5. Build it using for rchk (run in R source tree)
-	1. `. <rchk_root>/scripts/config.inc`
-	2. `<rchkroot>/scripts/build_r.sh`
-6. Run default rchk tools on GNU-R: ``<rchkroot>/scripts/check_r.sh`. Look for
+	1. `. <rchk_root>/scripts/config.inc` (`. /opt/rchk/scripts/config.inc`)
+	2. `<rchkroot>/scripts/build_r.sh` (`. /opt/rchk/scripts/cmpconfig.inc`)
+6. Run default rchk tools on GNU-R: ``<rchkroot>/scripts/check_r.sh` (/opt/rchk/scripts/check_r.sh). Look for
 files with suffixes `.maacheck` and `.bcheck` under `src`, e.g. 
 `src/main/R.bin.bcheck` is the result of running `bcheck` tool on the R
-binary. `<rchk_root>` is `/opt/rchk`.
+binary. `<rchk_root>` is `/opt/rchk` with the virtual installation.
 
 To check a package:
 
 1. Prepare the environment for build
-	1. `. <rchk_root>/scripts/config.inc`
-	2. `. <rchk_root>/scripts/cmpconfig.inc`
+	1. `. <rchk_root>/scripts/config.inc` (`. /opt/rchk/scripts/config.inc`)
+	2. `. <rchk_root>/scripts/cmpconfig.inc` (`. /opt/rchk/scripts/cmpconfig.inc`)
 2. Install packages from within R: `./bin/R` (use `install.packages` or
-`biocLite` or any other mechanism that in the end uses `install.packages`
+`biocLite` or any other mechanism that in the end uses `install.packages`)
 3. Check all installed packages: `<rchkroot>/scripts/check_package.sh`
 4. The results of the checks will appear under `packages/lib/<package_dir>`,
 again look for files with suffices `.maacheck` and `.bcheck`.
 
-To check the "curl" package from the virtual installation:
+For example, to check the "curl" package in the virtual installation:
 
-```
-svn checkout http://svn.r-project.org/R/trunk
+```bash
+svn checkout https://svn.r-project.org/R/trunk
 cd trunk
 . /opt/rchk/scripts/config.inc
 /opt/rchk/scripts/build_r.sh
@@ -83,7 +83,7 @@ cd trunk
 . /opt/rchk/scripts/cmpconfig.inc
 echo 'install.packages("curl",repos="http://cran.ma.imperial.ac.uk")' |  ./bin/R --slave
 /opt/rchk/scripts/check_package.sh curl
-less /home/vagrant/trunk/packages/lib/curl/libs/curl.so.bcheck
+less packages/lib/curl/libs/curl.so.bcheck
 ```
 
 Further information:
