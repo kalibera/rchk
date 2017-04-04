@@ -32,7 +32,32 @@ username = nil
   username = user unless res.empty?
 end
 
-execute "apt-get update" do
+execute "initial apt-get update" do
+  command "apt-get update"
+  user "root"
+  action :nothing
+    # do not run unless notified
+end
+
+execute "enable source repositories" do
+  command "sed -i 's/^# deb-src/deb-src/g' /etc/apt/sources.list"
+  user "root"
+  action :run
+  not_if 'grep "^deb-src" /etc/apt/sources.list'
+end
+
+# disable autoremove because it fails as it cannot remove
+#   linux-image-extra-4.4.0-71-generic
+file '/etc/apt/apt.conf' do
+  content 'APT::Get::AutomaticRemove "0"; APT::Get::HideAutoRemove "1";'
+  mode '0755'
+  owner 'root'
+  group 'root'
+  notifies :run, 'execute[initial apt-get update]',:immediately
+  not_if {File.exists?("/etc/apt/apt.conf")}
+end
+
+execute "periodic apt-get update" do
   command "apt-get update"
   user "root"
   action :run
@@ -62,48 +87,80 @@ directory "/opt" do
   action :create
 end
 
+#
+# # install LLVM
+#
+# llvmtarbase = "clang+llvm-3.6.1-x86_64-linux-gnu-ubuntu-15.04.tar.xz"
+# llvmtarfile = "/opt/#{llvmtarbase}"
+# llvmdir = "/opt/clang+llvm-3.6.1-x86_64-linux-gnu"
+#
+# remote_file llvmtarfile do
+#   source "http://llvm.org/releases/3.6.1/#{llvmtarbase}"
+#   not_if {File.exists?("#{llvmdir}/bin/clang")}
+# end
+#
+# execute "unpack LLVM" do
+#   command "tar xf #{llvmtarfile}"
+#   cwd "/opt"
+#   user "root"
+#   action :run
+#   not_if {File.exists?("#{llvmdir}/bin/clang")}
+# end
+#
+# file llvmtarfile do
+#   action :delete
+# end
+
 # install LLVM
 
-llvmtarbase = "clang+llvm-3.6.1-x86_64-linux-gnu-ubuntu-15.04.tar.xz"
-llvmtarfile = "/opt/#{llvmtarbase}"
-llvmdir = "/opt/clang+llvm-3.6.1-x86_64-linux-gnu"
-
-remote_file llvmtarfile do
-  source "http://llvm.org/releases/3.6.1/#{llvmtarbase}"
-  not_if {File.exists?("#{llvmdir}/bin/clang")}
-end
-
-execute "unpack LLVM" do
-  command "tar xf #{llvmtarfile}"
-  cwd "/opt"
-  user "root"
-  action :run
-  not_if {File.exists?("#{llvmdir}/bin/clang")}
-end
-
-file llvmtarfile do
-  action :delete
-end
-
-# install whole-program-llvm
-
-wllvmdir = "/opt/whole-program-llvm"
-git wllvmdir do
-  repository "git://www.github.com/travitch/whole-program-llvm"
-  revision "master"
-  action :export
-  user "root"
-  not_if {File.exists?("#{wllvmdir}/wllvm")}
-end
-
-# install rchk
-
-["g++-4.8","gcc-4.8-locales"].each do |pkg|
+["clang-3.8 llvm-3.8-dev clang\+\+-3.8 llvm-dev"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
   end
 end
+
+llvmdir = "/usr"
+
+# install whole-program-llvm
+
+wllvmsrcdir = "/opt/whole-program-llvm"
+git wllvmsrcdir do
+  repository "git://www.github.com/travitch/whole-program-llvm"
+  revision "16e4fa62dc8f91ca9a3d5416424a6583248d6cce"
+  action :export
+  user "root"
+  not_if {File.exists?("#{wllvmsrcdir}/wllvm")}
+end
+
+ # pip needed to install wllvm
+
+["python-pip"].each do |pkg|
+  package pkg do
+    action :install
+    not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
+  end
+end
+
+ # upgrade needed to install wllvm
+
+execute "pip upgrade" do
+  command "sudo -u #{username} -H pip install --user pip==9.0.1"
+  user "#{username}"
+  action :run
+  not_if 'pip --version | grep 9.0.1'
+end
+
+wllvmdir = "/home/#{username}/.local/bin"
+
+execute "wllvm install" do
+  command "sudo -u #{username} -H pip install --user #{wllvmsrcdir}"
+  user "#{username}"
+  action :run
+  not_if {File.exists?("#{wllvmdir}/wllvm")}
+end
+
+# install rchk
 
 rchkdir = "/opt/rchk"
 bcheck = "#{rchkdir}/src/bcheck"
@@ -125,30 +182,32 @@ if callocators_max_states > 0
 end
 
 execute "make rchk" do
-  command "make LLVM=#{llvmdir} CXX=g++-4.8 #{makeargs}"
+  command "make LLVM=#{llvmdir} CXX=g++ #{makeargs}"
   cwd "#{rchkdir}/src"
   user "root"
   action :run
   not_if {File.exists?(bcheck)}
 end
 
-execute "configure rchk - llvm dir" do
-  command "sed -i 's|\\( LLVM=\\).*|\\1#{llvmdir}|g' #{rchkdir}/scripts/config.inc"
-  user "root"
-  action :run
-end
-
-execute "configure rchk - wllvm dir" do
-  command "sed -i 's|\\( WLLVM=\\).*|\\1#{wllvmdir}|g' #{rchkdir}/scripts/config.inc"
-  user "root"
-  action :run
-end
-
-execute "configure rchk - rchk dir" do
-  command "sed -i 's|\\( RCHK=\\).*|\\1#{rchkdir}|g' #{rchkdir}/scripts/config.inc"
-  user "root"
-  action :run
-end
+# now based on hostname in config.inc
+#
+# execute "configure rchk - llvm dir" do
+#   command "sed -i 's|\\( LLVM=\\).*|\\1#{llvmdir}|g' #{rchkdir}/scripts/config.inc"
+#   user "root"
+#   action :run
+# end
+#
+# execute "configure rchk - wllvm dir" do
+#   command "sed -i 's|\\( WLLVM=\\).*|\\1#{wllvmdir}|g' #{rchkdir}/scripts/config.inc"
+#   user "root"
+#   action :run
+# end
+#
+# execute "configure rchk - rchk dir" do
+#   command "sed -i 's|\\( RCHK=\\).*|\\1#{rchkdir}|g' #{rchkdir}/scripts/config.inc"
+#   user "root"
+#   action :run
+# end
 
 
 # install more packages
@@ -159,5 +218,3 @@ end
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
   end
 end
-
-

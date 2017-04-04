@@ -7,7 +7,7 @@ VAGRANTFILE_API_VERSION = "2"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
-  config.vm.box = "ffuenf/ubuntu-15.04-server-amd64"
+  config.vm.box = "ffuenf/ubuntu-16.04.2-server-amd64"
   yamlconfig = YAML.load_file "config.yml"
 
   config.vm.provider "virtualbox" do |v, override|
@@ -33,8 +33,10 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # end
 
   config.vm.provision "chef_solo" do |chef|
-    # chef.log_level = :info
-    chef.log_level = :debug
+    chef.channel = "stable"
+    chef.version = "12.10.24"
+    chef.log_level = :info
+    # chef.log_level = :debug
     chef.add_recipe "setup_rchk"
   end
 
