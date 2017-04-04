@@ -70,6 +70,7 @@ execute "install R (dev) build deps" do
   user "root"
   action :run
   not_if 'dpkg --get-selections | grep -q "^xvfb\s"'
+  timeout 3600
 end
 
   # now also needed to build R
@@ -117,6 +118,7 @@ end
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
+    timeout 3600
   end
 end
 
