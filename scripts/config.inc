@@ -19,6 +19,12 @@ elif [ X"`hostname -s`" == Xra ] ; then
   export LLVM=/usr
   export RCHK=/home/tomas/git/rchk
 
+elif [ X"`hostname -s`" == Xvagrant ] ; then
+
+  export WLLVM=/home/vagrant/.local/bin
+  export LLVM=/usr
+  export RCHK=/opt/rchk
+
 else
   echo "Please specify directories in config.inc" >&2
 fi
