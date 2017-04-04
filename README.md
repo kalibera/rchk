@@ -40,11 +40,14 @@ Alternatively, one can install automatically into a VirtualBox image
 
 1. Install (manually) [VirtualBox](https://www.virtualbox.org/wiki/Downloads), e.g. `apt-get install virtualbox`
 2. Install (manually) [Vagrant](https://www.vagrantup.com/), e.g. `apt-get install vagrant`
-3. Install (automatically) R build dependencies, LLVM, WLLVM and rchk: just run
-`vagrant up` from `image` directory.  Note that the installation will take
-long, as it will be downloading an Ubuntu 16.04.2 image and installing indeed
-the R build dependencies to a fresh Ubuntu image.  Log in to the machine
-by `vagrant ssh`.
+3. Install (automatically) R build dependencies, LLVM, WLLVM and rchk: run `vagrant up` in `image` directory
+
+Note that the automated installation will take long, as it will be
+downloading an Ubuntu 16.04.2 image and installing the R build dependencies
+to a fresh Ubuntu image. Should the installation fail or time out, it can
+be re-started by `vagrant provision`.  One can log in to the machine by
+`vagrant ssh` to use the tools after successful install or to fix issues
+should the installation fail.
 
 For both native and virtual installation, to check GNU-R:
 
