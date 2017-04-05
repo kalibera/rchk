@@ -44,7 +44,8 @@ Alternatively, one can install automatically into a VirtualBox image
 
 Note that the automated installation will take long, as it will be
 downloading an Ubuntu 16.04.2 image and installing the R build dependencies
-to a fresh Ubuntu image. Should the installation fail or time out, it can
+to a fresh Ubuntu image (expect about 1 hour, good internet connection
+helps, multiple cores do not). Should the installation fail or time out, it can
 be re-started by `vagrant provision`.  One can log in to the machine by
 `vagrant ssh` to use the tools after successful install or to fix issues
 should the installation fail.
