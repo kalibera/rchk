@@ -3,8 +3,8 @@ This project consists of several bug-finding tools that look for memory
 protection errors in the C source code of [GNU
 R](http://www.r-project.org/) and packages.  
 
-A number of bugs has been found in
-[R-devel](https://svn.r-project.org/R/trunk/) using this tool and fixed.
+A number of bugs have been found and fixed using this tool in
+[R-devel](https://svn.r-project.org/R/trunk/).
 The tool can also be used to find errors in R packages (e.g.  from
 CRAN/BIOC).
 
