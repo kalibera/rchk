@@ -298,7 +298,18 @@ bool isProtectingFunction(Function *f) {
 
 bool isSetterFunction(Function *f) {
   if (!f) return false;
-  if (f->getName() == "Rf_setAttrib") return true;
+  
+  /* Note some setters below are not always setters, conversion may happen
+     before they set, or they may do something else when the length of some
+     argument is zero.  As a heuristic, they are still treated as setters,
+     because if they convert, code using the original objects later will be
+     wrong anyway, and hopefully the zero-length objects won't be reused. */
+  
+  if (f->getName() == "Rf_setAttrib") return true; // TODO: not always true, names conversion may happen
+  if (f->getName() == "Rf_namesgets") return true; // TODO: not true when names is a pairlist, conversion will then happen!
+  if (f->getName() == "Rf_dimnamesgets") return true; // TODO: not always true, conversion may happen, or length zero
+  if (f->getName() == "Rf_dimgets") return true;  // TODO: not always true, conversion may happen
+  if (f->getName() == "Rf_classgets") return true; // not completely true - not true when of length zero
   if (f->getName() == "SET_STRING_ELT") return true;
   if (f->getName() == "SET_VECTOR_ELT") return true;
   if (f->getName() == "SET_TAG") return true;
