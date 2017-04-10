@@ -114,7 +114,7 @@ end
 
 # install LLVM
 
-["clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev"].each do |pkg|
+["clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev libc++-dev"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
