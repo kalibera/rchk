@@ -1,0 +1,14 @@
+--- orig/string 2017-03-29 03:44:51.270843442 -0400
++++ hack/string 2017-03-29 03:45:23.678749561 -0400
+@@ -1936,6 +1936,11 @@
+ template <class _CharT, class _Traits, class _Allocator>
+ inline _LIBCPP_INLINE_VISIBILITY
+ basic_string<_CharT, _Traits, _Allocator>::basic_string(const allocator_type& __a)
++#if _LIBCPP_STD_VER <= 14
++    _NOEXCEPT_(is_nothrow_copy_constructible<allocator_type>::value)
++#else
++    _NOEXCEPT
++#endif
+     : __r_(__a)
+ {
+ #if _LIBCPP_DEBUG_LEVEL >= 2

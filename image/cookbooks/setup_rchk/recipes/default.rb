@@ -78,7 +78,6 @@ bash "fix broken persistent names hack" do
   not_if 'test -f /etc/udev/rules.d/70-persistent-net.rules'
 end
 
-
 execute "install R (dev) build deps" do
   command "apt-get build-dep -y r-base-dev"
   user "root"
@@ -137,6 +136,20 @@ end
 end
 
 llvmdir = "/usr"
+
+# Fix a bug in C++ string header file (libc++-dev)
+# (see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=808086)
+bash "fix broken string header" do
+  code <<-EOH
+    cp -p /usr/include/c++/v1/string /root/string.orig
+    cd /usr/include/c++/v1/
+    patch -p1 < /vagrant/string.diff
+  EOH
+  user "root"
+  action :run
+  only_if 'md5sum /usr/include/c++/v1/string | grep bc206c6dee334d9d8d1cdcf32df6a92b'
+end
+
 
 # install whole-program-llvm
 
