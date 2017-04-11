@@ -65,6 +65,20 @@ execute "periodic apt-get update" do
     # do not run if updated less than 3 hours ago
 end
 
+# This is to work around a no longer needed workaround which accidentally prevents
+# updating packages in the image (see https://github.com/chef/bento/issues/592)
+bash "fix broken persistent names hack" do
+  code <<-EOH
+    rm -rf /etc/udev/rules.d/70-persistent-net.rules
+    touch /etc/udev/rules.d/70-persistent-net.rules
+    apt-get -y -f install
+  EOH
+  user "root"
+  action :run
+  not_if 'test -f /etc/udev/rules.d/70-persistent-net.rules'
+end
+
+
 execute "install R (dev) build deps" do
   command "apt-get build-dep -y r-base-dev"
   user "root"
