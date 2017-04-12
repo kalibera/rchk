@@ -310,6 +310,7 @@ bool isSetterFunction(Function *f) {
   if (f->getName() == "Rf_dimnamesgets") return true; // TODO: not always true, conversion may happen, or length zero
   if (f->getName() == "Rf_dimgets") return true;  // TODO: not always true, conversion may happen
   if (f->getName() == "Rf_classgets") return true; // not completely true - not true when of length zero
+  if (f->getName() == "SET_ATTRIB") return true;
   if (f->getName() == "SET_STRING_ELT") return true;
   if (f->getName() == "SET_VECTOR_ELT") return true;
   if (f->getName() == "SET_TAG") return true;
