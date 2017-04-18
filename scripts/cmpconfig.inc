@@ -8,7 +8,7 @@ else
   # these options were tested on Ubuntu 16.04.2
   #   they allow to build most but not all packages
 
-  export CFLAGS="-Wall -g -O0"
+  export CFLAGS="-Wall -g -O0 -fPIC"
   export CXXFLAGS="$CFLAGS -I/usr/include/libcxxabi"
   export CC=$WLLVM/wllvm
   export CXX="$WLLVM/wllvm++ -stdlib=libc++"
