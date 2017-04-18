@@ -863,7 +863,7 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
       
       // either I know whether var is a vector, and then I know which branch to take
       
-      // or I don't know whether var is a vector, and then I will add information dependinv
+      // or I don't know whether var is a vector, and then I will add information depending
       //   on which branch is taken
       
       bool guardIsVector = (gs == SGS_VECTOR);
