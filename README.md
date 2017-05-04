@@ -9,9 +9,9 @@ The tool can also be used to find errors in R packages (e.g.  from
 CRAN/BIOC).
 
 The installation of dependencies for the tool is somewhat involved. It has
-now been tested on Ubuntu 16.04.2. One can also use a pre-installed virtual
+now been tested on Ubuntu 16.04.2. However, one can use a pre-installed virtual
 machine with `rchk` (or, more precisely, use an automated script that
-installs such machine without user intervention).
+installs such machine without user intervention, into virtualbox or docker).
 
 Manual installation on Ubuntu 16.04.2:
 
@@ -42,11 +42,14 @@ Alternatively, one can install automatically into a VirtualBox image
 2. Install (manually) [Vagrant](https://www.vagrantup.com/), e.g. `apt-get install vagrant`
 3. Install (automatically) R build dependencies, LLVM, WLLVM and rchk: run `vagrant up` in `image` directory
 
+Instead of virtualbox, one can now also use docker, so the tool can run inside
+a container. To install the tool into a docker container, run
+`vagrant up --provider docker`.
+
 Note that the automated installation may take long, as it will be
 downloading an Ubuntu 16.04.2 image and installing the R build dependencies
-to a fresh Ubuntu image (expect about 1 hour, good internet connection
-helps, multiple cores do not). Should the installation fail or time out, it can
-be re-started by `vagrant provision`.  One can log in to the machine by
+to a fresh Ubuntu image. Should the installation fail or time out, it can
+be re-started by `vagrant provision`. One can log in to the machine by
 `vagrant ssh` to use the tools after successful install or to fix issues
 should the installation fail. Note that a recent version of vagrant is
 needed, e.g. on Ubuntu 14.04 one can install the `.DEB` package of vagrant
