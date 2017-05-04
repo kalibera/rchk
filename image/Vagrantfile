@@ -7,15 +7,24 @@ VAGRANTFILE_API_VERSION = "2"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
-  config.vm.box = "ffuenf/ubuntu-16.04.2-server-amd64"
   yamlconfig = YAML.load_file "config.yml"
 
+  # the first provider (virtualbox) is used by default
   config.vm.provider "virtualbox" do |v, override|
+      override.vm.box = "ffuenf/ubuntu-16.04.2-server-amd64"
       override.vm.network "forwarded_port", guest: 8787, host: 8788
       v.memory = yamlconfig['vm_memory']
       #v.cpus = 2
-        # for faster networking
+      # for faster networking
       v.customize ["modifyvm", :id, "--nictype1", "virtio"]
+  end
+
+  # the docker provider can be selected via "vagrant --provider docker"
+  # or via environment variable VAGRANT_DEFAULT_PROVIDER
+  config.vm.provider "docker" do |d|
+      d.build_dir = "."
+      d.has_ssh = true
+      config.vm.hostname = "vagrant"
   end
 
   # Enable provisioning with CFEngine. CFEngine Community packages are
@@ -38,7 +47,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     chef.channel = "stable"
     chef.version = "12.10.24"
     chef.log_level = :info
-    # chef.log_level = :debug
+    #chef.log_level = :debug
     chef.add_recipe "setup_rchk"
   end
 
