@@ -19,7 +19,7 @@ Manual installation on Ubuntu 16.04.2:
 	1. enable source repositories in `/etc/apt/sources.list`
 	2. `apt-get build-dep -y r-base-dev`
 	3. `apt-get install libcurl4-openssl-dev`
-1. Install clang and llvm: `apt-get install clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev`
+1. Install clang and llvm: `apt-get install clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev libc++-dev libc++abi-dev`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	1. `apt-get install python-pip`
 	2. `pip install --upgrade pip`
