@@ -36,7 +36,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
     }
     if (ReturnInst::classof(bb->getTerminator())) {
       // this block has a return statement
-      if (onlyCheck && entry == bb) {
+      if (onlyCheck && entry == &*bb) {
         return false;
       }
       returningBlocks.insert(&*bb);
@@ -60,7 +60,7 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
         for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
           BasicBlock *succ = t->getSuccessor(i);
           if (returningBlocks.find(succ) != returningBlocks.end()) {
-            if (onlyCheck && entry == bb) {
+            if (onlyCheck && entry == &*bb) {
               return false;
             }          
             returningBlocks.insert(&*bb);

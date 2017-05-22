@@ -50,23 +50,23 @@ typedef InterningTable<LineInfoTy, LineInfoTy_hash, LineInfoTy_equal> LineInfoTa
 class BaseLineMessenger {
 
   protected:
-    bool DEBUG;
+    bool _DEBUG;
     bool TRACE;
     const bool UNIQUE_MSG;
     
     std::string withTrace(const std::string& msg, Instruction *in) const;
   
   public:
-    BaseLineMessenger(bool DEBUG, bool TRACE, bool UNIQUE_MSG):
-      DEBUG(DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG) {};
+    BaseLineMessenger(bool _DEBUG, bool TRACE, bool UNIQUE_MSG):
+      _DEBUG(_DEBUG), TRACE(TRACE), UNIQUE_MSG(UNIQUE_MSG) {};
       
     void trace(const std::string& msg, Instruction *in);
     void debug(const std::string& msg, Instruction *in);
     void info(const std::string& msg, Instruction *in);
     void error(const std::string& msg, Instruction *in);
-    bool debug() const { return DEBUG; } 
+    bool debug() const { return _DEBUG; } 
     bool trace() const { return TRACE; }
-    void debug(bool v) { DEBUG = v; }
+    void debug(bool v) { _DEBUG = v; }
     void trace(bool v) { TRACE = v; }
     bool uniqueMsg() const { return UNIQUE_MSG; }
     
@@ -88,9 +88,9 @@ class LineMessenger : public BaseLineMessenger {
 //  const LLVMContext& context;
   
   public:
-    LineMessenger(LLVMContext& context, bool DEBUG, bool TRACE, bool UNIQUE_MSG):
-      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName() {};
-//      BaseLineMessenger(DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName(), context(context)  {};
+    LineMessenger(LLVMContext& context, bool _DEBUG, bool TRACE, bool UNIQUE_MSG):
+      BaseLineMessenger(_DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName() {};
+//      BaseLineMessenger(_DEBUG, TRACE, UNIQUE_MSG), lineBuffer(), internTable(), lastFunction(NULL), lastChecksName(), context(context)  {};
       
     void flush();
     void clear();

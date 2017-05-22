@@ -24,6 +24,9 @@ else
   # use LLVM=/usr with Ubuntu 16.04 (to use system installation of LLVM)
   LLVM ?= /usr
   
+  # use with Ubuntu 16.04, but not with 17.04
+  EXTRACXXFLAGS := -I/usr/include/llvm-3.8/
+  
   ifeq ($(wildcard $(LLVM)),)
     $(error Please customize your Makefile here. Please set the home directory for LLVM 3.8)
   endif
@@ -43,8 +46,7 @@ HOSTFLAGS := -DBCHECK_MAX_STATES=$(BCHECK_MAX_STATES) -DCALLOCATORS_MAX_STATES=$
 
 CPPFLAGS := $(shell $(LLVMC) --cppflags)
 
-CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS) -I/usr/include/llvm-3.8/
-#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -g3 -MMD $(HOSTFLAGS) -I/usr/include/llvm-3.8/
+CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS) $(EXTRACXXFLAGS)
 
 # for GCC, which does not support this warning
 CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))

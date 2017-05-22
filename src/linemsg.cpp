@@ -17,13 +17,13 @@ void BaseLineMessenger::trace(const std::string& msg, Instruction *in) {
 }
 
 void BaseLineMessenger::debug(const std::string& msg, Instruction *in) {
-  if (DEBUG) {
+  if (_DEBUG) {
     emit("DEBUG", withTrace(msg, in), in);
   }
 }
 
 void BaseLineMessenger::info(const std::string& msg, Instruction *in) {
-  emit(DEBUG ? "INFO" : "", withTrace(msg, in), in);
+  emit(_DEBUG ? "INFO" : "", withTrace(msg, in), in);
 }
 
 void BaseLineMessenger::error(const std::string& msg, Instruction *in) {
@@ -31,7 +31,7 @@ void BaseLineMessenger::error(const std::string& msg, Instruction *in) {
 }
 
 void BaseLineMessenger::emit(const std::string& kind, const std::string& message, Instruction *in) {
-  if (kind == "DEBUG" && !DEBUG) {
+  if (kind == "DEBUG" && !_DEBUG) {
     return;
   }
   if (kind == "TRACE" && !TRACE) {

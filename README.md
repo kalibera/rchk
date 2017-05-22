@@ -20,7 +20,7 @@ Manual installation on Ubuntu 16.04.2:
 	2. `apt-get build-dep -y r-base-dev`
 	3. `apt-get install libcurl4-openssl-dev`
 1. Install clang and llvm: `apt-get install clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev libc++-dev libc++abi-dev`
-2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm), use *branch llvm-38*:
 	1. `apt-get install python-pip`
 	2. `pip install --upgrade pip`
 	3. `pip install --user DIR` where DIR is checked-out WLLVM
@@ -28,15 +28,15 @@ Manual installation on Ubuntu 16.04.2:
 	1. `make`
 	2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM can be `/usr` on Ubuntu 16.04.2
 
-The clang/llvm version in this version of Ubuntu is 3.8.  The tool can be
-used also with [LLVM binary
-distributions](http://llvm.org/releases/download.html).  It is extremely
-unlikely that the `master` version of the tool will work with any other
-version of LLVM than 3.8 due to frequent changes in LLVM API.  An older
-version working with LLVM 3.6 is available on the `llvm-36` branch but is no
-longer updated.
+The master branch of the tool should now be used with LLVM 4.0, which is
+part of Ubuntu 17.04. The tool can be used also with [LLVM binary distributions](http://llvm.org/releases/download.html).
+It is extremely unlikely that the `master` version of the tool will work with any other
+version of LLVM than 4.0 due to frequent changes in LLVM API.  An older
+version working with LLVM 3.8 is on the `llvm-38` branch and for LLVM 3.6 on the `llvm-36`
+branch, but those branches are no longer updated.
 
-Alternatively, one can install automatically into a VirtualBox image
+Alternatively, one can install automatically into a VirtualBox image (this
+will now use LLVM 3.8 and Ubuntu 16.04.2).
 
 1. Install (manually) [VirtualBox](https://www.virtualbox.org/wiki/Downloads), e.g. `apt-get install virtualbox`
 2. Install (manually) [Vagrant](https://www.vagrantup.com/), e.g. `apt-get install vagrant`
