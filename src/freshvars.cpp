@@ -29,7 +29,7 @@ static void pruneFreshVars(Instruction *in, FreshVarsTy& freshVars, LiveVarsTy& 
     AllocaInst *var = fi->first;
       
     auto lsearch = liveVars.find(in);
-    assert(lsearch != liveVars.end());
+    myassert(lsearch != liveVars.end());
       
     VarsLiveness& lvars = lsearch->second;
     if (!lvars.isPossiblyUsed(var)) {
@@ -170,8 +170,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
     return;
   }
   CallSite cs(cast<Value>(in));
-  assert(cs);
-  assert(cs.getCalledFunction());
+  myassert(cs);
+  myassert(cs.getCalledFunction());
   Function *f = tgt->fun;
 
   // handle protect
@@ -555,14 +555,14 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
 
   unsigned aidx = 0;
   CallSite cs(cast<Value>(li->user_back()));
-  assert(cs);
+  myassert(cs);
   
   for(aidx = 0; aidx < cs.arg_size(); aidx++) {
     if (cs.getArgument(aidx) == li) {
       break;
     }
   }
-  assert(aidx < cs.arg_size());
+  myassert(aidx < cs.arg_size());
 
   if (aidx < tgt->fun->arg_size() && cprotect.isCalleeProtect(tgt->fun, aidx, false)) {
     return; // the variable is callee-protect for the given argument
@@ -585,7 +585,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
   // a warning has to be reported if the value of this argument were to be used again
   
   Instruction *callIn = cs.getInstruction();
-  assert(callIn == li->user_back());
+  myassert(callIn == li->user_back());
   
   std::string message = "allocating function " + funName(tgt) + " may destroy its unprotected argument ("
     + varName(var) + nameSuffix + "), which is later used.";
@@ -657,7 +657,7 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
           // handle restore of pointer protection stack top
       
           int newDepth = balance->savedDepth;
-          assert(newDepth >= 0);
+          myassert(newDepth >= 0);
       
           int curDepth = freshVars.pstack.size();
           if (newDepth > curDepth) {

@@ -48,6 +48,10 @@ CPPFLAGS := $(shell $(LLVMC) --cppflags)
 
 CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS) $(EXTRACXXFLAGS)
 
+# for debugging
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -gdwarf-2 -g3 -MMD $(HOSTFLAGS) $(EXTRACXXFLAGS)
+#CXXFLAGS := $(filter-out -O2, $(CXXFLAGS))
+
 # for GCC, which does not support this warning
 CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))
 

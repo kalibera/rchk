@@ -268,7 +268,7 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
           return;
         }
         // countState == CS_DIFF
-        assert(b.countState == CS_DIFF);
+        myassert(b.countState == CS_DIFF);
         if (msg.debug()) msg.debug(MSG_PFX + "unprotect call using counter in diff state", in);
         b.countState = CS_NONE;
         // depth keeps its value - it now becomes exact depth again
@@ -400,7 +400,7 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
       if (b.count > MAX_COUNT) {
         // turn the counter to differential state
         if (msg.debug()) msg.debug(MSG_PFX + "setting counter to a large constant, switching to differential state", in);
-        assert(b.countState == CS_EXACT);
+        myassert(b.countState == CS_EXACT);
         b.countState = CS_DIFF;
         b.depth -= b.count;
         b.count = -1;
@@ -452,7 +452,7 @@ static void handleStore(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoo
             return;
           }
           // countState == CS_DIFF
-          assert(b.countState == CS_DIFF);
+          myassert(b.countState == CS_DIFF);
           b.depth -= arg; // fewer protects on top of counter than before
         }
       }
@@ -566,7 +566,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
                   
     Constant *knownLhs = ConstantInt::getSigned(s.balance.counterVar->getAllocatedType(), s.balance.count);
     Constant *res = ConstantExpr::getCompare(ci->getPredicate(), knownLhs, constOp);
-    assert(ConstantInt::classof(res));
+    myassert(ConstantInt::classof(res));
                 
     // add only the relevant successor
     if (msg.debug()) msg.debug(MSG_PFX + "folding out branch on counter value", t);
@@ -585,7 +585,7 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
     return true;
   }
   // countState == CS_DIFF
-  assert(s.balance.countState == CS_DIFF);
+  myassert(s.balance.countState == CS_DIFF);
   // we don't know if nprotect is zero
   // but if the expression is just "if (nprotect) UNPROTECT(nprotect)", we can
   //   treat it as "UNPROTECT(nprotect)", because UNPROTECT(0) does nothing
@@ -680,7 +680,7 @@ std::string cs_name(CountState cs) {
     case CS_EXACT: return "exact";
     case CS_DIFF: return "differential";
   }
-  assert(false);
+  myassert(false);
 }
 
 void StateWithBalanceTy::dump(bool verbose) {

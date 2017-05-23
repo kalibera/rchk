@@ -81,7 +81,7 @@ LiveVarsTy findLiveVariables(Function *f) {
     changed.erase(bi);
     
     auto bsearch = blockStates.find(bb);
-    assert(bsearch != blockStates.end());
+    myassert(bsearch != blockStates.end());
     BlockStateTy& s = bsearch->second;
     
     VarMapTy used = s.usedAfter; // copy

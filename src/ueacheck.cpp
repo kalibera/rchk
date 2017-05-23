@@ -213,7 +213,7 @@ int main(int argc, char* argv[])
   for(FunctionsVectorTy::iterator FI = functionsOfInterestVector.begin(), FE = functionsOfInterestVector.end(); FI != FE; ++FI) {
 
     auto fisearch = functionsMap.find(*FI);
-    assert (fisearch != functionsMap.end());
+    myassert (fisearch != functionsMap.end());
     FunctionInfo& finfo = fisearch->second;
 
     if (finfo.function->empty()) {

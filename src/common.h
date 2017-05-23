@@ -1,14 +1,15 @@
 #ifndef RCHK_COMMON_H
 #define RCHK_COMMON_H
 
-// assertions are enabled when NDEBUG is NOT defined
-#ifdef NDEBUG
-  //#undef NDEBUG
-#else
-  #define NDEBUG
-#endif
+void myassert_fail (const char *assertion, const char *file, unsigned int line, const char *function);
 
-#include <assert.h>
+#define ENABLE_ASSERTIONS
+#ifdef ENABLE_ASSERTIONS
+  // based on GCC assert.h, but do not use NDEBUG and standard assertions, because it confuses LLVM
+  #define myassert(x) ((x) ? static_cast<void>(0) : myassert_fail(#x, __FILE__, __LINE__, __func__))
+#else
+  #define myassert(x) (static_cast<void>(0))
+#endif
 
 #include <set>
 #include <unordered_set>

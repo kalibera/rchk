@@ -97,7 +97,7 @@ std::string igs_name(IntGuardState gs) {
     case IGS_NONZERO: return "nonzero";
     case IGS_UNKNOWN: return "unknown";
   }
-  assert(false);
+  myassert(false);
 }
 
 IntGuardState IntGuardsChecker::getGuardState(const IntGuardsTy& intGuards, AllocaInst* var) {
@@ -277,7 +277,7 @@ IntGuardsTy IntGuardsChecker::unpack(const PackedIntGuardsTy& intGuards) {
   IntGuardsTy unpacked;
   unsigned nvars = intGuards.bits.size() / IGS_BITS;
   
-  assert(nvars * IGS_BITS == intGuards.bits.size());
+  myassert(nvars * IGS_BITS == intGuards.bits.size());
   
   for(unsigned varIdx = 0; varIdx < nvars; varIdx++) {
     unsigned base = varIdx * IGS_BITS;
@@ -427,7 +427,7 @@ std::string sgs_name(SEXPGuardTy& g) {
     case SGS_SYMBOL: return "symbol \"" + g.symbolName + "\"";
     case SGS_VECTOR: return "vector";
   }
-  assert(false);
+  myassert(false);
 }
 
 SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName) {
@@ -652,7 +652,7 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, int testedType, SEXPGuard
     testedState = SGS_SYMBOL;
   }
 
-  assert(testedState != SGS_NIL && testedState != SGS_NONNIL);
+  myassert(testedState != SGS_NIL && testedState != SGS_NONNIL);
   // testedState == SGS_UNKNOWN means testing for a known, specific, but unsupported state (unsupported type)
   
   bool canBeTrue = true;
@@ -683,7 +683,7 @@ bool SEXPGuardsChecker::handleTypeCheck(bool positive, int testedType, SEXPGuard
     }    
   }
   
-  assert(canBeTrue || canBeFalse);
+  myassert(canBeTrue || canBeFalse);
   
   int succIndex = -1;
   if (!canBeFalse) succIndex = 0;
@@ -872,7 +872,7 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
       bool onlyTrueBranch = (guardIsVector && trueForVector(f)) || (guardIsNonVector && trueForNonVector(f));
       bool onlyFalseBranch = (guardIsVector && falseForVector(f)) || (guardIsNonVector && falseForNonVector(f));
       
-      assert(!onlyTrueBranch || !onlyFalseBranch);
+      myassert(!onlyTrueBranch || !onlyFalseBranch);
       
       if (onlyTrueBranch) {
         {
@@ -1079,7 +1079,7 @@ SEXPGuardsTy SEXPGuardsChecker::unpack(const PackedSEXPGuardsTy& sexpGuards) {
   SEXPGuardsTy unpacked;
   unsigned nvars = sexpGuards.bits.size() / SGS_BITS;
   
-  assert(nvars * SGS_BITS == sexpGuards.bits.size());
+  myassert(nvars * SGS_BITS == sexpGuards.bits.size());
   unsigned symbolIdx = 0;
   
   for(unsigned idx = 0; idx < nvars; idx++) {

@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
       continue;
     }
     auto fsearch = cprotect.map.find(fun);
-    assert(fsearch != cprotect.map.end());
+    myassert(fsearch != cprotect.map.end());
     CPArgsTy& cpargs = fsearch->second;
   
     unsigned nargs = cpargs.size();

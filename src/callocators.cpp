@@ -214,7 +214,7 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *fun = &*fi;
 
-    assert(fun);
+    myassert(fun);
     getCalledFunction(fun); // make sure each function has a called function counterpart
     for(Value::user_iterator ui = fun->user_begin(), ue = fun->user_end(); ui != ue; ++ui) {
       User *u = *ui;
@@ -557,7 +557,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
         CallSite cs(in);
         const CalledFunctionTy *ct = cm->getCalledFunction(in, true);
         if (cs) {
-          assert(ct);
+          myassert(ct);
           Function *t = cs.getCalledFunction();
             // note that this is a heuristic, best-effort approach that is not equivalent to what allocators.cpp do
             //   this heuristic may treat a function as wrapped even when allocators.cpp will not

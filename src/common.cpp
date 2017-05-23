@@ -385,3 +385,8 @@ GlobalVariable* GlobalsTy::getSpecialVariable(Module *m, std::string name) {
   }
   return v;
 }
+
+void myassert_fail (const char *assertion, const char *file, unsigned int line, const char *function) {
+  errs() << "RCHK assertion failed: " << assertion << ", in function " << function << " at " << file << ":" << line << "\n";
+  abort();
+}

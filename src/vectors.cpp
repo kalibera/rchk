@@ -17,9 +17,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-//#undef NDEBUG
-//#include <assert.h>
-
 using namespace llvm;
 
 const bool DEBUG = false;
@@ -216,7 +213,7 @@ struct FunctionState {
   
   static FunctionState& get(FunctionTableTy& functions, Function *f) {
     auto fsearch = functions.find(f);
-    assert(fsearch != functions.end());
+    myassert(fsearch != functions.end());
     return fsearch->second;
   }  
 };
@@ -392,7 +389,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
     workList.pop_back();
     
     auto bsearch = blocks.find(bb);
-    assert(bsearch != blocks.end());
+    myassert(bsearch != blocks.end());
     bsearch->second.dirty = false;
     BlockState s = bsearch->second; // copy
     
@@ -467,7 +464,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   Function *fun = fstate.fun;
   
   unsigned ncontexts = fstate.contextIndex.size();
-  assert(fstate.returnsOnlyVector.size() <= ncontexts);
+  myassert(fstate.returnsOnlyVector.size() <= ncontexts);
   fstate.returnsOnlyVector.resize(ncontexts); // add new elements, contexts may have been added in the meantime
   
   ReturnsOnlyVectorTy before = fstate.returnsOnlyVector;
@@ -517,7 +514,7 @@ void findVectorReturningFunctions(CalledModuleTy *cm) {
     }
     FunctionState fstate(f);
     auto finsert = functions.insert({f, fstate});
-    assert(finsert.second);
+    myassert(finsert.second);
 
     fstate.addToWorkList(workList);
   }
@@ -541,7 +538,7 @@ void printVectorReturningFunctions(FunctionTableTy *functionsPtr) {
     FunctionState& fstate = fi->second;
     
     unsigned ncontexts = fstate.contextIndex.size();
-    assert(ncontexts == fstate.returnsOnlyVector.size());
+    myassert(ncontexts == fstate.returnsOnlyVector.size());
     
     bool seenTrue = false;
     bool seenFalse = false;
@@ -593,7 +590,7 @@ bool isVectorReturningFunction(Function *fun, ArgsTy context, CalledModuleTy* cm
     FunctionState fstate(fun);
     contextIdx = fstate.contextIndex.indexOf(context); // add context
     auto finsert = functions.insert({fun, fstate});
-    assert(finsert.second);
+    myassert(finsert.second);
 
     fstate.addToWorkList(workList);    
   } else {

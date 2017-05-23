@@ -12,9 +12,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-//#undef NDEBUG
-//#include <assert.h>
-
 using namespace llvm;
 
 typedef std::vector<bool> ArgsTy;
@@ -169,9 +166,9 @@ struct BlockState {
     }
     
     unsigned nargs = exposed.size();
-    assert(nargs == usedAfterExposure.size());
-    assert(nargs == s.exposed.size());
-    assert(nargs == s.usedAfterExposure.size());
+    myassert(nargs == usedAfterExposure.size());
+    myassert(nargs == s.exposed.size());
+    myassert(nargs == s.usedAfterExposure.size());
     
     for(unsigned i = 0; i < nargs; i++) {
       if (!exposed.at(i) && s.exposed.at(i)) {
@@ -227,7 +224,7 @@ static void dumpArgs(ArgsTy args) {
 static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned aidx) {
 
   auto fsearch = functions.find(fun);
-  assert(fsearch != functions.end());
+  myassert(fsearch != functions.end());
   
   FunctionState& fstate = fsearch->second;
   return fstate.exposed.at(aidx);
@@ -237,7 +234,7 @@ static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned 
 static bool isUsedAfterExposureBitSet(Function *fun, FunctionTableTy& functions, unsigned aidx) {
 
   auto fsearch = functions.find(fun);
-  assert(fsearch != functions.end());
+  myassert(fsearch != functions.end());
   
   FunctionState& fstate = fsearch->second;
   return fstate.usedAfterExposure.at(aidx);
@@ -245,7 +242,7 @@ static bool isUsedAfterExposureBitSet(Function *fun, FunctionTableTy& functions,
 
 static FunctionState& getFunctionState(FunctionTableTy& functions, Function *f) {
   auto fsearch = functions.find(f);
-  assert(fsearch != functions.end());
+  myassert(fsearch != functions.end());
   return fsearch->second;
 }
 
@@ -343,7 +340,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
     workList.pop_back();
     
     auto bsearch = blocks.find(bb);
-    assert(bsearch != blocks.end());
+    myassert(bsearch != blocks.end());
     bsearch->second.dirty = false;
     BlockState s = bsearch->second; // copy
     
@@ -382,7 +379,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
           if (varState >= 0) {
             // variable holds a value from an argument
             unsigned aidx = varState;
-            assert(aidx < s.exposed.size() && aidx < s.usedAfterExposure.size());
+            myassert(aidx < s.exposed.size() && aidx < s.usedAfterExposure.size());
             if (s.exposed.at(aidx)) {
               s.usedAfterExposure.at(aidx) = true;
               // Note: this does not work well for functions that make a value exposed
@@ -616,7 +613,7 @@ CProtectInfo findCalleeProtectFunctions(Module *m, FunctionsSetTy& allocatingFun
     Function *f = &*fi;
     FunctionState fstate(f);
     auto finsert = functions.insert({f, fstate});
-    assert(finsert.second);
+    myassert(finsert.second);
     addToFunctionWorkList(workList, fstate);
   }
   
@@ -664,7 +661,7 @@ CProtectInfo findCalleeProtectFunctions(Module *m, FunctionsSetTy& allocatingFun
 
 bool CProtectInfo::isCalleeProtect(Function *fun, int argIndex, bool onlyNonTrivially) {
   auto fsearch = map.find(fun);
-  assert(fsearch != map.end()); 
+  myassert(fsearch != map.end()); 
   CPArgsTy& cpargs = fsearch->second;
   CPKind k = cpargs.at(argIndex);
   if (onlyNonTrivially) {
@@ -676,7 +673,7 @@ bool CProtectInfo::isCalleeProtect(Function *fun, int argIndex, bool onlyNonTriv
 
 bool CProtectInfo::isCalleeProtect(Function *fun, bool onlyNonTrivially) {
   auto fsearch = map.find(fun);
-  assert(fsearch != map.end()); 
+  myassert(fsearch != map.end()); 
   CPArgsTy& cpargs = fsearch->second;
   
   unsigned nargs = cpargs.size();
@@ -702,7 +699,7 @@ bool CProtectInfo::isCalleeProtect(Function *fun, bool onlyNonTrivially) {
 
 bool CProtectInfo::isCalleeSafe(Function *fun, int argIndex, bool onlyNonTrivially) {
   auto fsearch = map.find(fun);
-  assert(fsearch != map.end()); 
+  myassert(fsearch != map.end()); 
   CPArgsTy& cpargs = fsearch->second;
   
   CPKind k = cpargs.at(argIndex);
@@ -716,7 +713,7 @@ bool CProtectInfo::isCalleeSafe(Function *fun, int argIndex, bool onlyNonTrivial
 
 bool CProtectInfo::isCalleeSafe(Function *fun, bool onlyNonTrivially) {
   auto fsearch = map.find(fun);
-  assert(fsearch != map.end()); 
+  myassert(fsearch != map.end()); 
   CPArgsTy& cpargs = fsearch->second;
   
   unsigned nargs = cpargs.size();
@@ -743,7 +740,7 @@ bool CProtectInfo::isCalleeSafe(Function *fun, bool onlyNonTrivially) {
 bool CProtectInfo::isNonTrivial(Function *fun) {
 
   auto fsearch = map.find(fun);
-  assert(fsearch != map.end()); 
+  myassert(fsearch != map.end()); 
   CPArgsTy& cpargs = fsearch->second;
   
   unsigned nargs = cpargs.size();
