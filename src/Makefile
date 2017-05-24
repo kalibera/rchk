@@ -10,6 +10,13 @@ ifeq ($(HOST), prg)
   BCHECK_MAX_STATES := 800000
   CALLOCATORS_MAX_STATES := 1000000
 
+else ifeq ($(HOST), ra)
+  LLVM := /usr
+  CXX := g++
+#  CXX := $(LLVM)/bin/clang++
+  BCHECK_MAX_STATES := 800000
+  CALLOCATORS_MAX_STATES := 1000000
+
 else ifeq ($(HOST), r-lnx400)
   LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.8.0-x86_64-fedora23
   CXX := g++
@@ -21,7 +28,7 @@ else
   # ------  CUSTOMIZE HERE --------- 
   # or provide these variables to make
   
-  # use LLVM=/usr with Ubuntu 16.04 (to use system installation of LLVM)
+  # use LLVM=/usr with Ubuntu 16.04, 17.04 (to use system installation of LLVM)
   LLVM ?= /usr
   
   # use with Ubuntu 16.04, but not with 17.04
