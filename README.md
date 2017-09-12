@@ -63,7 +63,7 @@ For both native and virtual installation, to check GNU-R:
 5. Build it using for rchk (run in R source tree)
 	1. `. <rchk_root>/scripts/config.inc` (`. /opt/rchk/scripts/config.inc`)
 	2. `<rchkroot>/scripts/build_r.sh` (`. /opt/rchk/scripts/build_r.sh`)
-6. Run default rchk tools on GNU-R: ``<rchkroot>/scripts/check_r.sh` (/opt/rchk/scripts/check_r.sh). Look for
+6. Run default rchk tools on GNU-R: `<rchkroot>/scripts/check_r.sh` (/opt/rchk/scripts/check_r.sh). Look for
 files with suffixes `.maacheck` and `.bcheck` under `src`, e.g. 
 `src/main/R.bin.bcheck` is the result of running `bcheck` tool on the R
 binary. `<rchk_root>` is `/opt/rchk` with the virtual installation.
