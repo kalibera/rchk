@@ -291,8 +291,19 @@ bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) 
   // %35 = bitcast %struct.sxpinfo_struct* %34 to i32*, !dbg !21240 ; [#uses=1 type=i32*] [debug line = 1097:0]
   // %36 = load i32* %35, align 4, !dbg !21240       ; [#uses=1 type=i32] [debug line = 1097:0]
   // %37 = and i32 %36, 31, !dbg !21240              ; [#uses=1 type=i32] [debug line = 1097:0]
-  
   // %38 = icmp eq i32 %37, 22, !dbg !21240          ; [#uses=1 type=i1] [debug line = 1097:0]
+  
+    // but since ALTREP header changes, the pattern is
+  
+  // %42 = load %struct.SEXPREC*, %struct.SEXPREC** %5, align 8, !dbg !44519 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 164:9]
+  // %43 = getelementptr inbounds %struct.SEXPREC, %struct.SEXPREC* %42, i32 0, i32 0, !dbg !44519 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 164:9]
+  // %44 = bitcast %struct.sxpinfo_struct* %43 to i64*, !dbg !44519 ; [#uses=1 type=i64*] [debug line = 164:9]
+  // %45 = load i64, i64* %44, align 8, !dbg !44519  ; [#uses=1 type=i64] [debug line = 164:9]
+  // %46 = and i64 %45, 31, !dbg !44519              ; [#uses=1 type=i64] [debug line = 164:9]
+  // %47 = trunc i64 %46 to i32, !dbg !44519         ; [#uses=1 type=i32] [debug line = 164:9]  <===== extra truncate
+  // %48 = icmp eq i32 %47, 16, !dbg !44519          ; [#uses=1 type=i1] [debug line = 164:9]
+  // br i1 %48, label %49, label %53, !dbg !44521    ; [debug line = 164:9]
+
 
   if (!CmpInst::classof(inst)) {
     return false;
@@ -305,18 +316,28 @@ bool isTypeCheck(Value *inst, bool& positive, AllocaInst*& var, unsigned& type) 
   positive = ci->isTrueWhenEqual();
   
   ConstantInt* ctype;
-  BinaryOperator* andv;
+  Value *other;
   
-  if (ConstantInt::classof(ci->getOperand(0)) && BinaryOperator::classof(ci->getOperand(1))) {
+  if (ConstantInt::classof(ci->getOperand(0))) {
     ctype = cast<ConstantInt>(ci->getOperand(0));
-    andv = cast<BinaryOperator>(ci->getOperand(1));
-  } else if (ConstantInt::classof(ci->getOperand(1)) && BinaryOperator::classof(ci->getOperand(0))) {
+    other = ci->getOperand(1);
+  } else if (ConstantInt::classof(ci->getOperand(1))) {
     ctype = cast<ConstantInt>(ci->getOperand(1));
-    andv = cast<BinaryOperator>(ci->getOperand(0));  
+    other = ci->getOperand(0);  
   } else {
     return false;
   }
+
+  if (TruncInst::classof(other)) {
+    other = (cast<TruncInst>(other))->getOperand(0);
+  }
   
+  BinaryOperator* andv;
+  if (BinaryOperator::classof(other)) {
+    andv = cast<BinaryOperator>(other);
+  } else {
+    return false;
+  }
   if (isTypeExtraction(andv, var)) {
     type = ctype->getZExtValue();
     return true;
