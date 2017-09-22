@@ -129,8 +129,13 @@ Module *parseArgsReadIR(int argc, char* argv[], FunctionsOrderedSetTy& functions
   
   for(std::vector<std::string>::iterator ni = functionNames.begin(), ne = functionNames.end(); ni != ne; ++ni) {
     std::string name = *ni;
-    functionsOfInterestSet.insert(base->getFunction(name));
-  }  
+    Function *fun = base->getFunction(name);
+    if (fun)
+      functionsOfInterestSet.insert(fun);
+      
+    // fun may be NULL when a package defines a function (e.g. latin1locale
+    // in package tau), but R has the same symbol as non-function
+  }
 
   sortFunctionsByName(functionsOfInterestSet, functionsOfInterestVector);
   return base;

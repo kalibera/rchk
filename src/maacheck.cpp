@@ -80,7 +80,8 @@ int main(int argc, char* argv[])
 
   for(FunctionsVectorTy::iterator FI = functionsOfInterestVector.begin(), FE = functionsOfInterestVector.end(); FI != FE; ++FI) {
 
-    auto fisearch = functionsMap.find(*FI);
+    Function *fun = *FI;
+    auto fisearch = functionsMap.find(fun);
     myassert (fisearch != functionsMap.end());
     FunctionInfo& finfo = fisearch->second;
 
