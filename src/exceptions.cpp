@@ -22,6 +22,14 @@ bool isKnownNonAllocator(const CalledFunctionTy *f) {
 bool isAssertedNonAllocating(Function *f) {
   if (f->getName() == "Rf_envlength") return true; // this impacts also length, xlength, inherits, nthcdr, is*, etc
   if (f->getName() == "R_AllocStringBuffer") return true; // perhaps the warning in R code could be turned to error?
+  
+  // R_GCEnable is not supported by the tool
+  if (f->getName() == "ALTVEC_DATAPTR") return true;
+  if (f->getName() == "ALTSTRING_ELT") return true;
+  if (f->getName() == "ALTSTRING_SET_ELT") return true;
+  if (f->getName() == "ALTREP_LENGTH") return true;
+  if (f->getName() == "ALTINTEGER_ELT") return true;
+  if (f->getName() == "ALTREAL_ELT") return true;
 
   return false;
 }
