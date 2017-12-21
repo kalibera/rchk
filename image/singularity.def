@@ -80,7 +80,7 @@ singularity run rchk.img curl
 
 # Local package install
 wget https://cran.r-project.org/src/contrib/irlba_2.3.1.tar.gz
-singularity run rchk.img irlba irlba_2.3.1.tar.gz
+singularity run rchk.img irlba $(pwd)/irlba_2.3.1.tar.gz
 
 # Set the output directory to /tmp
 PKG_ROOT=/tmp singularity run rchk.img curl

@@ -59,7 +59,8 @@ Build the rchk singularity image with:
 ```
 sudo singularity build rchk.img singularity.def       # makes rchk.img
 ```
-See the Singularity documentation for alternative output formats (like
+See the Singularity documentation and the example below
+for alternative output formats (like
 a sandboxed directory that you can investigate easily).
 
 The container build process concludes with a usage message, or an error if
@@ -103,3 +104,72 @@ cat /tmp/lib/irlba/libs/irlba.so.bcheck
 
 # Analyzed 71 functions, traversed 489 states.
 ```
+
+## Sandboxed images
+
+Some R packages may require additional operating system library dependencies
+not included in the container recipe `singularity.def` above. You can add
+additional Ubuntu-packaged libraries to the container recipe before building
+it. Alternatively, you can build a container `sandbox` directory instead of a
+single container image file, and dynamically add required libraries to the
+sandbox directory as needed.
+
+The following example builds a sandboxed container directory. We then try to
+install the Rmpfr library for multi-precision arithmetic, which fails due to
+unsatisifed library dependencies in the container image. The example proceeds
+to manually install the required dependencies and then chkecks the package.
+
+
+### Step 1. Build the sandboxed container
+
+```
+sudo singularity build --sandbox rchk singularity.def     # makes rchk directory
+```
+
+### 2. Try to check the Rmpfr package
+
+```
+PKG_ROOT=/tmp singularity run rchk  Rmpfr                 # try to check package
+
+## ...
+## ERROR: dependency ‘gmp’ is not available for package ‘Rmpfr’
+## ...
+```
+
+### 3. Modify the sandboxed container to include required libraries
+
+```
+sudo singularity exec -w rchk /bin/bash
+
+apt-get install -y libgmp-dev libmpfr-dev
+## ... output of apt installation process
+
+exit
+```
+
+Note that at this point, we can do anything to the container image that we
+desire, including for instance installing library dependencies manually or
+otherwise.
+
+The sandboxed singularity container is the most flexible approach for checking
+packages with dependencies.
+
+### 4. Try to check the Rmpfr package again
+
+```
+PKG_ROOT=/tmp singularity run rchk  Rmpfr
+
+## ... output of R package build process, which should finish without error
+
+# Let's check the output:
+cat /tmp/lib/Rmpfr/libs/Rmpfr.so.bcheck 
+
+## Function MPFR_as_R
+##   [UP] unprotected variable exp_R while calling allocating ...
+##   [UP] unprotected variable prec_R while calling allocating ...
+## ... (truncated output)
+```
+
+Now that the library dependencies are satisfied, we're able to check the
+package with rchk. In this case, at least at the time of this writing,
+we see a few potential issues.
