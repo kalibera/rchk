@@ -46,8 +46,8 @@ Singularity is simply a program. No daemon process/server is needed.
 
 ## Building an rchk container image
 
-The `rck.def` file includes a singularity definition file for building a
-singularity container image based on Ubuntu 17.04 and the LLVM-4.0 and
+The `singularity.def` file includes a singularity definition file for building
+a singularity container image based on Ubuntu 17.04 and the LLVM-4.0 and
 corresponding WLLVM toolchains.  Singularity containers may be built as single
 files or, for experimentation, sandbox directories.
 
