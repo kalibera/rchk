@@ -12,6 +12,7 @@ The installation of dependencies for the tool is somewhat involved. It has
 now been tested on Ubuntu 16.04.2. However, one can use a pre-installed virtual
 machine with `rchk` (or, more precisely, use an automated script that
 installs such machine without user intervention, into virtualbox or docker).
+Also, one can install into a singularity container ([instructions](image/README_SINGULARITY.md) and configuration contributed by B. W. Lewis).
 
 Manual installation on Ubuntu 16.04.2:
 
