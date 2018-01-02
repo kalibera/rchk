@@ -328,6 +328,8 @@ bool isSetterFunction(Function *f) {
   if (f->getName() == "SET_FORMALS") return true;
   if (f->getName() == "SET_BODY") return true;
   if (f->getName() == "SET_CLOENV") return true;
+  if (f->getName() == "R_set_altrep_data1") return true;
+  if (f->getName() == "R_set_altrep_data2") return true;
   return false;
 }
 
