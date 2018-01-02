@@ -707,7 +707,7 @@ bool CProtectInfo::isCalleeSafe(Function *fun, int argIndex, bool onlyNonTrivial
   if (onlyNonTrivially) {
     return k == CP_CALLEE_SAFE;
   } else {
-    return k == CP_CALLEE_SAFE || CP_TRIVIAL || k == CP_CALLEE_PROTECT;
+    return k == CP_CALLEE_SAFE || k == CP_TRIVIAL || k == CP_CALLEE_PROTECT;
   }
 }
 
