@@ -59,16 +59,34 @@ CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS) $(EXTRACXXFLA
 #CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -gdwarf-2 -g3 -MMD $(HOSTFLAGS) $(EXTRACXXFLAGS)
 #CXXFLAGS := $(filter-out -O2, $(CXXFLAGS))
 
-# for GCC, which does not support this warning
-CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))
+# for GCC, debugging (bounds checking for containers)
+#   note: LLVM has to be compiled with this option as well
+#CXXFLAGS := $(CXXFLAGS) -D_GLIBCXX_DEBUG
 
 # For address sanitizer
 #   also have to set environment variable,
-#   export ASAN_SYMBOLIZER_PATH = $(LLVM)/bin/llvm-symbolizer
-#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O1 -g3 -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -MMD $(HOSTFLAGS)
+#     export ASAN_SYMBOLIZER_PATH=$(LLVM)/bin/llvm-symbolizer
+#   can also set variable
+#     ASAN_OPTIONS=detect_stack_use_after_return=1
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O1 -g3 -fsanitize=address -fsanitize-address-use-after-scope -fno-omit-frame-pointer -fno-optimize-sibling-calls -MMD $(HOSTFLAGS)
+#CXXFLAGS := $(filter-out -O2, $(CXXFLAGS))
+
+# For address sanitizer with fewer optimizations
+#CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O0 -gdwarf-2 -g3 -fsanitize=address -fsanitize-address-use-after-scope -fno-omit-frame-pointer -fno-optimize-sibling-calls -MMD $(HOSTFLAGS) $(EXTRACXXFLAGS)
+#CXXFLAGS := $(filter-out -O2, $(CXXFLAGS))
+
+# for GCC, which does not support this warning
+CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))
+CXXFLAGS := $(filter-out -Wstring-conversion, $(CXXFLAGS))
 
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
+
+# For address sanitizer
+#LDFLAGS := $(shell $(LLVMC) --ldflags) -fsanitize=address
+# ASAN with GCC
+#LDLIBS := $(shell $(LLVMC) --libs --system-libs) -lasan 
+
 
 LINK.o = $(LINK.cc) # link with C++ compiler by default
 
