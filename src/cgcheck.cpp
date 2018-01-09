@@ -65,6 +65,10 @@ int main(int argc, char* argv[])
 
   FunctionsInfoMapTy functionsMap;
   buildCGClosure(m, functionsMap, false /* ignore error paths */, &onlyFunctions, &onlyEdges);
+  
+  for(CallEdgesMapTy::iterator cei = onlyEdges.begin(), cee = onlyEdges.end(); cei != cee; ++cei) {
+    delete cei->second;
+  }
 
   unsigned myfindex = 0;
   
