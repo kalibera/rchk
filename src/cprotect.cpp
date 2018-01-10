@@ -42,7 +42,7 @@ static bool isSEXPParam(Function *fun, unsigned pidx) {
   return isSEXP(ftype->getParamType(pidx));
 }
 
-struct FunctionState {
+struct CProtectFunctionState {
 
   Function *fun;
   ArgsTy exposed;		// true for arguments that are (possibly) not protected explicitly at an allocating call
@@ -52,7 +52,7 @@ struct FunctionState {
   ArgIndexTy argIndex;		// argument numbering
   bool confused;
   
-  FunctionState(Function *fun): fun(fun), exposed(fun->arg_size(), false), usedAfterExposure(fun->arg_size(), false), dirty(false), varIndex(), argIndex(), confused(false) {
+  CProtectFunctionState(Function *fun): fun(fun), exposed(fun->arg_size(), false), usedAfterExposure(fun->arg_size(), false), dirty(false), varIndex(), argIndex(), confused(false) {
 
     // index variables
     for(inst_iterator ii = inst_begin(*fun), ie = inst_end(*fun); ii != ie; ++ii) {
@@ -121,10 +121,10 @@ struct FunctionState {
   }
 };
 
-typedef std::unordered_map<Function*, FunctionState> FunctionTableTy;
+typedef std::unordered_map<Function*, CProtectFunctionState> FunctionTableTy;
 typedef std::vector<Function*> FunctionListTy;
 
-static void addToFunctionWorkList(FunctionListTy& workList, FunctionState& fstate) {
+static void addToFunctionWorkList(FunctionListTy& workList, CProtectFunctionState& fstate) {
 
   if (!fstate.dirty) {
     fstate.dirty = true;
@@ -135,7 +135,7 @@ static void addToFunctionWorkList(FunctionListTy& workList, FunctionState& fstat
 typedef std::vector<int> ProtectStackTy;
 typedef std::vector<int> VarsTy;
 
-struct BlockState {
+struct CProtectBlockState {
 
   ProtectStackTy pstack; 	// argument index (>=0) or -1, when not (surely) an argument value
   ArgsTy exposed;
@@ -143,13 +143,13 @@ struct BlockState {
   VarsTy vars;			// argument index (>=0) or -1, when not (surely) an argument value
   bool dirty;			// block is in worklist, to be processed again
   
-  BlockState(unsigned nargs, unsigned nvars):
+  CProtectBlockState(unsigned nargs, unsigned nvars):
     pstack(), exposed(nargs, false), usedAfterExposure(nargs, false), vars(nvars, -1), dirty(false) {}
   
-  BlockState(ProtectStackTy pstack, ArgsTy exposed, ArgsTy usedAfterExposure, VarsTy vars, bool dirty):
+  CProtectBlockState(ProtectStackTy pstack, ArgsTy exposed, ArgsTy usedAfterExposure, VarsTy vars, bool dirty):
     pstack(pstack), exposed(exposed), usedAfterExposure(usedAfterExposure), vars(vars), dirty(dirty) {}
     
-  bool merge(BlockState& s, FunctionState& fstate) {
+  bool merge(CProtectBlockState& s, CProtectFunctionState& fstate) {
     bool updated = false;
 
     unsigned depth = pstack.size();
@@ -192,7 +192,7 @@ struct BlockState {
   }
 };
 
-typedef std::unordered_map<BasicBlock*, BlockState> BlocksTy;
+typedef std::unordered_map<BasicBlock*, CProtectBlockState> BlocksTy;
 typedef std::vector<BasicBlock*> BlockWorkListTy;
 
 // calculates which arguments are currently (definitely) protected
@@ -226,7 +226,7 @@ static bool isExposedBitSet(Function *fun, FunctionTableTy& functions, unsigned 
   auto fsearch = functions.find(fun);
   myassert(fsearch != functions.end());
   
-  FunctionState& fstate = fsearch->second;
+  CProtectFunctionState& fstate = fsearch->second;
   return fstate.exposed.at(aidx);
 }
 
@@ -236,11 +236,11 @@ static bool isUsedAfterExposureBitSet(Function *fun, FunctionTableTy& functions,
   auto fsearch = functions.find(fun);
   myassert(fsearch != functions.end());
   
-  FunctionState& fstate = fsearch->second;
+  CProtectFunctionState& fstate = fsearch->second;
   return fstate.usedAfterExposure.at(aidx);
 }
 
-static FunctionState& getFunctionState(FunctionTableTy& functions, Function *f) {
+static CProtectFunctionState& getFunctionState(FunctionTableTy& functions, Function *f) {
   auto fsearch = functions.find(f);
   myassert(fsearch != functions.end());
   return fsearch->second;
@@ -273,7 +273,7 @@ static void addCallersToWorkList(Function *fun, FunctionTableTy& functions, Func
     if (Instruction *in = dyn_cast<Instruction>(u)) {
       if (BasicBlock *bb = dyn_cast<BasicBlock>(in->getParent())) {
         Function *pf = bb->getParent();
-        FunctionState& pstate = getFunctionState(functions, pf);
+        CProtectFunctionState& pstate = getFunctionState(functions, pf);
         addToFunctionWorkList(functionsWorkList, pstate);
         if (DEBUG) errs() << "adding function " << funName(pf) << " to worklist (updated its callee)\n";
       }
@@ -281,7 +281,7 @@ static void addCallersToWorkList(Function *fun, FunctionTableTy& functions, Func
   }
 }
 
-static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
+static void analyzeFunction(CProtectFunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, FunctionsSetTy& allocatingFunctions) {
 
   Function *fun = fstate.fun;
 
@@ -332,7 +332,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
   BlockWorkListTy workList;
   
   BasicBlock *entryb = &fun->getEntryBlock();
-  blocks.insert({entryb, BlockState(nargs, nvars)}); 
+  blocks.insert({entryb, CProtectBlockState(nargs, nvars)}); 
   workList.push_back(entryb); 
   
   while(!workList.empty()) {
@@ -342,7 +342,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
     auto bsearch = blocks.find(bb);
     myassert(bsearch != blocks.end());
     bsearch->second.dirty = false;
-    BlockState s = bsearch->second; // copy
+    CProtectBlockState s = bsearch->second; // copy
     
     
     for(BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie; ++ii) {
@@ -561,12 +561,12 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
       if (ssearch == blocks.end()) {
       
         // not yet explored block
-        BlockState sstate(s.pstack, s.exposed, s.usedAfterExposure, s.vars, true /* dirty */);
+        CProtectBlockState sstate(s.pstack, s.exposed, s.usedAfterExposure, s.vars, true /* dirty */);
         blocks.insert({succ, sstate});
         workList.push_back(succ);
 
       } else {
-        BlockState& pstate = ssearch->second;
+        CProtectBlockState& pstate = ssearch->second;
         
         // merge
         if (pstate.merge(s, fstate) && !pstate.dirty) {
@@ -611,14 +611,14 @@ CProtectInfo findCalleeProtectFunctions(Module *m, FunctionsSetTy& allocatingFun
   if (DEBUG) errs() << "adding functions..\n";
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *f = &*fi;
-    FunctionState fstate(f);
+    CProtectFunctionState fstate(f);
     auto finsert = functions.insert({f, fstate});
     myassert(finsert.second);
     addToFunctionWorkList(workList, fstate);
   }
   
   while(!workList.empty()) {
-    FunctionState& fstate = getFunctionState(functions, workList.back());
+    CProtectFunctionState& fstate = getFunctionState(functions, workList.back());
     workList.pop_back();
     if (DEBUG) errs() << "size functions=" << functions.size() << " workList=" << workList.size() << "\n";
 
@@ -632,7 +632,7 @@ CProtectInfo findCalleeProtectFunctions(Module *m, FunctionsSetTy& allocatingFun
   CProtectInfo cprotect;
   for(FunctionTableTy::iterator fi = functions.begin(), fe = functions.end(); fi != fe; ++fi) {
     Function* fun = fi->first;
-    FunctionState& fstate = fi->second;
+    CProtectFunctionState& fstate = fi->second;
     
     unsigned nargs = fstate.exposed.size();
     CPArgsTy cpargs(nargs, CP_TRIVIAL);

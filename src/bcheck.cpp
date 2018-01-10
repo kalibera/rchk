@@ -92,18 +92,18 @@ const int MAX_STATES = BCHECK_MAX_STATES;        // maximum number of states vis
 unsigned int nComparedEqual = 0;
 unsigned int nComparedDifferent = 0;
 
-struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanceTy {
+struct BcheckStateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanceTy {
   
   size_t hashcode;
   public:
-    StateTy(BasicBlock *bb): 
+    BcheckStateTy(BasicBlock *bb):
       StateBaseTy(bb), StateWithGuardsTy(bb), StateWithFreshVarsTy(bb), StateWithBalanceTy(bb), hashcode(0) {};
 
-    StateTy(BasicBlock *bb, BalanceStateTy& balance, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
+    BcheckStateTy(BasicBlock *bb, BalanceStateTy& balance, IntGuardsTy& intGuards, SEXPGuardsTy& sexpGuards, FreshVarsTy& freshVars):
       StateBaseTy(bb), StateWithGuardsTy(bb, intGuards, sexpGuards), StateWithFreshVarsTy(bb, freshVars), StateWithBalanceTy(bb, balance), hashcode(0) {};
       
-    virtual StateTy* clone(BasicBlock *newBB) {
-      return new StateTy(newBB, balance, intGuards, sexpGuards, freshVars);
+    virtual BcheckStateTy* clone(BasicBlock *newBB) {
+      return new BcheckStateTy(newBB, balance, intGuards, sexpGuards, freshVars);
     }
     
     virtual bool add();
@@ -177,14 +177,14 @@ struct StateTy : public StateWithGuardsTy, StateWithFreshVarsTy, StateWithBalanc
 // the hashcode is cached at the time of first hashing
 //   (and indeed is not copied)
 
-struct StateTy_hash {
-  size_t operator()(const StateTy* t) const {
+struct BcheckStateTy_hash {
+  size_t operator()(const BcheckStateTy* t) const {
     return t->hashcode;
   }
 };
 
-struct StateTy_equal {
-  bool operator() (const StateTy* lhs, const StateTy* rhs) const {
+struct BcheckStateTy_equal {
+  bool operator() (const BcheckStateTy* lhs, const BcheckStateTy* rhs) const {
 
     if (!FULL_COMPARISON) {
       return lhs->hashcode == rhs->hashcode;
@@ -216,15 +216,15 @@ struct StateTy_equal {
   }
 };
 
-typedef std::stack<StateTy*> WorkListTy;
-typedef std::unordered_set<StateTy*, StateTy_hash, StateTy_equal> DoneSetTy;
+typedef std::stack<BcheckStateTy*> WorkListTy;
+typedef std::unordered_set<BcheckStateTy*, BcheckStateTy_hash, BcheckStateTy_equal> DoneSetTy;
 
 // ------------- helper functions --------------
 
 DoneSetTy doneSet;
 WorkListTy workList;   
 
-bool StateTy::add() {
+bool BcheckStateTy::add() {
   hash(); // precompute hashcode
   auto sinsert = doneSet.insert(this);
   if (sinsert.second) {
@@ -247,7 +247,7 @@ void clearStates() {
   // clear the worklist and the doneset
   totalStates += doneSet.size();
   for(DoneSetTy::iterator ds = doneSet.begin(), de = doneSet.end(); ds != de; ++ds) {
-    StateTy *old = *ds;
+    BcheckStateTy *old = *ds;
     delete old;
   }
   doneSet.clear();
@@ -256,7 +256,7 @@ void clearStates() {
   // all elements in worklist are also in doneset, so no need to call destructors
 }
 
-void handleUnprotectWithIntGuard(Instruction *in, StateTy& s, GlobalsTy& g, IntGuardsChecker& intGuardsChecker, LineMessenger& msg, unsigned& refinableInfos) { 
+void handleUnprotectWithIntGuard(Instruction *in, BcheckStateTy& s, GlobalsTy& g, IntGuardsChecker& intGuardsChecker, LineMessenger& msg, unsigned& refinableInfos) { 
   
   // UNPROTECT(intguard ? 3 : 4)
   
@@ -356,7 +356,7 @@ class FunctionChecker {
     bool restartable = (!intGuardsEnabled && !avoidIntGuardsFor(fun)) || (!sexpGuardsEnabled && !avoidSEXPGuardsFor(fun));
     clearStates();
     {
-      StateTy* initState = new StateTy(&fun->getEntryBlock());
+      BcheckStateTy* initState = new BcheckStateTy(&fun->getEntryBlock());
       initState->add();
     }
     while(!workList.empty()) {
@@ -376,7 +376,7 @@ class FunctionChecker {
         workList.top()->dump();
       }
 
-      StateTy s(*workList.top());
+      BcheckStateTy s(*workList.top());
       workList.pop();
       m.msg.trace("going to work on this state:", &*s.bb->begin());
       
@@ -457,7 +457,7 @@ class FunctionChecker {
       for(int i = 0, nsucc = t->getNumSuccessors(); i < nsucc; i++) {
         BasicBlock *succ = t->getSuccessor(i);
         {
-          StateTy* state = s.clone(succ);
+          BcheckStateTy* state = s.clone(succ);
           if (state->add()) {
             m.msg.trace("added (conservatively) successor of", t);
           }

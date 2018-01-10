@@ -130,8 +130,8 @@ typedef std::vector<bool> VarsTy;
 typedef IndexedTable<Argument> ArgIndexTy;
 typedef IndexedTable<AllocaInst> VarIndexTy;
 
-struct FunctionState;
-typedef std::unordered_map<Function*, FunctionState> FunctionTableTy;
+struct VectorsFunctionState;
+typedef std::unordered_map<Function*, VectorsFunctionState> FunctionTableTy;
 typedef std::vector<Function*> FunctionListTy;
 
 typedef IndexedCopyingTable<ArgsTy> ContextIndexTy;
@@ -172,7 +172,7 @@ std::string funNameWithContext(Function *fun, ArgsTy context) {
   return res;
 }
 
-struct FunctionState {
+struct VectorsFunctionState {
   Function *fun;
   bool dirty; // dirty iff in functions work list
 
@@ -181,7 +181,7 @@ struct FunctionState {
   ContextIndexTy contextIndex;
   ReturnsOnlyVectorTy returnsOnlyVector;
   
-  FunctionState(Function *fun): fun(fun), dirty(false), varIndex(), argIndex(), contextIndex(), returnsOnlyVector() {
+  VectorsFunctionState(Function *fun): fun(fun), dirty(false), varIndex(), argIndex(), contextIndex(), returnsOnlyVector() {
   
     // index variables
     for(inst_iterator ii = inst_begin(*fun), ie = inst_end(*fun); ii != ie; ++ii) {
@@ -211,7 +211,7 @@ struct FunctionState {
     }    
   }
   
-  static FunctionState& get(FunctionTableTy& functions, Function *f) {
+  static VectorsFunctionState& get(FunctionTableTy& functions, Function *f) {
     auto fsearch = functions.find(f);
     myassert(fsearch != functions.end());
     return fsearch->second;
@@ -224,15 +224,15 @@ struct VrfStateTy {
   VrfStateTy() : functions() {};
 };
 
-struct BlockState {
+struct VectorsBlockState {
   VarsTy vars; // which vars are "vector" after the basic block executes
   bool dirty;
   
-  BlockState(unsigned nvars): vars(nvars, false), dirty(false) {};
+  VectorsBlockState(unsigned nvars): vars(nvars, false), dirty(false) {};
   
-  BlockState(VarsTy vars, bool dirty): vars(vars), dirty(dirty) {};
+  VectorsBlockState(VarsTy vars, bool dirty): vars(vars), dirty(dirty) {};
   
-  bool merge(BlockState& s) {
+  bool merge(VectorsBlockState& s) {
 
     bool updated = false;
     for(unsigned i = 0; i < vars.size(); i++) {
@@ -249,10 +249,10 @@ struct BlockState {
 
 };
 
-typedef std::unordered_map<BasicBlock*, BlockState> BlocksTy;
+typedef std::unordered_map<BasicBlock*, VectorsBlockState> BlocksTy;
 typedef std::vector<BasicBlock*> BlockWorkListTy;
 
-static bool callReturnsOnlyVector(CallSite& cs, FunctionState& fstate, BlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
+static bool callReturnsOnlyVector(CallSite& cs, VectorsFunctionState& fstate, VectorsBlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
 
   if (!cs) {
     return false;
@@ -301,7 +301,7 @@ static bool callReturnsOnlyVector(CallSite& cs, FunctionState& fstate, BlockStat
   
   if (DEBUG) errs() << " [target " << funNameWithContext(tgt, targs) << "]";
 
-  FunctionState& tstate = FunctionState::get(functions, tgt);
+  VectorsFunctionState& tstate = VectorsFunctionState::get(functions, tgt);
   unsigned tcontextIdx = tstate.contextIndex.indexOf(targs);
 
   if (tcontextIdx < tstate.returnsOnlyVector.size()) {
@@ -338,7 +338,7 @@ static bool callReturnsOnlyVector(CallSite& cs, FunctionState& fstate, BlockStat
   }
 }
 
-static bool valueIsVector(Value *val, FunctionState& fstate, BlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
+static bool valueIsVector(Value *val, VectorsFunctionState& fstate, VectorsBlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
           
   if (Argument *arg = dyn_cast<Argument>(val)) {  // = arg
     unsigned aidx = fstate.argIndex.indexOf(arg);
@@ -368,7 +368,7 @@ static bool valueIsVector(Value *val, FunctionState& fstate, BlockState& s, Args
   return false;
 }
 
-static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
+static void analyzeFunctionInContext(VectorsFunctionState& fstate, unsigned contextIdx, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
 
   Function *fun = fstate.fun;
   ArgsTy context = fstate.contextIndex.at(contextIdx);
@@ -379,7 +379,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
   BlockWorkListTy workList;
   
   BasicBlock *entryb = &fun->getEntryBlock();
-  blocks.insert({entryb, BlockState(nvars)});
+  blocks.insert({entryb, VectorsBlockState(nvars)});
   workList.push_back(entryb);
   
   if (DEBUG) errs() << "Analyzing function " << funNameWithContext(fun, context) << "\n";
@@ -391,7 +391,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
     auto bsearch = blocks.find(bb);
     myassert(bsearch != blocks.end());
     bsearch->second.dirty = false;
-    BlockState s = bsearch->second; // copy
+    VectorsBlockState s = bsearch->second; // copy
     
     for(BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie; ++ii) {
       Instruction *in = &*ii;
@@ -440,12 +440,12 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
       if (ssearch == blocks.end()) {
       
         // not yet explored block
-        BlockState sstate(s.vars, true /* dirty */);
+        VectorsBlockState sstate(s.vars, true /* dirty */);
         blocks.insert({succ, sstate});
         workList.push_back(succ);
 
       } else {
-        BlockState& pstate = ssearch->second;
+        VectorsBlockState& pstate = ssearch->second;
         
         // merge
         if (pstate.merge(s) && !pstate.dirty) {
@@ -459,7 +459,7 @@ static void analyzeFunctionInContext(FunctionState& fstate, unsigned contextIdx,
   if (DEBUG) errs() << "Function " << funNameWithContext(fun, context) << " returns only vectors\n";
 }
 
-static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
+static void analyzeFunction(VectorsFunctionState& fstate, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
 
   Function *fun = fstate.fun;
   
@@ -485,7 +485,7 @@ static void analyzeFunction(FunctionState& fstate, FunctionTableTy& functions, F
         if (BasicBlock *bb = dyn_cast<BasicBlock>(in->getParent())) {
           Function *pf = bb->getParent();
           if (isSEXP(pf->getReturnType())) {
-            FunctionState& pstate = FunctionState::get(functions, pf);
+            VectorsFunctionState& pstate = VectorsFunctionState::get(functions, pf);
             pstate.addToWorkList(functionsWorkList);
             if (DEBUG) errs() << "Marking dirty affected caller function " << funName(pf) << "\n";
             // NOTE: in case of recursive functions, we may be re-adding fun
@@ -512,7 +512,7 @@ void findVectorReturningFunctions(CalledModuleTy *cm) {
       continue;
       // if a function does not return an SEXP, it definitely does not return a vector
     }
-    FunctionState fstate(f);
+    VectorsFunctionState fstate(f);
     auto finsert = functions.insert({f, fstate});
     myassert(finsert.second);
 
@@ -520,7 +520,7 @@ void findVectorReturningFunctions(CalledModuleTy *cm) {
   }
 
   while(!workList.empty()) {
-    FunctionState& fstate = FunctionState::get(functions, workList.back());
+    VectorsFunctionState& fstate = VectorsFunctionState::get(functions, workList.back());
     workList.pop_back();
     fstate.dirty = false;
 
@@ -535,7 +535,7 @@ void printVectorReturningFunctions(FunctionTableTy *functionsPtr) {
   
   for(FunctionTableTy::iterator fi = functions.begin(), fe = functions.end(); fi != fe; ++fi) {
     Function* fun = fi->first;
-    FunctionState& fstate = fi->second;
+    VectorsFunctionState& fstate = fi->second;
     
     unsigned ncontexts = fstate.contextIndex.size();
     myassert(ncontexts == fstate.returnsOnlyVector.size());
@@ -587,28 +587,28 @@ bool isVectorReturningFunction(Function *fun, ArgsTy context, CalledModuleTy* cm
   
   auto fsearch = functions.find(fun);
   if (fsearch == functions.end()) {
-    FunctionState fstate(fun);
+    VectorsFunctionState fstate(fun);
     contextIdx = fstate.contextIndex.indexOf(context); // add context
     auto finsert = functions.insert({fun, fstate});
     myassert(finsert.second);
 
     fstate.addToWorkList(workList);    
   } else {
-    FunctionState& fstate = fsearch->second;
+    VectorsFunctionState& fstate = fsearch->second;
     contextIdx = fstate.contextIndex.indexOf(context); // add context
     
     fstate.addToWorkList(workList);    
   }
   
   while(!workList.empty()) {
-    FunctionState& fstate = FunctionState::get(functions, workList.back());
+    VectorsFunctionState& fstate = VectorsFunctionState::get(functions, workList.back());
     workList.pop_back();
     fstate.dirty = false;
 
     analyzeFunction(fstate, functions, workList, cm);
   }
   
-  FunctionState& fstate = FunctionState::get(functions, fun);
+  VectorsFunctionState& fstate = VectorsFunctionState::get(functions, fun);
   bool res = fstate.returnsOnlyVector.at(contextIdx);
 
   if (DEBUG) errs() << "isVectorReturningFunction: function " << funNameWithContext(fun, context) << (res ? "returns only vector" : "may return non-vector") << "\n";
