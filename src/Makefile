@@ -93,6 +93,7 @@ LINK.o = $(LINK.cc) # link with C++ compiler by default
 SOURCES := $(wildcard *.cpp)
 DEPENDS := $(SOURCES:.cpp=.d)
 OBJECTS := $(SOURCES:.cpp=.o)
+DWOBJECTS := $(SOURCES:.cpp=.dwo)
 SOBJECTS := $(filter-out %check.o, $(OBJECTS))
 
 TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck cgcheck
@@ -122,7 +123,7 @@ veccheck: veccheck.o $(SOBJECTS)
 glcheck: glcheck.o $(SOBJECTS)
 
 clean:
-	rm -f $(OBJECTS) $(DEPENDS) $(TOOLS)
+	rm -f $(OBJECTS) $(DEPENDS) $(TOOLS) $(DWOBJECTS)
 
 info:
 	@echo "CPPFLAGS: $(CPPFLAGS)"
