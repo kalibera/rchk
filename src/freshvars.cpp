@@ -235,6 +235,52 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
             break; 
           }
         }
+        if (var) {
+          // found indirect PROTECT(x = foo()) - indirect protect of "x"
+          // now check whether this indirect protect is also a part of a setter call, e.g.
+          //
+          // setAttrib(x, PROTECT(d = alloc()))
+          //
+          // yes, some code does it...
+          //
+          //        setAttrib(r, R_DimNamesSymbol, PROTECT(d = allocVector(VECSXP, 2)));
+          //
+          //  %197 = call %struct.SEXPREC* @Rf_allocVector(i32 19, i64 2), !dbg !1619 ; [#uses=2 type=%struct.SEXPREC*] [debug line = 489:33]
+          // store %struct.SEXPREC* %197, %struct.SEXPREC** %22, align 8, !dbg !1619 ; [debug line = 489:33] <=========================================== stores result of allocVector into "d"
+          // %198 = call %struct.SEXPREC* @Rf_protect(%struct.SEXPREC* %197), !dbg !1620 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 489:33]  <====== PROTECT the source of "d"
+          // %199 = call %struct.SEXPREC* @Rf_setAttrib(%struct.SEXPREC* %195, %struct.SEXPREC* %196, %struct.SEXPREC* %198), !dbg !1621 ; [#uses=0 type=%struct.SEXPREC*] [debug line = 489:2]
+          
+          for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
+            User *u = *ui;
+            CallSite cs2(u);
+            if (!cs2) continue;
+            Function *tgt = cs2.getCalledFunction();
+            if (!tgt) continue;
+            // heuristic - handle functions usually protecting like setAttrib(x, ...) where x is protected (say, non-fresh, as approximation)
+            if (cs2.arg_size() > 1 && isSetterFunction(tgt)) {
+              if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs2.getArgument(0))) {
+                if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
+                  if (firstArg != var) {
+                    auto vsearch = freshVars.vars.find(firstArg);
+                    if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
+                      // first argument of the setter is not fresh
+                
+                      if (msg.debug()) msg.debug(MSG_PFX + "fresh variable " + varName(var) + " passed to known setter function (possibly implicitly protecting) via setter(,PROTECT(x=foo())) " + funName(tgt) + " and thus no longer fresh" , in);
+                      freshVars.vars.erase(var);
+                      var = NULL;
+                        // setting the variable to null because otherwise it would be by the code below
+                        // inserted into the fresh list again with protect count 1, so will become fresh again
+                        //   (by a heuristic that guess that if a variable is being protected, it is for a reason, and hence
+                        //    perhaps should be treated as fresh again...)
+                      
+                      break;
+                    }
+                  }
+                }
+              }
+            }            
+          }
+        }
       }
       if (!var) { // x = PROTECT(foo())
         for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
@@ -277,6 +323,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
       
           // the variable is not currently fresh, but the fact that it is being reprotected actually means
           //   that there is probably a reason to protect it
+          //   just a heuristic, it does not always work with implicit protection
         
           freshVars.vars.insert({var, 1});
           if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being REPROTECTed, inserting it as fresh with protectcount 1", in); 
@@ -309,6 +356,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
           // the variable is not currently fresh, but the fact that it is being protected actually means
           //   that there is probably a reason to protect it, so when unprotected, it should be then treated
           //   as fresh again... so lets add it with protect count of 1
+          // just a heuristic, it does not always work with implicit protection
         
           freshVars.vars.insert({var, 1});
           if (msg.debug()) msg.debug(MSG_PFX + "non-fresh variable " + varName(var) + " is being protected, inserting it as fresh with protectcount 1", in); 
