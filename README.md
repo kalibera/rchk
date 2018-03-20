@@ -1,40 +1,45 @@
 
 This project consists of several bug-finding tools that look for memory
-protection errors in the C source code of [GNU
-R](http://www.r-project.org/) and packages.  
+protection errors in the C source code of [R](http://www.r-project.org/) and packages.  
 
 A number of bugs have been found and fixed using this tool in
 [R-devel](https://svn.r-project.org/R/trunk/).
 The tool can also be used to find errors in R packages (e.g.  from
 CRAN/BIOC).
 
-The installation of dependencies for the tool is somewhat involved. It has
-now been tested on Ubuntu 16.04.2. However, one can use a pre-installed virtual
-machine with `rchk` (or, more precisely, use an automated script that
-installs such machine without user intervention, into virtualbox or docker).
-Also, one can install into a singularity container ([instructions](image/README_SINGULARITY.md) and configuration contributed by B. W. Lewis).
+One can use a pre-installed virtual machine with `rchk` (or, more precisely,
+use an automated script that installs such machine without user
+intervention, into virtualbox or docker).  Also, one can install into a
+singularity container ([instructions](image/README_SINGULARITY.md) and
+configuration contributed by B.  W.  Lewis).
 
-Manual installation on Ubuntu 16.04.2:
+The native installation of dependencies for the tool is somewhat involved.
+Branch llvm-38 has been tested on Ubuntu 16.04.2 (but it may be better to
+use the latest version of `rchk` due to recent changes in R, see below).
 
-0. Install build dependencies for GNU-R:
+Manual installation on Ubuntu 16.04.2 (branch llvm-38):
+
+0. Install build dependencies for R:
 	1. enable source repositories in `/etc/apt/sources.list`
 	2. `apt-get build-dep -y r-base-dev`
 	3. `apt-get install libcurl4-openssl-dev`
 1. Install clang and llvm: `apt-get install clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev libc++-dev libc++abi-dev`
-2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm), use *branch llvm-38*:
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	1. `apt-get install python-pip`
 	2. `pip install --upgrade pip`
 	3. `pip install --user DIR` where DIR is checked-out WLLVM
-3. Install [rchk](https://github.com/kalibera/rchk.git):
+3. Install [rchk](https://github.com/kalibera/rchk.git), use *branch llvm-38*:
 	1. `make`
 	2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM can be `/usr` on Ubuntu 16.04.2
 
 The master branch of the tool should now be used with LLVM 4.0, which is
-part of Ubuntu 17.04. The tool can be used also with [LLVM binary distributions](http://llvm.org/releases/download.html).
-It is extremely unlikely that the `master` version of the tool will work with any other
-version of LLVM than 4.0 due to frequent changes in LLVM API.  An older
-version working with LLVM 3.8 is on the `llvm-38` branch and for LLVM 3.6 on the `llvm-36`
-branch, but those branches are no longer updated.
+part of Ubuntu 17.04 (and also tested on Ubuntu 17.10).  The tool can be
+used also with [LLVM binary distributions](http://llvm.org/releases/download.html).
+
+It is extremely unlikely that the `master` version of the tool will work
+with any other version of LLVM than 4.0 due to frequent changes in LLVM API. 
+An older version working with LLVM 3.8 is on the `llvm-38` branch and for
+LLVM 3.6 on the `llvm-36` branch, but those branches are no longer updated.
 
 Alternatively, one can install automatically into a VirtualBox image (this
 will now use LLVM 3.8 and Ubuntu 16.04.2).
@@ -58,13 +63,13 @@ available from the [vagrant website](https://www.vagrantup.com/downloads.html)
 using `dpkg -i`.
 
 
-For both native and virtual installation, to check GNU-R:
+For both native and virtual installation, to check R:
 
-4. Get latest version of GNU-R: `svn checkout https://svn.r-project.org/R/trunk`
+4. Get latest version of R: `svn checkout https://svn.r-project.org/R/trunk`
 5. Build it using for rchk (run in R source tree)
 	1. `. <rchk_root>/scripts/config.inc` (`. /opt/rchk/scripts/config.inc`)
 	2. `<rchkroot>/scripts/build_r.sh` (`. /opt/rchk/scripts/build_r.sh`)
-6. Run default rchk tools on GNU-R: `<rchkroot>/scripts/check_r.sh` (`/opt/rchk/scripts/check_r.sh`). Look for
+6. Run default rchk tools on R: `<rchkroot>/scripts/check_r.sh` (`/opt/rchk/scripts/check_r.sh`). Look for
 files with suffixes `.maacheck` and `.bcheck` under `src`, e.g. 
 `src/main/R.bin.bcheck` is the result of running `bcheck` tool on the R
 binary. `<rchk_root>` is `/opt/rchk` with the virtual installation.
@@ -99,4 +104,4 @@ Further information:
 
 * [User documentation](doc/USAGE.md) - how to use the tools and what they check.
 * [Internals](doc/INTERNALS.md) - how the tools work internally.
-* [Building](doc/BUILDING.md) - how to get the necessary bitcode files for GNU-R/packages; this is now encapsulated in scripts, but the background is here
+* [Building](doc/BUILDING.md) - how to get the necessary bitcode files for R/packages; this is now encapsulated in scripts, but the background is here
