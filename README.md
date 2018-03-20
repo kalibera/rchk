@@ -83,7 +83,7 @@ To check a package:
 `biocLite` or any other mechanism that in the end uses `install.packages`)
 3. Check all installed packages: `<rchkroot>/scripts/check_package.sh`
 4. The results of the checks will appear under `packages/lib/<package_dir>`,
-again look for files with suffices `.maacheck` and `.bcheck`.
+again look for files with suffixes `.maacheck` and `.bcheck`.
 
 For example, to check the "curl" package in the virtual installation:
 
@@ -95,9 +95,9 @@ cd trunk
 
 . /opt/rchk/scripts/config.inc
 . /opt/rchk/scripts/cmpconfig.inc
-echo 'install.packages("curl",repos="http://cran.ma.imperial.ac.uk")' |  ./bin/R --slave
-/opt/rchk/scripts/check_package.sh curl
-less packages/lib/curl/libs/curl.so.bcheck
+echo 'install.packages("jpeg",repos="http://cloud.r-project.org")' |  ./bin/R --slave
+/opt/rchk/scripts/check_package.sh jpeg
+less packages/lib/jpeg/libs/jpeg.so.maacheck
 ```
 
 Further information:
