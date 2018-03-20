@@ -127,7 +127,7 @@ end
 
 # install LLVM
 
-["clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev libc++-dev libc++abi-dev"].each do |pkg|
+["clang-4.0 llvm-4.0-dev clang\+\+-4.0 llvm-4.0 libllvm4.0 libc\+\+-dev libc\+\+abi-dev"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
@@ -135,7 +135,7 @@ end
   end
 end
 
-llvmdir = "/usr"
+llvmdir = "/usr/lib/llvm-4.0"
 
 # Fix a bug in C++ string header file (libc++-dev)
 # (see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=808086)
@@ -196,7 +196,7 @@ bcheck = "#{rchkdir}/src/bcheck"
 
 git rchkdir do
   repository "git://www.github.com/kalibera/rchk"
-  revision "97ceff3509ba01fd98333a063217cf304ce9009c"
+  revision "f8d020666012e59edd27a9cc96f99e7da12d50af"
   action :export
   user "root"
   not_if {File.exists?("#{rchkdir}/src")}

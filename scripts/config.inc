@@ -22,7 +22,7 @@ elif [ X"`hostname -s`" == Xra ] ; then
 elif [ X"`hostname -s`" == Xvagrant ] ; then
 
   export WLLVM=/home/vagrant/.local/bin
-  export LLVM=/usr
+  export LLVM=/usr/lib/llvm-4.0
   export RCHK=/opt/rchk
 
 else

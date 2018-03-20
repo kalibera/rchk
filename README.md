@@ -11,30 +11,31 @@ One can use a pre-installed virtual machine with `rchk` (or, more precisely,
 use an automated script that installs such machine without user
 intervention, into virtualbox or docker).  Also, one can install into a
 singularity container ([instructions](image/README_SINGULARITY.md) and
-configuration contributed by B.  W.  Lewis).
+configuration contributed by B. W. Lewis, not tested nor maintained by
+`rchk` author).
 
-The native installation of dependencies for the tool is somewhat involved.
-Branch llvm-38 has been tested on Ubuntu 16.04.2 (but it may be better to
-use the latest version of `rchk` due to recent changes in R, see below).
+The native (manual) installation of dependencies for the tool is still
+somewhat involved, but has been working with binary releases of LLVM
+packaged in Ubuntu.  Branch llvm-38 has been tested on Ubuntu 16.04.2, but
+it is better to use the trunk version of `rchk` and LLVM 4.0 (already
+available in Ubuntu 16.04.2).  `rchk` has also been tested with Ubuntu 17.04
+and Ubuntu 17.10 with LLVM from the Ubuntu distributions.  The tool can be
+used also with [LLVM binary distributions](http://llvm.org/releases/download.html).
 
-Manual installation on Ubuntu 16.04.2 (branch llvm-38):
+Manual installation on Ubuntu 16.04.2:
 
 0. Install build dependencies for R:
 	1. enable source repositories in `/etc/apt/sources.list`
 	2. `apt-get build-dep -y r-base-dev`
 	3. `apt-get install libcurl4-openssl-dev`
-1. Install clang and llvm: `apt-get install clang-3.8 llvm-3.8-dev clang\+\+-3.8 clang llvm-dev libc++-dev libc++abi-dev`
+1. Install clang and llvm: `apt-get install clang-4.0 llvm-4.0-dev clang\+\+-4.0 llvm-4.0 libllvm4.0 libc\+\+-dev libc\+\+abi-dev`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	1. `apt-get install python-pip`
 	2. `pip install --upgrade pip`
 	3. `pip install --user DIR` where DIR is checked-out WLLVM
-3. Install [rchk](https://github.com/kalibera/rchk.git), use *branch llvm-38*:
+3. Install [rchk](https://github.com/kalibera/rchk.git):
 	1. `make`
-	2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM can be `/usr` on Ubuntu 16.04.2
-
-The master branch of the tool should now be used with LLVM 4.0, which is
-part of Ubuntu 17.04 (and also tested on Ubuntu 17.10).  The tool can be
-used also with [LLVM binary distributions](http://llvm.org/releases/download.html).
+	2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM can be `/usr/lib/llvm-4.0` on Ubuntu 16.04.2
 
 It is extremely unlikely that the `master` version of the tool will work
 with any other version of LLVM than 4.0 due to frequent changes in LLVM API. 
@@ -42,15 +43,17 @@ An older version working with LLVM 3.8 is on the `llvm-38` branch and for
 LLVM 3.6 on the `llvm-36` branch, but those branches are no longer updated.
 
 Alternatively, one can install automatically into a VirtualBox image (this
-will now use LLVM 3.8 and Ubuntu 16.04.2).
+will now use LLVM 4.0 and Ubuntu 16.04.2).
 
 1. Install (manually) [VirtualBox](https://www.virtualbox.org/wiki/Downloads), e.g. `apt-get install virtualbox`
 2. Install (manually) [Vagrant](https://www.vagrantup.com/), e.g. `apt-get install vagrant`
 3. Install (automatically) R build dependencies, LLVM, WLLVM and rchk: run `vagrant up` in `image` directory
 
-Instead of virtualbox, one can now also use docker, so the tool can run inside
-a container. To install the tool into a docker container, run
-`vagrant up --provider docker`.
+Instead of virtualbox, one can also use docker, so the tool can run inside a
+container.  To install the tool into a docker container, run `vagrant up
+--provider docker`. The automatic installation a fixed version of `rchk`
+to reduce the risk of breakage, but this also means it does not immediately
+get latest updates from the trunk.
 
 Note that the automated installation may take long, as it will be
 downloading an Ubuntu 16.04.2 image and installing the R build dependencies
@@ -60,8 +63,8 @@ be re-started by `vagrant provision`. One can log in to the machine by
 should the installation fail. Note that a recent version of vagrant is
 needed, e.g. on Ubuntu 14.04 one can install the `.DEB` package of vagrant
 available from the [vagrant website](https://www.vagrantup.com/downloads.html)
-using `dpkg -i`.
-
+using `dpkg -i`. At least since Ubuntu 16.04, one can use the distribution
+version of vagrant.
 
 For both native and virtual installation, to check R:
 
