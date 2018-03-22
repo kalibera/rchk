@@ -24,6 +24,8 @@ bool isAssertedNonAllocating(Function *f) {
   if (f->getName() == "Rf_envxlength") return true;
   if (f->getName() == "R_AllocStringBuffer") return true; // perhaps the warning in R code could be turned to error?
   
+  if (f->getName() == "ALTVEC_DATAPTR_OR_NULL") return true;
+
   // R_GCEnabled is not supported by the tool
   if (f->getName() == "ALTVEC_DATAPTR") return true;
   if (f->getName() == "ALTVEC_DATAPTR_EX") return true;  
