@@ -8,11 +8,12 @@ else
   # these options were tested on Ubuntu 16.04.2
   #   they allow to build most but not all packages
 
-  # Some systems report LLVM linking errors due to conflicting PIC levels,
-  # but some packages did not work without -fPIC.
-  # export CFLAGS="-Wall -g -O0 -fPIC"
+  # rJava cannot be checked without -fPIC in CFLAGS, but we need to set also
+  # CPICFLAGS to -fPIC, because otherwise it on some systems becomes -fpic,
+  # and then we get conficting PIC levels (with which MonetDBLite fails)
 
-  export CFLAGS="-Wall -g -O0"
+  export CPICFLAGS="-fPIC"
+  export CFLAGS="-Wall -g -O0 $CPICFLAGS"
 
   export CXXFLAGS="$CFLAGS -I/usr/include/libcxxabi"
   export CC=$WLLVM/wllvm
