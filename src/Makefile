@@ -28,14 +28,16 @@ else
   # ------  CUSTOMIZE HERE --------- 
   # or provide these variables to make
   
-  # use LLVM=/usr with Ubuntu 16.04, 17.04 (to use system installation of LLVM)
+  # use LLVM=/usr with Ubuntu 16.04, 17.04, 18.04 (to use system
+  # installation of LLVM) or LLVM=/usr/lib/llvm-4.0 to select LLVM 4.0
+  # specifically; WLLVM does not support compiler names like clang-4.0
   LLVM ?= /usr
   
-  # use with Ubuntu 16.04, but not with 17.04
+  # use with Ubuntu 16.04 (not needed with newer Ubuntu/LLVM)
   EXTRACXXFLAGS := -I/usr/include/llvm-3.8/
   
   ifeq ($(wildcard $(LLVM)),)
-    $(error Please customize your Makefile here. Please set the home directory for LLVM 3.8)
+    $(error Please customize your Makefile here. Please set the home directory for LLVM)
   endif
 
   # please update the "MAX_STATES", these defaults seem to work fine for 8G RAM laptop
