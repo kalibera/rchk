@@ -14,7 +14,7 @@ distribution that is part of Ubuntu allows seamless installation natively,
 and this is the recommended way as the number of dependencies needed is high
 (to build R, to build packages).
 
-# Ubuntu 18.04
+## Ubuntu 18.04
 
 These steps worked for me in Ubuntu 18.04:
 
@@ -36,9 +36,9 @@ These steps worked for me in Ubuntu 18.04:
 	path to rchk directory created by git in step (8).
 
 Ubuntu allows multiple versions of LLVM/CLANG to be installed at a time.
-rchk now requires LLVM 4 and.
+rchk now requires LLVM 4.
 
-# Testing the installation by checking a package
+## Testing the installation
 
 The installation can be tested by checking a package.  For that one also
 needs to install `subversion`, `rsync`, and any dependencies needed by that
@@ -68,7 +68,7 @@ which is a true error. `bcheck` does not find any errors, it only reports
 Analyzed 15 functions, traversed 1938 states.
 ```
 
-#Automated installation and installation in earlier OS versions
+## Automated installation and installation in earlier OS versions
 
 One can use a pre-installed virtual machine with rchk (or, more precisely,
 use an automated script that installs such machine without user
