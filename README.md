@@ -8,15 +8,14 @@ now regularly used to check
 
 rchk depends on LLVM.  In the past, installing LLVM was complicated to the
 point that I've created scripts to automatically install into a virtual
-machine (using chef, initially into virtualbox and then also to docker;
-B. W. Lewis provided support for singularity). However, now the LLVM
-distribution that is part of Ubuntu allows seamless installation natively,
-and this is the recommended way as the number of dependencies needed is high
-(to build R, to build packages).
+machine (using chef, initially into virtualbox and then also to docker; B. 
+W.  Lewis provided support for singularity).  The number of dependencies
+needed (to build R and packages) is, however, high, so the container is
+huge.  I've been using rchk natively on Ubuntu and today it works nicely
+with LLVM 4 (or 3.8) packages in Debian/Ubuntu, so native installation is
+recommended.
 
-## Ubuntu 18.04
-
-These steps worked for me in Ubuntu 18.04:
+## Ubuntu 18.04 (Bionic Beaver)
 
 0. Install build dependencies for R:
 	* enable source repositories in `/etc/apt/sources.list`
@@ -30,13 +29,33 @@ These steps worked for me in Ubuntu 18.04:
 3. Install [rchk](https://github.com/kalibera/rchk.git):
 	* `apt-get install git`
 	* `git clone https://github.com/kalibera/rchk.git`
-	* `cd rchk/src ; env LLVM=/usr/lib/llvm-4.0 make`
-	* customize `../scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	* `cd rchk/src ; env LLVM=/usr/lib/llvm-4.0 make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
 	would be `/usr/lib/llvm-4.0`, WLLVM would be `/usr/local/bin`, RCHK would be the
 	path to rchk directory created by git in step (8).
 
-Ubuntu allows multiple versions of LLVM/CLANG to be installed at a time.
-rchk now requires LLVM 4.
+Ubuntu allows multiple versions of LLVM/CLANG to be installed at a time, for
+Ubuntu, the recommended version is LLVM 4. Newer versions will not work due
+to incompatible changes in the API.
+
+## Debian 9 (Stretch)
+
+0. Install build dependencies for R:
+	* enable source repositories in `/etc/apt/sources.list`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base-dev`
+1. Install clang and llvm:
+	* `apt-get install clang-3.8 llvm-3.8-dev clang\+\+-3.8 llvm-3.8 libllvm3.8 libc\+\+-dev libc\+\+abi-dev`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install python-pip`
+	* `pip install wllvm`
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; env LLVM=/usr/lib/llvm-3.8 make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	would be `/usr/lib/llvm-3.8`, WLLVM would be `/usr/local/bin`, RCHK would be the
+	path to rchk directory created by git in step (8).
 
 ## Testing the installation
 
@@ -56,13 +75,14 @@ package.
 
 The output of the checking is in files
 `packages/lib/jpeg/libs/jpeg.so.*check`. For version 0.1-8 of the package,
-`maacheck` reports
+`jpeg.so.maacheck` includes
 
 ```
 WARNING Suspicious call (two or more unprotected arguments) to Rf_setAttrib at read_jpeg /rchk/trunk/packages/build/IsnsJjDm/jpeg/src/read.c:131
 ```
 
-which is a true error. `bcheck` does not find any errors, it only reports
+which is a true error. `bcheck` does not find any errors, `jpeg.so.bcheck`
+only contains something like
 
 ```
 Analyzed 15 functions, traversed 1938 states.
