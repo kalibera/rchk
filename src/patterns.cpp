@@ -376,8 +376,13 @@ bool isTypeSwitch(Value *inst, AllocaInst*& var, BasicBlock*& defaultSucc, TypeS
 
   for(SwitchInst::CaseIt ci = si->case_begin(), ce = si->case_end(); ci != ce; ++ci) {
   
-    ConstantInt *val = ci.getCaseValue();  // -> with LLVM5
-    BasicBlock *succ = ci.getCaseSuccessor(); // -> with LLVM5
+#if LLVM_VERSION_MAJOR>3 || (LLVM_VERSION_MAJOR==3 && LLVM_VERSION_MINOR>=5)
+    ConstantInt *val = ci->getCaseValue();
+    BasicBlock *succ = ci->getCaseSuccessor();
+#else  
+    ConstantInt *val = ci.getCaseValue();
+    BasicBlock *succ = ci.getCaseSuccessor();
+#endif
     
     info.insert({succ, val->getZExtValue()});
   }

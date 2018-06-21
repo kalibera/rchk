@@ -26,5 +26,8 @@ elif [ X"`hostname -s`" == Xvagrant ] ; then
   export RCHK=/opt/rchk
 
 else
-  echo "Please specify directories in config.inc" >&2
+#  echo "Please specify directories in config.inc" >&2
+  export WLLVM=/usr/local/bin
+  export LLVM=/usr
+  export RCHK=/home/tomas/work/git/rchk
 fi

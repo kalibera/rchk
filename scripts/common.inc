@@ -9,7 +9,7 @@ function check_config {
     RES=2
   fi
 
-  if [ ! -x $LLVM/bin/clang ] ; then
+  if [ ! -x $LLVM/bin/llvm-config ] ; then
     echo "Please check LLVM installation ($LLVM)." >&2
     RES=2
   fi
