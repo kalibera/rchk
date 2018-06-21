@@ -6,16 +6,23 @@ protection bugs have been found using rchk and fixed in R. rchk is
 now regularly used to check
 [CRAN packages](https://github.com/kalibera/cran-checks/tree/master/rchk).
 
-rchk depends on LLVM.  In the past, installing LLVM was complicated to the
-point that I've created scripts to automatically install into a virtual
-machine (using chef, initially into virtualbox and then also to docker; B. 
-W.  Lewis provided support for singularity).  The number of dependencies
-needed (to build R and packages) is, however, high, so the container is
-huge.  I've been using rchk natively on Ubuntu and today it works nicely
-with LLVM 4 (or 3.8) packages in Debian/Ubuntu, so native installation is
-recommended.
+rchk depends on LLVM and CLANG.  R and packages to check are built with
+CLANG, producing executable code and also LLVM bitcode, then linking the
+LLVM bitcode for the R executable and shared libraries of packages.  In the
+past, installation of LLVM for this had to be done manually and required a
+number of steps.  At that point I've created scripts to automatically
+install into a virtual machine (using chef, initially into virtualbox and
+then also to docker; B.  W.  Lewis provided support for singularity). 
+Today, however, LLVM support in Linux distributions is much better and one
+can use Debian, Ubuntu or Fedora packaging system to install all required
+LLVM components.  Only WLLVM scripts (python) are installed using `pip`. 
+Today, native installation can be recommended.  The best tested distribution
+is Ubuntu, on which rchk is run regularly, but below are instructions also
+for Debian and Fedora (all tested in clean docker images of these systems).
 
 ## Ubuntu 18.04 (Bionic Beaver)
+
+These instructions are for LLVM 4.
 
 0. Install build dependencies for R:
 	* enable source repositories in `/etc/apt/sources.list`
@@ -34,11 +41,19 @@ recommended.
 	would be `/usr/lib/llvm-4.0`, WLLVM would be `/usr/local/bin`, RCHK would be the
 	path to rchk directory created by git in step (8).
 
-Ubuntu allows multiple versions of LLVM/CLANG to be installed at a time, for
-Ubuntu, the recommended version is LLVM 4. Newer versions will not work due
-to incompatible changes in the API.
+LLVM 4 is now the version best tested with rchk, but one can also use LLVM
+6, which is the Ubuntu default.  To use rchk with LLVM6, modify the steps
+above as follows:
+
+* Install clang and llvm:
+	* `apt-get install clang llvm-dev clang\+\+ llvm libllvm libc\+\+-dev libc\+\+abi-dev`
+* Install rchk:
+	* `cd rchk/src ; make ; cd ..`
+	* customize `scripts/config.inc` to include export LLVM=/usr`
 
 ## Debian 9 (Stretch)
+
+These instructions are for LLVM 3.8.
 
 0. Install build dependencies for R:
 	* enable source repositories in `/etc/apt/sources.list`
@@ -56,6 +71,29 @@ to incompatible changes in the API.
 	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
 	would be `/usr/lib/llvm-3.8`, WLLVM would be `/usr/local/bin`, RCHK would be the
 	path to rchk directory created by git in step (8).
+
+## Fedora 28
+
+These instructions are for LLVM 6.
+
+0. Install development tools and build dependencies for R:
+	* `yum install yum-utils`
+	* `yum-builddep R`
+	* `yum install redhat-rpm-config hostname java-1.8.0-openjdk-devel`
+	* `yum groupinstall "Development Tools"`
+	* `yum groupinstall "C Development Tools and Libraries"`
+1. Install clang and llvm:
+	* `yum install llvm llvm-devel clang`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `pip install wllvm`
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `yum install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ;  make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	would be `/usr`, WLLVM would be `/usr/bin`, RCHK would be the
+	path to rchk directory created by git in step (8).
+
 
 ## Testing the installation
 
@@ -88,7 +126,7 @@ only contains something like
 Analyzed 15 functions, traversed 1938 states.
 ```
 
-## Automated installation and installation in earlier OS versions
+## Automated installation
 
 One can use a pre-installed virtual machine with rchk (or, more precisely,
 use an automated script that installs such machine without user
@@ -97,36 +135,9 @@ singularity container ([instructions](image/README_SINGULARITY.md) and
 configuration contributed by B. W. Lewis, not tested nor maintained by
 rchk author).
 
-The native (manual) installation of dependencies for the tool is still
-somewhat involved, but has been working with binary releases of LLVM
-packaged in Ubuntu.  Branch llvm-38 has been tested on Ubuntu 16.04.2, but
-it is better to use the trunk version of rchk and LLVM 4.0 (already
-available in Ubuntu 16.04.2).  rchk has also been tested with Ubuntu 17.04
-and Ubuntu 17.10 with LLVM from the Ubuntu distributions.  The tool can be
-used also with [LLVM binary distributions](http://llvm.org/releases/download.html).
-
-Manual installation on Ubuntu 16.04.2:
-
-0. Install build dependencies for R:
-	1. enable source repositories in `/etc/apt/sources.list`
-	2. `apt-get build-dep -y r-base-dev`
-	3. `apt-get install libcurl4-openssl-dev`
-1. Install clang and llvm: `apt-get install clang-4.0 llvm-4.0-dev clang\+\+-4.0 llvm-4.0 libllvm4.0 libc\+\+-dev libc\+\+abi-dev`
-2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
-	1. `apt-get install python-pip`
-	2. `pip install --upgrade pip`
-	3. `pip install --user DIR` where DIR is checked-out WLLVM
-3. Install [rchk](https://github.com/kalibera/rchk.git):
-	1. `env LLVM=/usr/lib/llvm-4.0 make`
-	2. modify script `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM can be `/usr/lib/llvm-4.0` on Ubuntu 16.04.2
-
-It is extremely unlikely that the `master` version of the tool will work
-with any other version of LLVM than 4.0 due to frequent changes in LLVM API. 
-An older version working with LLVM 3.8 is on the `llvm-38` branch and for
-LLVM 3.6 on the `llvm-36` branch, but those branches are no longer updated.
-
-Alternatively, one can install automatically into a VirtualBox image (this
-will now use LLVM 4.0 and Ubuntu 16.04.2).
+One can install automatically into a VirtualBox image (this will now use
+LLVM 4.0 and Ubuntu 16.04.2). The image uses a fixed version of rchk that I
+tested last, so it will not have the latest fixes on the master branch.
 
 1. Install (manually) [VirtualBox](https://www.virtualbox.org/wiki/Downloads), e.g. `apt-get install virtualbox`
 2. Install (manually) [Vagrant](https://www.vagrantup.com/), e.g. `apt-get install vagrant`
@@ -149,42 +160,16 @@ available from the [vagrant website](https://www.vagrantup.com/downloads.html)
 using `dpkg -i`. At least since Ubuntu 16.04, one can use the distribution
 version of vagrant.
 
-For both native and virtual installation, to check R:
+## Installing on older systems
 
-4. Get latest version of R: `svn checkout https://svn.r-project.org/R/trunk`
-5. Build it using for rchk (run in R source tree)
-	1. `. <rchk_root>/scripts/config.inc` (`. /opt/rchk/scripts/config.inc`)
-	2. `<rchkroot>/scripts/build_r.sh` (`. /opt/rchk/scripts/build_r.sh`)
-6. Run default rchk tools on R: `<rchkroot>/scripts/check_r.sh` (`/opt/rchk/scripts/check_r.sh`). Look for
-files with suffixes `.maacheck` and `.bcheck` under `src`, e.g. 
-`src/main/R.bin.bcheck` is the result of running `bcheck` tool on the R
-binary. `<rchk_root>` is `/opt/rchk` with the virtual installation.
-
-To check a package:
-
-1. Prepare the environment for build
-	1. `. <rchk_root>/scripts/config.inc` (`. /opt/rchk/scripts/config.inc`)
-	2. `. <rchk_root>/scripts/cmpconfig.inc` (`. /opt/rchk/scripts/cmpconfig.inc`)
-2. Install packages from within R: `./bin/R` (use `install.packages` or
-`biocLite` or any other mechanism that in the end uses `install.packages`)
-3. Check all installed packages: `<rchkroot>/scripts/check_package.sh`
-4. The results of the checks will appear under `packages/lib/<package_dir>`,
-again look for files with suffixes `.maacheck` and `.bcheck`.
-
-For example, to check the "curl" package in the virtual installation:
-
-```bash
-svn checkout https://svn.r-project.org/R/trunk
-cd trunk
-. /opt/rchk/scripts/config.inc
-/opt/rchk/scripts/build_r.sh
-
-. /opt/rchk/scripts/config.inc
-. /opt/rchk/scripts/cmpconfig.inc
-echo 'install.packages("jpeg",repos="http://cloud.r-project.org")' |  ./bin/R --slave
-/opt/rchk/scripts/check_package.sh jpeg
-less packages/lib/jpeg/libs/jpeg.so.maacheck
-```
+rchk is likely to work on older Linux systems as long as LLVM 4 is used (or
+3.8, 5 or 6).  In particular, I've been using rchk on many earlier versions
+of Ubuntu, so Ubuntu and Debian are likely to be easiest to use.  An older
+version of rchk working with LLVM 3.8 is on the `llvm-38` branch and for
+LLVM 3.6 on the `llvm-36` branch, but those branches are no longer updated
+and their use is not recommended.  LLVM 4 is not that new by now, so it is
+widely supported. Problems on Gentoo have been reported (rchk crashes
+observed and it was not clear why). 
 
 Further information:
 
