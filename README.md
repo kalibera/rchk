@@ -46,7 +46,7 @@ LLVM 4 is now the version best tested with rchk, but one can also use LLVM
 above as follows:
 
 * Install clang and llvm:
-	* `apt-get install clang llvm-dev clang\+\+ llvm libllvm libc\+\+-dev libc\+\+abi-dev`
+	* `apt-get install llvm clang-6.0 llvm-6.0-dev llvm-6.0 libllvm6.0 libc\+\+-dev libc\+\+abi-dev`
 * Install rchk:
 	* `cd rchk/src ; make ; cd ..`
 	* customize `scripts/config.inc` to include export LLVM=/usr`
