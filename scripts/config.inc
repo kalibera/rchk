@@ -25,6 +25,12 @@ elif [ X"`hostname -s`" == Xvagrant ] ; then
   export LLVM=/usr/lib/llvm-4.0
   export RCHK=/opt/rchk
 
+elif [ X"`hostname -s`" == Xpod ] ; then
+
+  export WLLVM=/usr/local/bin
+  export LLVM=/usr
+  export RCHK=/home/tomas/work/git/rchk
+
 else
   echo "Please specify directories in config.inc" >&2
 fi
