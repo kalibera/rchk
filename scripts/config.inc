@@ -9,9 +9,9 @@ if [ X"`hostname -s`" == Xprg ] ; then
 
 elif [ X"`hostname -s`" == Xr-lnx400 ] ; then
 
-  export WLLVM=/var/scratch/tomas/opt/whole-program-llvm
-  export LLVM=/var/scratch/tomas/opt/llvm/clang+llvm-3.8.0-x86_64-fedora23
-  export RCHK=/var/scratch/tomas/opt/rchk
+  export WLLVM=/space/tkalibera/.local/bin
+  export LLVM=/var/scratch/tomas/opt/llvm/clang+llvm-6.0.0-x86_64-linux-gnu-Fedora27
+  export RCHK=/space/tkalibera/git/rchk
 
 elif [ X"`hostname -s`" == Xra ] ; then
 

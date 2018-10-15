@@ -18,7 +18,7 @@ else ifeq ($(HOST), ra)
   CALLOCATORS_MAX_STATES := 1000000
 
 else ifeq ($(HOST), r-lnx400)
-  LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-3.8.0-x86_64-fedora23
+  LLVM := /var/scratch/tomas/opt/llvm/clang+llvm-6.0.0-x86_64-linux-gnu-Fedora27
   CXX := g++
 #  CXX := $(LLVM)/bin/clang++
   BCHECK_MAX_STATES := 6000000
@@ -80,6 +80,7 @@ CXXFLAGS := $(shell $(LLVMC) --cxxflags) -O3 -g3 -MMD $(HOSTFLAGS) $(EXTRACXXFLA
 # for GCC, which does not support this warning
 CXXFLAGS := $(filter-out -Wcovered-switch-default, $(CXXFLAGS))
 CXXFLAGS := $(filter-out -Wstring-conversion, $(CXXFLAGS))
+CXXFLAGS := $(filter-out -Werror=unguarded-availability-new, $(CXXFLAGS))
 
 LDFLAGS := $(shell $(LLVMC) --ldflags)
 LDLIBS := $(shell $(LLVMC) --libs --system-libs) 
