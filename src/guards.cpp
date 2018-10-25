@@ -484,6 +484,17 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
   }
   // sexpguard = ...
 
+  // sexpguard = PROTECT( ... )
+  // FIXME: they may be more filtering functions like PROTECT
+  CallSite cs(storeValueOp);
+  if (cs) {
+    Function *pfun = cs.getCalledFunction();
+    if (pfun && (pfun->getName() == "Rf_protect" || pfun->getName() == "Rf_protectWithIndex")) {
+      storeValueOp = cs.getArgument(0); // fall through
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " receiving its value from call to PROTECT/PROTECT_WITH_INDEX", store);
+    }
+  }
+
   if (argInfos && Argument::classof(storeValueOp))  { // sexpguard = function_argument
     Argument *arg = cast<Argument>(storeValueOp);
     const ArgInfoTy *ai = (*argInfos)[arg->getArgNo()];
@@ -491,17 +502,17 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
       SEXPGuardTy newGS(SGS_SYMBOL, static_cast<const SymbolArgInfoTy*>(ai)->symbolName);
       sexpGuards[storePointerVar] = newGS;
       if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to symbol \"" +
-        static_cast<const SymbolArgInfoTy*>(ai)->symbolName + "\" from argument\n", store);
+        static_cast<const SymbolArgInfoTy*>(ai)->symbolName + "\" from argument", store);
       return;
     }
     if (ai && ai->isVector()) { // sexpguard = vector_argument
       SEXPGuardTy newGS(SGS_VECTOR);
       sexpGuards[storePointerVar] = newGS;
-      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector from argument\n", store);
+      if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to vector from argument", store);
       return;
     }
   }
-              
+
   if (LoadInst::classof(storeValueOp)) {
     Value *src = cast<LoadInst>(storeValueOp)->getPointerOperand();
     if (src == g->nilVariable) {  // sexpguard = R_NilValue
@@ -564,7 +575,6 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
         return;
       }
     }
-    
   }
   sexpGuards.erase(storePointerVar);
   if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " set to unknown", store);

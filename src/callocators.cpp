@@ -28,9 +28,9 @@ const int MAX_STATES = CALLOCATORS_MAX_STATES;
 const bool VERBOSE_DUMP = false;
 
 const bool DUMP_STATES = false;
-const std::string DUMP_STATES_FUNCTION = "Rf_allocMatrix"; // only dump states in this function
+const std::string DUMP_STATES_FUNCTION = "XXXX"; // only dump states in this function
 const bool ONLY_CHECK_ONLY_FUNCTION = false; // only check one function (named ONLY_FUNCTION_NAME)
-const std::string ONLY_FUNCTION_NAME = "Rf_allocMatrix";
+const std::string ONLY_FUNCTION_NAME = "XXXX";
 const bool ONLY_DEBUG_ONLY_FUNCTION = true;
 const bool ONLY_TRACE_ONLY_FUNCTION = true;
 
@@ -606,6 +606,14 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
             for(ValuesSetTy::iterator vi = vorig.begin(), ve = vorig.end(); vi != ve; ++vi) { 
               Value *v = *vi;
             
+              CallSite cs(v);
+              if (cs) {
+                Function *tgt = cs.getCalledFunction();
+                if (tgt && (tgt->getName() == "Rf_protect" || tgt->getName() == "Rf_protectWithIndex")) {
+                  if (msg.debug()) msg.debug("propagating origins through PROTECT/PROTECT_WITH_INDEX to " + varName(dst), in);
+                  v = cs.getArgument(0);
+                }
+              }
               if (AllocaInst* src = dyn_cast<AllocaInst>(v)) {
                 if (isSEXP(src)) {
                   // copy all var origins of src into dst
@@ -626,7 +634,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
                   msg.debug("call through a pointer, asserting it may be allocating (marking as call to gc function) - assigned to " + varName(dst), dyn_cast<Instruction>(v));
                 tgt = cm->getCalledGCFunction();
               } else {
-                tgt = cm->getCalledFunction(st->getValueOperand(), sexpGuardsChecker, &s.sexpGuards, true);
+                tgt = cm->getCalledFunction(v, sexpGuardsChecker, &s.sexpGuards, true);
                 if (tgt && !cm->isPossibleAllocator(tgt->fun)) {
                   tgt = NULL;
                 }

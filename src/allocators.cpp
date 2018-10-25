@@ -128,6 +128,14 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
         return true;
       }
     }
+    CallSite cs(u);
+    if (cs) {
+      Function *tgt = cs.getCalledFunction();
+      if (tgt && (tgt->getName() == "Rf_protect" || tgt->getName() == "Rf_protectWithIndex") && valueMayBeReturned(u, possiblyReturned)) {
+        if (DEBUG) errs() << "  callsite result is returned indirectly via PROTECT" << *u << "\n";
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -167,7 +175,7 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
       if (valueMayBeReturned(v, possiblyReturnedVars)) {
-        if (DEBUG) errs() << "SEXP function " << funName(f) << " wraps functions " << funName(tgt) << "\n";
+        if (DEBUG) errs() << "SEXP function " << funName(f) << " wraps function " << funName(tgt) << "\n";
         wrappedAllocators.insert(tgt);
       }
     }
