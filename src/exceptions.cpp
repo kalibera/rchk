@@ -30,11 +30,19 @@ bool isAssertedNonAllocating(Function *f) {
   // R_GCEnabled is not supported by the tool
   if (f->getName() == "ALTVEC_DATAPTR") return true;
   if (f->getName() == "ALTVEC_DATAPTR_EX") return true;  
-  if (f->getName() == "ALTSTRING_ELT") return true;
-  if (f->getName() == "ALTSTRING_SET_ELT") return true;
   if (f->getName() == "ALTREP_LENGTH") return true;
+
+  if (f->getName() == "ALTCOMPLEX_ELT") return true;
   if (f->getName() == "ALTINTEGER_ELT") return true;
+  if (f->getName() == "ALTLOGICAL_ELT") return true;  
+  if (f->getName() == "ALTRAW_ELT") return true;
   if (f->getName() == "ALTREAL_ELT") return true;
+
+  if (f->getName() == "ALTSTRING_ELT") return true;
+
+  
+  if (f->getName() == "ALTSTRING_SET_ELT") return true;
+  
 
   return false;
 }
