@@ -26,11 +26,13 @@ callocators_max_states = read_fixnum_var(yamlconfig, "callocators_max_states")
 
 # install some packages
 
-username = nil
-["vagrant", "ubuntu"].each do |user|
-  res = `grep "^#{user}" /etc/passwd`
-  username = user unless res.empty?
-end
+# username = nil
+# ["vagrant", "ubuntu"].each do |user|
+#  res = `grep "^#{user}" /etc/passwd`
+#  username = user unless res.empty?
+# end
+
+username = "vagrant"
 
 execute "initial apt-get update" do
   command "apt-get update"
@@ -46,16 +48,16 @@ execute "enable source repositories" do
   not_if 'grep "^deb-src" /etc/apt/sources.list'
 end
 
-# disable autoremove because it fails as it cannot remove
-#   linux-image-extra-4.4.0-71-generic
-file '/etc/apt/apt.conf' do
-  content 'APT::Get::AutomaticRemove "0"; APT::Get::HideAutoRemove "1";'
-  mode '0755'
-  owner 'root'
-  group 'root'
-  notifies :run, 'execute[initial apt-get update]',:immediately
-  not_if {File.exists?("/etc/apt/apt.conf")}
-end
+# # disable autoremove because it fails as it cannot remove
+# #   linux-image-extra-4.4.0-71-generic
+# file '/etc/apt/apt.conf' do
+#   content 'APT::Get::AutomaticRemove "0"; APT::Get::HideAutoRemove "1";'
+#   mode '0755'
+#   owner 'root'
+#   group 'root'
+#   notifies :run, 'execute[initial apt-get update]',:immediately
+#   not_if {File.exists?("/etc/apt/apt.conf")}
+# end
 
 execute "periodic apt-get update" do
   command "apt-get update"
@@ -65,18 +67,18 @@ execute "periodic apt-get update" do
     # do not run if updated less than 3 hours ago
 end
 
-# This is to work around a no longer needed workaround which accidentally prevents
-# updating packages in the image (see https://github.com/chef/bento/issues/592)
-bash "fix broken persistent names hack" do
-  code <<-EOH
-    rm -rf /etc/udev/rules.d/70-persistent-net.rules
-    touch /etc/udev/rules.d/70-persistent-net.rules
-    apt-get -y -f install
-  EOH
-  user "root"
-  action :run
-  not_if 'test -f /etc/udev/rules.d/70-persistent-net.rules'
-end
+# # This is to work around a no longer needed workaround which accidentally prevents
+# # updating packages in the image (see https://github.com/chef/bento/issues/592)
+# bash "fix broken persistent names hack" do
+#   code <<-EOH
+#     rm -rf /etc/udev/rules.d/70-persistent-net.rules
+#     touch /etc/udev/rules.d/70-persistent-net.rules
+#     apt-get -y -f install
+#   EOH
+#   user "root"
+#   action :run
+#   not_if 'test -f /etc/udev/rules.d/70-persistent-net.rules'
+# end
 
 execute "install R (dev) build deps" do
   command "apt-get build-dep -y r-base-dev"
@@ -87,12 +89,12 @@ execute "install R (dev) build deps" do
 end
 
   # now also needed to build R
-["libcurl4-openssl-dev"].each do |pkg|
-  package pkg do
-    action :install
-    not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
-  end
-end
+# ["libcurl4-openssl-dev"].each do |pkg|
+#   package pkg do
+#     action :install
+#     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
+#   end
+# end
 
 directory "/opt" do
   owner "root"
@@ -127,7 +129,7 @@ end
 
 # install LLVM
 
-["clang-4.0 llvm-4.0-dev clang\+\+-4.0 llvm-4.0 libllvm4.0 libc\+\+-dev libc\+\+abi-dev"].each do |pkg|
+["llvm clang clang-6.0 llvm-6.0-dev llvm-6.0 libllvm6.0 libc\+\+-dev libc\+\+abi-dev"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
@@ -135,32 +137,32 @@ end
   end
 end
 
-llvmdir = "/usr/lib/llvm-4.0"
+llvmdir = "/usr"
 
-# Fix a bug in C++ string header file (libc++-dev)
-# (see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=808086)
-bash "fix broken string header" do
-  code <<-EOH
-    cp -p /usr/include/c++/v1/string /root/string.orig
-    cd /usr/include/c++/v1/
-    patch -p1 < /vagrant/string.diff
-  EOH
-  user "root"
-  action :run
-  only_if 'md5sum /usr/include/c++/v1/string | grep bc206c6dee334d9d8d1cdcf32df6a92b'
-end
+# # Fix a bug in C++ string header file (libc++-dev)
+# # (see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=808086)
+# bash "fix broken string header" do
+#   code <<-EOH
+#     cp -p /usr/include/c++/v1/string /root/string.orig
+#     cd /usr/include/c++/v1/
+#     patch -p1 < /vagrant/string.diff
+#   EOH
+#   user "root"
+#   action :run
+#   only_if 'md5sum /usr/include/c++/v1/string | grep bc206c6dee334d9d8d1cdcf32df6a92b'
+# end
 
 
 # install whole-program-llvm
 
-wllvmsrcdir = "/opt/whole-program-llvm"
-git wllvmsrcdir do
-  repository "git://www.github.com/travitch/whole-program-llvm"
-  revision "16e4fa62dc8f91ca9a3d5416424a6583248d6cce"
-  action :export
-  user "root"
-  not_if {File.exists?("#{wllvmsrcdir}/wllvm")}
-end
+# wllvmsrcdir = "/opt/whole-program-llvm"
+# git wllvmsrcdir do
+#   repository "git://www.github.com/travitch/whole-program-llvm"
+#   revision "16e4fa62dc8f91ca9a3d5416424a6583248d6cce"
+#   action :export
+#   user "root"
+#   not_if {File.exists?("#{wllvmsrcdir}/wllvm")}
+# end
 
  # pip needed to install wllvm
 
@@ -173,17 +175,18 @@ end
 
  # upgrade needed to install wllvm
 
-execute "pip upgrade" do
-  command "sudo -u #{username} -H pip install --user pip==9.0.1"
-  user "#{username}"
-  action :run
-  not_if 'pip --version | grep 9.0.1'
-end
+# execute "pip upgrade" do
+#   command "sudo -u #{username} -H pip install --user pip==9.0.1"
+#   user "#{username}"
+#   action :run
+#   not_if 'pip --version | grep 9.0.1'
+# end
 
 wllvmdir = "/home/#{username}/.local/bin"
 
 execute "wllvm install" do
-  command "sudo -u #{username} -H pip install --user #{wllvmsrcdir}"
+#  command "sudo -u #{username} -H pip install --user #{wllvmsrcdir}"
+  command "sudo -u #{username} -H pip install wllvm"
   user "#{username}"
   action :run
   not_if {File.exists?("#{wllvmdir}/wllvm")}
@@ -196,7 +199,7 @@ bcheck = "#{rchkdir}/src/bcheck"
 
 git rchkdir do
   repository "git://www.github.com/kalibera/rchk"
-  revision "c4ca83365ccd7d054062f12eac5cecf9f1c7bddd"
+  revision "54f92ed9296375adfeb61f73ea1b5819e3bb281b"
   action :export
   user "root"
   not_if {File.exists?("#{rchkdir}/src")}
