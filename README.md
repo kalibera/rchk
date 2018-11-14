@@ -144,7 +144,9 @@ tested last, so it will not have the latest fixes on the master branch.
 3. Install (automatically) R build dependencies, LLVM, WLLVM and rchk: run `vagrant up` in `image` directory
 
 Instead of virtualbox, one can also use docker, so the tool can run inside a
-container.  To install the tool into a docker container, run `vagrant up --provider docker`. 
+container.  To install the tool into a docker container, run `vagrant up --provider docker`.
+To install docker on Ubuntu, run `apt-get install docker docker.io` and add
+the current user to the `docker` group.
 
 The automatic installation uses a fixed version of rchk to reduce the risk
 of breakage, but this also means it does not immediately get latest updates
