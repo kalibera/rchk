@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 ENV DEBIAN_FRONTEND noninteractive
 
 # ssh server and other tools
@@ -33,6 +33,11 @@ ADD vagrant.pub /home/vagrant/.ssh/authorized_keys
 RUN chown -R vagrant /home/vagrant/.ssh && \
   chmod -R go-rwsx /home/vagrant/.ssh && \
   mkdir /var/run/sshd && chmod 0755 /var/run/sshd
+
+# preconfigure tzdata before switching to teletype frontend
+
+RUN echo "Europe/Prague" > /etc/timezone &&
+  dpkg-reconfigure -f noninteractive tzdata
 
 ENV DEBIAN_FRONTEND teletype
 EXPOSE 22

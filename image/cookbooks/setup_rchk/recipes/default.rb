@@ -244,7 +244,7 @@ end
 
 # install more packages
 
-["subversion","git"].each do |pkg|
+["subversion","git","rsync"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
