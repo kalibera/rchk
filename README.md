@@ -12,13 +12,15 @@ LLVM bitcode for the R executable and shared libraries of packages.  In the
 past, installation of LLVM for this had to be done manually and required a
 number of steps.  At that point I've created scripts to automatically
 install into a virtual machine (using chef, initially into virtualbox and
-then also to docker; B. W. Lewis provided support for singularity). 
+then also to docker; B.  W.  Lewis provided support for singularity). 
 Today, however, LLVM support in Linux distributions is much better and one
 can use Debian, Ubuntu or Fedora packaging system to install all required
-LLVM components.  Only WLLVM scripts (python) are installed using `pip`. 
-Today, native installation can be recommended.  The best tested distribution
-is Ubuntu, on which rchk is run regularly, but below are instructions also
-for Debian and Fedora (all tested in clean docker images of these systems).
+LLVM components.  Only WLLVM scripts (python) are not included in the
+distribution, but are installed using `pip`.  Today, native installation can
+be recommended on Linux, but the automated installation into a VM is still
+the only option on Windows.  The best tested distribution is Ubuntu, on
+which rchk is run regularly, but below are instructions also for Debian and
+Fedora (all tested in clean docker images of these systems).
 
 ## Ubuntu 18.04 (Bionic Beaver)
 
@@ -149,7 +151,8 @@ of breakage, but this also means it does not immediately get latest updates
 from the trunk.  Today native installation on Linux (tested on Ubuntu,
 Debian and Fedora) is so easy that it is preferable over the virtual machine
 installation on those systems: one gets the latest fixes, and it is also
-much faster to install and takes much less space.
+much faster to install and takes much less space. On Windows, the automated
+installation into VirtualBox is the only tested option.
 
 Note that the automated installation may take long, as it will be
 downloading an Ubuntu image and installing the R build dependencies to the
