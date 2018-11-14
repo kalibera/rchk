@@ -22,7 +22,7 @@ elif [ X"`hostname -s`" == Xra ] ; then
 elif [ X"`hostname -s`" == Xvagrant ] ; then
 
   export WLLVM=/home/vagrant/.local/bin
-  export LLVM=/usr/lib/llvm-4.0
+  export LLVM=/usr
   export RCHK=/opt/rchk
 
 elif [ X"`hostname -s`" == Xpod ] ; then

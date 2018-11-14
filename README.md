@@ -12,7 +12,7 @@ LLVM bitcode for the R executable and shared libraries of packages.  In the
 past, installation of LLVM for this had to be done manually and required a
 number of steps.  At that point I've created scripts to automatically
 install into a virtual machine (using chef, initially into virtualbox and
-then also to docker; B.  W.  Lewis provided support for singularity). 
+then also to docker; B. W. Lewis provided support for singularity). 
 Today, however, LLVM support in Linux distributions is much better and one
 can use Debian, Ubuntu or Fedora packaging system to install all required
 LLVM components.  Only WLLVM scripts (python) are installed using `pip`. 
@@ -41,15 +41,13 @@ These instructions are for LLVM 4.
 	would be `/usr/lib/llvm-4.0`, WLLVM would be `/usr/local/bin`, RCHK would be the
 	path to rchk directory created by git in step (8).
 
-LLVM 4 is now the version best tested with rchk, but one can also use LLVM
-6, which is the Ubuntu default.  To use rchk with LLVM6, modify the steps
-above as follows:
+To use rchk with LLVM 6, modify the steps above as follows:
 
 * Install clang and llvm:
-	* `apt-get install llvm clang-6.0 llvm-6.0-dev llvm-6.0 libllvm6.0 libc\+\+-dev libc\+\+abi-dev`
+	* `apt-get install llvm clang clang-6.0 llvm-6.0-dev llvm-6.0 libllvm6.0 libc\+\+-dev libc\+\+abi-dev`
 * Install rchk:
 	* `cd rchk/src ; make ; cd ..`
-	* customize `scripts/config.inc` to include export LLVM=/usr`
+	* customize `scripts/config.inc` to include export `LLVM=/usr`
 
 ## Debian 9 (Stretch)
 
@@ -104,12 +102,12 @@ package.
 1. Build R producing also LLVM bitcode
 	* `svn checkout https://svn.r-project.org/R/trunk`
 	* `cd trunk`
-	* `. ../scripts/config.inc`
-	* `. ../scripts/cmpconfig.inc`
-	* `../scripts/build_r.sh`
+	* `. ../scripts/config.inc` (in VM install, `. /opt/rchk/scripts/config.inc`)
+	* `. ../scripts/cmpconfig.inc` (in VM install, `. /opt/rchk/scripts/cmpconfig.inc`)
+	* `../scripts/build_r.sh` (in VM install, `/opt/rchk/scripts/build_r.sh`)
 2. Install and check the package
 	* `echo 'install.packages("jpeg",repos="http://cloud.r-project.org")' |  ./bin/R --slave`
-	* `../scripts/check_package.sh jpeg`
+	* `../scripts/check_package.sh jpeg` (in VM install, `/opt/rchk/scripts/check_package.sh jpeg`)
 
 The output of the checking is in files
 `packages/lib/jpeg/libs/jpeg.so.*check`. For version 0.1-8 of the package,
@@ -136,7 +134,7 @@ configuration contributed by B. W. Lewis, not tested nor maintained by
 rchk author).
 
 One can install automatically into a VirtualBox image (this will now use
-LLVM 4.0 and Ubuntu 16.04.2). The image uses a fixed version of rchk that I
+LLVM 6.0 and Ubuntu 18.04.1). The image uses a fixed version of rchk that I
 tested last, so it will not have the latest fixes on the master branch.
 
 1. Install (manually) [VirtualBox](https://www.virtualbox.org/wiki/Downloads), e.g. `apt-get install virtualbox`
@@ -144,32 +142,49 @@ tested last, so it will not have the latest fixes on the master branch.
 3. Install (automatically) R build dependencies, LLVM, WLLVM and rchk: run `vagrant up` in `image` directory
 
 Instead of virtualbox, one can also use docker, so the tool can run inside a
-container.  To install the tool into a docker container, run `vagrant up
---provider docker`. The automatic installation a fixed version of rchk
-to reduce the risk of breakage, but this also means it does not immediately
-get latest updates from the trunk.
+container.  To install the tool into a docker container, run `vagrant up --provider docker`. 
+
+The automatic installation uses a fixed version of rchk to reduce the risk
+of breakage, but this also means it does not immediately get latest updates
+from the trunk.  Today native installation on Linux (tested on Ubuntu,
+Debian and Fedora) is so easy that it is preferable over the virtual machine
+installation on those systems: one gets the latest fixes, and it is also
+much faster to install and takes much less space.
 
 Note that the automated installation may take long, as it will be
-downloading an Ubuntu 16.04.2 image and installing the R build dependencies
-to a fresh Ubuntu image. Should the installation fail or time out, it can
-be re-started by `vagrant provision`. One can log in to the machine by
+downloading an Ubuntu image and installing the R build dependencies to the
+fresh Ubuntu image.  Should the installation fail or time out, it can be
+re-started by `vagrant provision`.  One can log in to the machine by
 `vagrant ssh` to use the tools after successful install or to fix issues
-should the installation fail. Note that a recent version of vagrant is
-needed, e.g. on Ubuntu 14.04 one can install the `.DEB` package of vagrant
-available from the [vagrant website](https://www.vagrantup.com/downloads.html)
-using `dpkg -i`. At least since Ubuntu 16.04, one can use the distribution
+should the installation fail.  Note that a recent version of vagrant is
+needed.  On Ubuntu 14.04 (as the host OS) one can install the `.DEB` package
+of vagrant available from the [vagrant website](https://www.vagrantup.com/downloads.html) using `dpkg -i`.
+
+At least since Ubuntu 16.04 (as the host OS), one can use the distribution
 version of vagrant.
+
+Please note that since the repository contains scripts to install the VM
+rather than an image of the installed VM, they depend on external sources
+and need to be maintained regularly.  Instead of running the VM always via
+vagrant (which includes attempts to update packages, etc), one can also run
+the installed VM from the VirtualBox interface directly.
 
 ## Installing on older systems
 
-rchk is likely to work on older Linux systems as long as LLVM 4 is used (or
-3.8, 5 or 6).  In particular, I've been using rchk on many earlier versions
-of Ubuntu, so Ubuntu and Debian are likely to be easiest to use.  An older
-version of rchk working with LLVM 3.8 is on the `llvm-38` branch and for
-LLVM 3.6 on the `llvm-36` branch, but those branches are no longer updated
-and their use is not recommended.  LLVM 4 is not that new by now, so it is
-widely supported. Problems on Gentoo have been reported (rchk crashes
-observed and it was not clear why). 
+While rchk used to work on older systems, it is not being backported to them
+and cannot be compiled with older versions of LLVM due to incompatibility of
+the API.  One can get an old version of rchk to work with LLVM 3.6
+(`llvm-36` branch) and with LLVM 3.8 (`llvm-38` branch), but these older
+versions of rchk do not include the latest fixes to work well with the
+latest (development) version of R, and hence they are not recommended for
+use.  It should, however, be possible to install rchk on an older system a
+with working installation of LLVM 4, 5 or 6.  I've been using rchk on many
+earlier versions of Ubuntu, so Ubuntu and Debian are likely to be easiest to
+use.  Also I've used rchk regularly on several versions of Fedora. 
+Particularly on older systems or with older versions of rchk, it is
+recommended to use GCC/g++ instead of LLVM/clang++ to compile rchk as
+crashes have been observed when compiled with clang++.  Problems on Gentoo
+have been reported (rchk crashes observed and it was not clear why).
 
 Further information:
 
