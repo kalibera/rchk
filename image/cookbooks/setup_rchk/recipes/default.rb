@@ -199,7 +199,7 @@ bcheck = "#{rchkdir}/src/bcheck"
 
 git rchkdir do
   repository "git://www.github.com/kalibera/rchk"
-  revision "54f92ed9296375adfeb61f73ea1b5819e3bb281b"
+  revision "ceb8558a1b15f3579cd326fa8fa4dd38730e3324"
   action :export
   user "root"
   not_if {File.exists?("#{rchkdir}/src")}
