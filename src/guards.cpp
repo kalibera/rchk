@@ -848,7 +848,7 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
       if (cs) {
         f = cs.getCalledFunction();
         
-        if (LoadInst::classof(cs.getArgument(0))) {
+        if (cs.arg_size()>0 && LoadInst::classof(cs.getArgument(0))) {
           Value *loadOp = cast<LoadInst>(cs.getArgument(0))->getPointerOperand();
           if (AllocaInst::classof(loadOp)) {
             guard = cast<AllocaInst>(loadOp);
