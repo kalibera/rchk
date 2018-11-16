@@ -19,8 +19,11 @@ required LLVM components.  Only WLLVM scripts (python) are not included in
 the distribution, but are installed using `pip`.  Today, native installation
 can be recommended on Linux, but the automated installation into a VM is
 still the only option on Windows.  The best tested distribution is Ubuntu,
-on which rchk is run regularly, but below are instructions also for Debian
-and Fedora (all tested in clean docker images of these systems).
+on which rchk has been developed and was running regular checks, but well
+tested is also Fedora (with LLVM from binary distribution from the LLVM
+website) which is used for regular checks now; below are instructions for
+Ubuntu, Debian and Fedora (all tested in clean docker images of these
+systems).
 
 ## Ubuntu 18.04 (Bionic Beaver)
 
@@ -172,7 +175,9 @@ Please note that since the repository contains scripts to install the VM
 rather than an image of the installed VM, they depend on external sources
 and need to be maintained regularly.  Instead of running the VM always via
 vagrant (which includes attempts to update packages, etc), one can also run
-the installed VM from the VirtualBox interface directly.
+the installed VM from the VirtualBox interface directly.  Also in principle
+one could build the VM on one host machine (say Linux) and then transfer it
+to other host machines.
 
 ## Installing on older systems
 
@@ -182,15 +187,15 @@ the API.  One can get an old version of rchk to work with LLVM 3.6
 (`llvm-36` branch) and with LLVM 3.8 (`llvm-38` branch), but these older
 versions of rchk do not include the latest fixes to work well with the
 latest (development) version of R, and hence they are not recommended for
-use.  It should, however, be possible to install rchk on an older system a
-with working installation of LLVM 4, 5 or 6.  I've been using rchk on many
+use.  It should, however, be possible to install rchk on an older system
+with a working installation of LLVM 4, 5 or 6.  I've been using rchk on many
 earlier versions of Ubuntu, so Ubuntu and Debian are likely to be easiest to
 use.  Also I've used rchk regularly on several versions of Fedora. 
 Particularly on older systems or with older versions of rchk, it is
 recommended to use GCC/g++ instead of LLVM/clang++ to compile rchk as
-crashes have been observed when compiled with clang++. Earlier version of
-rchk had a bug that incidentally has been causing crashes on Gentoo but not
-other systems.
+crashes have been observed when compiled with clang++.  Earlier version of
+rchk had an access-out-of-bounds bug that incidentally has been causing
+crashes on Gentoo but not other systems.
 
 Further information:
 
