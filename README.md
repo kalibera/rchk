@@ -14,13 +14,13 @@ number of steps.  At that point I've created scripts to automatically
 install into a virtual machine (using chef, initially into virtualbox and
 then also to docker; B.  W.  Lewis provided support for singularity). 
 Today, however, LLVM support in Linux distributions is much better and one
-can use Debian, Ubuntu or Fedora packaging system to install all required
-LLVM components.  Only WLLVM scripts (python) are not included in the
-distribution, but are installed using `pip`.  Today, native installation can
-be recommended on Linux, but the automated installation into a VM is still
-the only option on Windows.  The best tested distribution is Ubuntu, on
-which rchk is run regularly, but below are instructions also for Debian and
-Fedora (all tested in clean docker images of these systems).
+can use at least Debian, Ubuntu or Fedora packaging system to install all
+required LLVM components.  Only WLLVM scripts (python) are not included in
+the distribution, but are installed using `pip`.  Today, native installation
+can be recommended on Linux, but the automated installation into a VM is
+still the only option on Windows.  The best tested distribution is Ubuntu,
+on which rchk is run regularly, but below are instructions also for Debian
+and Fedora (all tested in clean docker images of these systems).
 
 ## Ubuntu 18.04 (Bionic Beaver)
 
@@ -188,8 +188,9 @@ earlier versions of Ubuntu, so Ubuntu and Debian are likely to be easiest to
 use.  Also I've used rchk regularly on several versions of Fedora. 
 Particularly on older systems or with older versions of rchk, it is
 recommended to use GCC/g++ instead of LLVM/clang++ to compile rchk as
-crashes have been observed when compiled with clang++.  Problems on Gentoo
-have been reported (rchk crashes observed and it was not clear why).
+crashes have been observed when compiled with clang++. Earlier version of
+rchk had a bug that incidentally has been causing crashes on Gentoo but not
+other systems.
 
 Further information:
 
