@@ -25,6 +25,28 @@ website) which is used for regular checks now; below are instructions for
 Ubuntu, Debian and Fedora (all tested in clean docker images of these
 systems).
 
+## Debian (Buster)
+
+These instructions are for LLVM 7. Tested March 5, 2019 on a clean install
+of Debian testing (buster/sid).
+
+0. Install build dependencies for R:
+	* enable source repositories in `/etc/apt/sources.list`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base-dev`
+1. Install clang and llvm:
+	* `apt-get install llvm clang clang-7 llvm-7-dev llvm-7 libllvm7 libc\+\+-dev libc\+\+abi-dev`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install python-pip`
+	* `pip install wllvm`
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; env LLVM=/usr/lib/llvm-7 make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	would be `/usr/lib/llvm-7`, WLLVM would be `/usr/local/bin`, RCHK would be the
+	path to rchk directory created by git.
+
 ## Ubuntu 18.04 (Bionic Beaver)
 
 These instructions are for LLVM 4.
@@ -44,7 +66,7 @@ These instructions are for LLVM 4.
 	* `cd rchk/src ; env LLVM=/usr/lib/llvm-4.0 make ; cd ..`
 	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
 	would be `/usr/lib/llvm-4.0`, WLLVM would be `/usr/local/bin`, RCHK would be the
-	path to rchk directory created by git in step (8).
+	path to rchk directory created by git.
 
 To use rchk with LLVM 6, modify the steps above as follows:
 
@@ -73,7 +95,7 @@ These instructions are for LLVM 3.8.
 	* `cd rchk/src ; env LLVM=/usr/lib/llvm-3.8 make ; cd ..`
 	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
 	would be `/usr/lib/llvm-3.8`, WLLVM would be `/usr/local/bin`, RCHK would be the
-	path to rchk directory created by git in step (8).
+	path to rchk directory created by git.
 
 ## Fedora 28
 
@@ -95,7 +117,7 @@ These instructions are for LLVM 6.
 	* `cd rchk/src ;  make ; cd ..`
 	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
 	would be `/usr`, WLLVM would be `/usr/bin`, RCHK would be the
-	path to rchk directory created by git in step (8).
+	path to rchk directory created by git.
 
 
 ## Testing the installation
