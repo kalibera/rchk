@@ -47,6 +47,30 @@ of Debian testing (buster/sid).
 	would be `/usr/lib/llvm-7`, WLLVM would be `/usr/local/bin`, RCHK would be the
 	path to rchk directory created by git.
 
+## Fedora 29
+
+These instructions are for LLVM 7. Tested March 6, 2019 on a clean install
+of Fedora 29.
+
+0. Install development tools and build dependencies for R:
+	* `dnf install dnf-plugins-core hostname`
+	* `dnf install redhat-rpm-config hostname java-1.8.0-openjdk-devel`
+	* `dnf groupinstall "Development Tools"`
+	* `dnf groupinstall "C Development Tools and Libraries"`
+        * `dnf builddep R`
+1. Install clang and llvm:
+	* `dnf install llvm llvm-devel clang`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `dnf install python-pip`
+	* `pip install wllvm`
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `dnf install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ;  make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	would be `/usr`, WLLVM would be `/usr/bin`, RCHK would be the
+	path to rchk directory created by git.
+
 ## Ubuntu 18.04 (Bionic Beaver)
 
 These instructions are for LLVM 4.
