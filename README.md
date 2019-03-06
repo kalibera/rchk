@@ -55,9 +55,9 @@ of Fedora 29.
 0. Install development tools and build dependencies for R:
 	* `dnf install dnf-plugins-core hostname`
 	* `dnf install redhat-rpm-config hostname java-1.8.0-openjdk-devel`
+        * `dnf builddep R`
 	* `dnf groupinstall "Development Tools"`
 	* `dnf groupinstall "C Development Tools and Libraries"`
-        * `dnf builddep R`
 1. Install clang and llvm:
 	* `dnf install llvm llvm-devel clang`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
