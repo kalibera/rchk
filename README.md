@@ -12,18 +12,26 @@ LLVM bitcode for the R executable and shared libraries of packages.  In the
 past, installation of LLVM for this had to be done manually and required a
 number of steps.  At that point I've created scripts to automatically
 install into a virtual machine (using chef, initially into virtualbox and
-then also to docker; B.  W.  Lewis provided support for singularity). 
+then also to docker; B.  W.  Lewis provided support for singularity), more
+information can be found below in this document.
+
 Today, however, LLVM support in Linux distributions is much better and one
 can use at least Debian, Ubuntu or Fedora packaging system to install all
 required LLVM components.  Only WLLVM scripts (python) are not included in
-the distribution, but are installed using `pip`.  Today, native installation
-can be recommended on Linux, but the automated installation into a VM is
-still the only option on Windows.  The best tested distribution is Ubuntu,
-on which rchk has been developed and was running regular checks, but well
-tested is also Fedora (with LLVM from binary distribution from the LLVM
-website) which is used for regular checks now; below are instructions for
-Ubuntu, Debian and Fedora (all tested in clean docker images of these
-systems).
+the distributions, but are installed using `pip`.  Today, native
+installation can be recommended on Linux, but the automated installation
+into a VM is still the only option on Windows.  The best tested distribution
+is Ubuntu, on which rchk has been developed and was running regular checks
+in the past, and well tested is also Fedora which is used for regular checks
+now; below are instructions for Ubuntu, Debian and Fedora (all tested in
+clean docker images of these systems). I think it is best to install `rchk`
+natively as one can use their own development environment, etc. One can also
+install `rchk` and its dependencies without administrator rights, I use LLVM
+binaries provided at the LLVM website for that. A docker image with `rchk`
+is also provided by third parties on R-hub,
+[source](https://github.com/r-hub/rhub-linux-builders/tree/master/ubuntu-rchk)
+and
+[image](https://cloud.docker.com/u/rhub/repository/docker/rhub/ubuntu-rchk).
 
 ## Debian (Buster)
 
@@ -47,10 +55,13 @@ of Debian testing (buster/sid).
 	would be `/usr/lib/llvm-7`, WLLVM would be `/usr/local/bin`, RCHK would be the
 	path to rchk directory created by git.
 
-## Fedora 29
+## Fedora 29 and 30
 
 These instructions are for LLVM 7. Tested March 6, 2019 on a clean install
-of Fedora 29.
+of Fedora 29 and March 7 on Fedora 30. Note, however, there may be error
+messages like `objcopy: xxx: failed to find link section for section` (the
+problem has been discussed at WLLVM website a bug filed against binutils).
+It seems these messages can be ignored.
 
 0. Install development tools and build dependencies for R:
 	* `dnf install dnf-plugins-core hostname`
