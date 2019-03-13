@@ -20,7 +20,7 @@ and anyone who develops in C should be easily able to follow the
 installation on the distributions with explicitly given instructions (recent
 Ubuntu, Debian, Fedora).  See [Installation](doc/INSTALLATION.md).
 
-## Testing the installation - checking the first package
+## Checking the first package
 
 For this that one also needs to install `subversion`, `rsync` (`apt-get
 install subversion rsync`, but already available in the automated install). 
