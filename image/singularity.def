@@ -1,5 +1,5 @@
 BootStrap: debootstrap
-OSVersion: zesty
+OSVersion: bionic
 MirrorURL: http://archive.ubuntu.com/ubuntu/
 
 %post
@@ -12,29 +12,26 @@ MirrorURL: http://archive.ubuntu.com/ubuntu/
   apt-get install -y libopenblas-dev libcurl4-openssl-dev libopenmpi-dev openmpi-bin openmpi-common openmpi-doc openssh-client openssh-server libssh-dev wget vim git cmake curl wget python autoconf bzip2 libtool libtool-bin python-pip python-dev locales
   apt-get build-dep -y r-base-core
   # LLVM
-  apt-get install -y clang-4.0 llvm-4.0-dev clang++-4.0 clang llvm-dev libc++-dev libc++abi-dev
+  apt-get install -y clang-6.0 llvm-6.0-dev clang++-6.0 clang llvm-dev libc++-dev libc++abi-dev
   apt-get clean
   locale-gen en_US.UTF-8
-  pip install --upgrade pip
 
-  # wpllvm
-  cd /opt
-  git clone "git://www.github.com/travitch/whole-program-llvm"
-  pip install whole-program-llvm/   
+  # wllvm
+  pip install wllvm
 
   # rchk
   cd /opt
   git clone git://www.github.com/kalibera/rchk &&  \
     cd rchk && \
     cd src && \
-    make -j `cat /proc/cpuinfo | grep "core id" | wc -l` LLVM=/usr CXX=g++
+    make -j `cat /proc/cpuinfo | grep "core id" | wc -l` LLVM=/usr/lib/llvm-6.0 CXX=g++
 
   # download, build r-devel
   cd /opt
   wget -O - -q https://cran.r-project.org/src/base-prerelease/R-devel.tar.gz | tar zxvf -
   cd /opt/R-devel
   export WLLVM=/usr/local/bin
-  export LLVM=/usr
+  export LLVM=/usr/lib/llvm-6.0
   export RCHK=/opt/rchk
   export CPICFLAGS=-fPIC
   export FPICFLAGS=-fPIC
@@ -110,7 +107,7 @@ EOF
     echo "Output will be in ./lib and ./build subdirectories."
     echo
   fi
-  export LLVM=/usr
+  export LLVM=/usr/lib/llvm-6.0
   export WLLVM=/usr/local/bin
   export RCHK=/opt/rchk
   export CFLAGS="-Wall -g -O0 -fpic"  

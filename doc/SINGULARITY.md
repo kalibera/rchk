@@ -1,22 +1,18 @@
+The singularity support and this text is originally by B. W. Lewis.
+
 The rchk project, https://github.com/kalibera/rchk is an important tool for
 detecting memory protection errors and related subtle bugs in R packages that
 contain compiled code and the R source code itself.
 
 The project uses the LLVM compiler toolchain with the whole program LLVM
-extensions. As noted in the rchk project README, setting up the toolchain is a
-complicated process requiring careful attention to a very specific set of
-software dependencies.
-
-The rchk project includes recipes for Docker and Vagrant systems to help
-automate the set up process to build either containers or virtual machines that
-can then be used to check R packages.
+extensions.  The rchk project includes recipes for Docker and Vagrant
+systems to help automate the set up process to build either containers or
+virtual machines that can then be used to check R packages.
 
 This note and the corresponding `singularity.def` file present an alternative
 simple container recipe using the Singularity container system
 (http://singularity.lbl.gov/). Singularity is a lightweight, serverless (that
 is, no daemon process), container system for GNU Linux popular in HPC settings.
-It's a very lightweight an minimalist containerization framework that we feel
-is ideal for projects like rchk.
 
 This note outlines system requirements and installation of Singularity,
 building a container for rchk, and testing R packages using the container.
@@ -27,10 +23,12 @@ building a container for rchk, and testing R packages using the container.
 Singularity requires a GNU Linux operating system. Most modern GNU Linux
 systems include Linux kernels that will work.
 
-See http://singularity.lbl.gov/docs-installation for installation examples
-specific to Ubuntu and CentOS/RHEL operating systems. Alternatively,
-you may install Singularity directly from its source code in GitHub with
-(requires the `git` command line client, GNU make and a C compiler:
+On Ubuntu/Debian, one can install using `apt-get install
+singularity-container`.  See http://singularity.lbl.gov/docs-installation
+for installation examples and instructions for other Linux systems. 
+Alternatively, you may install Singularity directly from its source code in
+GitHub with (requires the `git` command line client, GNU make and a C
+compiler:
 
 ```
 git clone https://github.com/singularityware/singularity.git
@@ -46,10 +44,10 @@ Singularity is simply a program. No daemon process/server is needed.
 
 ## Building an rchk container image
 
-The `singularity.def` file includes a singularity definition file for building
-a singularity container image based on Ubuntu 17.04 and the LLVM-4.0 and
-corresponding WLLVM toolchains.  Singularity containers may be built as single
-files or, for experimentation, sandbox directories.
+The `singularity.def` file includes a singularity definition file for
+building a singularity container image based on Ubuntu 18.04 and the
+LLVM-6.0.  Singularity containers may be built as single files or, for
+experimentation, sandbox directories.
 
 Note! If you're running on Red Hat or CentOS, you'll need the `debootstrap`
 program: `sudo yum install debootstrap`. See the Singularity documentation for

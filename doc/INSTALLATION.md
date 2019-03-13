@@ -1,4 +1,4 @@
-# Automated installation
+# Automated installation (Docker/Virtualbox)
 
 One can use a pre-installed virtual machine with rchk (or, more precisely,
 use an automated script that installs such machine without user
@@ -6,7 +6,8 @@ intervention, into virtualbox or docker).  Please note that this is
 conceptually the same thing as downloading the binary image from docker
 hub/virtualbox repository, it is just independent on such repositories and
 takes slightly longer (within 15 minutes on my laptop) to automatically
-install.
+install. The installation will create a virtual machine into which one can
+log in and perform the checks, all state is kept inside the machine.
 
 Run `vagrant up` in `image` directory to use VirtualBox or `vagrant up
 --provider docker` to use Docker.
@@ -24,12 +25,33 @@ If `vagrant up` fails or times out due to network connectivity issues,
 `/vagrant` inside the virtual installation, e.g.  to copy package tarballs
 in and out.
 
-Also, one can install into a singularity container
-([instructions](../image/README_SINGULARITY.md) and configuration contributed
-by B.  W.  Lewis, not tested nor maintained by rchk author).  A docker
-image, not exactly the same as provided here, is also available from third
-parties on R-hub
-([source](https://github.com/r-hub/rhub-linux-builders/tree/master/ubuntu-rchk)).
+# Automated installation (Singularity)
+
+On Linux, one can install also into a singularity container
+([instructions](README_SINGULARITY.md) and configuration contributed by B. 
+W.  Lewis, with some maintenance/updates from me).  This setup is aimed
+directly at checking of packages, one normally would not log into the
+virtual machine, but the machine keeps some state on the host system
+(package library, temporary build files, and rchk reports).  For just
+checking of packages on Linux, this is easier to use than the Docker/Virtualbox
+one. Even the text may seem long, the installation can be as simple as:
+
+```
+apt-get install singularity-container debootstrap
+singularity build rchk.img singularity.def
+```
+
+and the checking just (package memisc).
+
+```
+/usr/bin/singularity run rchk.img memisc
+```
+
+# Alternative automated installations
+
+An alternative docker image is also available from third parties on R-hub
+(`rhub/ubuntu-rchk`,
+[source](https://github.com/r-hub/rhub-linux-builders/tree/master/ubuntu-rchk)).
 
 # Native installation on Linux
 
