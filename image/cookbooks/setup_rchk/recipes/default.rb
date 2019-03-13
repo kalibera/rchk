@@ -42,7 +42,7 @@ execute "initial apt-get update" do
 end
 
 execute "enable source repositories" do
-  command "sed -i 's/^# deb-src/deb-src/g' /etc/apt/sources.list"
+  command "sed -i 's/^# deb-src/deb-src/g' /etc/apt/sources.list && apt-get update"
   user "root"
   action :run
   not_if 'grep "^deb-src" /etc/apt/sources.list'
