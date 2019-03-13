@@ -1,16 +1,20 @@
 FROM ubuntu:18.04
-ENV DEBIAN_FRONTEND noninteractive
+ARG DEBIAN_FRONTEND=noninteractive
 
 # ssh server and other tools
-RUN apt-get update && apt-get install -y apt-utils
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y \
-  openssh-server \
-  openssh-client \
-  lsb-release \
-  sudo \
-  git \
-  language-pack-en-base \
-  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+  apt-get install -y apt-utils && \
+  rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y \
+      openssh-server \
+      openssh-client \
+      lsb-release \
+      sudo \
+      git \
+      language-pack-en-base \
+      tzdata && \
+  rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_US.UTF-8
 ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
@@ -36,7 +40,7 @@ RUN chown -R vagrant /home/vagrant/.ssh && \
 
 # preconfigure tzdata before switching to teletype frontend
 
-RUN echo "Europe/Prague" > /etc/timezone &&
+RUN echo "Europe/Prague" > /etc/timezone && \
   dpkg-reconfigure -f noninteractive tzdata
 
 ENV DEBIAN_FRONTEND teletype
