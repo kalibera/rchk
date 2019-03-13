@@ -7,18 +7,25 @@ whole-program static analysis on LLVM bitcode and run on Linux.  About
 rchk is now regularly used to check [CRAN
 packages](https://github.com/kalibera/cran-checks/tree/master/rchk).
 
-The tools can be installed automatically into a Virtualbox or Docker
-container.  The container is based on Linux/Ubuntu, the Virtualbox seems
-more natural for these tools and works on Linux, Windows, MacOS and probably
-other systems.  Docker installation only works on Linux.  The installation
-is fully automated and requires good network connection - the containers are
-large (~2-3G), because one needs toolchains and dependencies to build R and
-packages from source.  See [Installation](doc/INSTALLATION.md).
+The tools can be installed automatically into a Singularity container and
+invoke that container from command line to check a single package.  This is
+the easiest way to checking a package (Singularity requires Linux, in
+principle it is very similar to Docker).  See [Singularity
+Instructions](doc/SINGULARITY.md)], [Installation](doc/INSTALLATION.md).
+I've tested on Ubuntu 18.04 as host system.
 
-On Linux, it is best to install `rchk` natively.  The installation is simple
-and anyone who develops in C should be easily able to follow the
-installation on the distributions with explicitly given instructions (recent
-Ubuntu, Debian, Fedora).  See [Installation](doc/INSTALLATION.md).
+The tools can also be installed automatically into a Virtualbox or Docker
+container and log into that virtual machine and use it from command line
+interactively to check packages, check R itself, etc.  Virtualbox
+installation is possible on Windows, macOS and Linux; Docker installation
+only on Linux.  See [Installation](doc/INSTALLATION.md) and the steps below
+on checking the first package.
+
+On Linux, one can also install `rchk` natively, which has been tested on
+recent Ubuntu, Debian and Fedora distributions.  This is the fastest and
+most flexible way to use `rchk` for users working on Linux.  See
+[Installation](doc/INSTALLATION.md) and the steps below on checking the
+first package.
 
 ## Checking the first package
 
