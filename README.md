@@ -9,9 +9,9 @@ packages](https://github.com/kalibera/cran-checks/tree/master/rchk).
 
 The tools can be installed automatically into a Singularity container and
 invoke that container from command line to check a single package.  This is
-the easiest way to checking a package (Singularity requires Linux, in
-principle it is very similar to Docker).  See [Singularity
-Instructions](doc/SINGULARITY.md)], [Installation](doc/INSTALLATION.md).
+the easiest way to checking a package (Singularity requires Linux, it has
+similar features to Docker).  See [Singularity
+Instructions](doc/SINGULARITY.md), [Installation](doc/INSTALLATION.md). 
 I've tested on Ubuntu 18.04 as host system.
 
 The tools can also be installed automatically into a Virtualbox or Docker
