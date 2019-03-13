@@ -25,7 +25,7 @@ If `vagrant up` fails or times out due to network connectivity issues,
 in and out.
 
 Also, one can install into a singularity container
-([instructions](image/README_SINGULARITY.md) and configuration contributed
+([instructions](../image/README_SINGULARITY.md) and configuration contributed
 by B.  W.  Lewis, not tested nor maintained by rchk author).  A docker
 image, not exactly the same as provided here, is also available from third
 parties on R-hub
