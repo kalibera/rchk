@@ -20,7 +20,7 @@ docker.io`, add current user to the `docker` group).
 If `vagrant up` fails or times out due to network connectivity issues,
 `vagrant provision` restarts it.  To log into the installed machined, use
 `vagrant ssh` and check the first R package using instructions provided
-[here](README.md).  One can access the host file system in directory
+[here](../README.md).  One can access the host file system in directory
 `/vagrant` inside the virtual installation, e.g.  to copy package tarballs
 in and out.
 
@@ -34,7 +34,7 @@ parties on R-hub
 # Native installation on Linux
 
 Once the installation is finished, check the first R package using
-instructions provided [here](README.md).
+instructions provided [here](../README.md).
 
 ## Debian (Buster)
 
