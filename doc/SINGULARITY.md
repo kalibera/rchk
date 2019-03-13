@@ -11,7 +11,7 @@ virtual machines that can then be used to check R packages.
 
 This note and the corresponding `singularity.def` file present an alternative
 simple container recipe using the Singularity container system
-(http://singularity.lbl.gov/). Singularity is a lightweight, serverless (that
+(https://www.sylabs.io/docs/). Singularity is a lightweight, serverless (that
 is, no daemon process), container system for GNU Linux popular in HPC settings.
 
 This note outlines system requirements and installation of Singularity,
@@ -24,7 +24,7 @@ Singularity requires a GNU Linux operating system. Most modern GNU Linux
 systems include Linux kernels that will work.
 
 On Ubuntu/Debian, one can install using `apt-get install
-singularity-container`.  See http://singularity.lbl.gov/docs-installation
+singularity-container`.  See https://www.sylabs.io/guides/3.0/user-guide/installation.html
 for installation examples and instructions for other Linux systems. 
 Alternatively, you may install Singularity directly from its source code in
 GitHub with (requires the `git` command line client, GNU make and a C
