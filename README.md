@@ -7,7 +7,7 @@ whole-program static analysis on LLVM bitcode and run on Linux.  About
 rchk is now regularly used to check [CRAN
 packages](https://github.com/kalibera/cran-checks/tree/master/rchk).
 
-The tools can be used from a pre-built Singularity container on Linux
+The tools can be used from a pre-built singularity container on Linux
 systems. To check R package `jpeg`, one needs to do
 
 ```
@@ -21,15 +21,16 @@ and `lib/jpeg/libs/jpeg.so.maacheck`). I've tested this on Ubuntu 18.04
 [Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
 and on Debian 9.8 (singularity 2.6 from stretch-backports).
 
-One can also build the Singularity container from source, this is also fully
+One can also build the singularity container from source, this is also fully
 automated, it takes longer than downloading the pre-built container, but it
 does not depend on external binaries and in Ubuntu 18.04 one can use the old
 `singularity-container` package from the distribution.  On Debian 9.8, one
 needs to use debootstrap from stretch-backports.
 
 See [Singularity Instructions](doc/SINGULARITY.md), [Installation](doc/INSTALLATION.md)
-for more details how to use the containers. An initial version of the
-Singularity container has been contributed by B. W. Lewis.
+for more details how to use the container and how to build it.  
+An initial version of the singularity container has been contributed by B. 
+W.  Lewis.
 
 The tools can also be installed automatically into a Virtualbox or Docker
 container and log into that virtual machine and use it from command line

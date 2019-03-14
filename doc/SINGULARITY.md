@@ -1,6 +1,7 @@
 The original version of the Singularity support and of this note has been
 contributed by B. W. Lewis.
 
+<!--
 The rchk project, https://github.com/kalibera/rchk is an important tool for
 detecting memory protection errors and related subtle bugs in R packages that
 contain compiled code and the R source code itself.
@@ -14,34 +15,22 @@ This note and the corresponding `singularity.def` file present an alternative
 simple container recipe using the Singularity container system
 (https://www.sylabs.io/docs/). Singularity is a lightweight, serverless (that
 is, no daemon process), container system for GNU Linux popular in HPC settings.
+-->
 
-This note outlines system requirements and installation of Singularity,
+This note outlines system requirements and installation of singularity,
 building a container for rchk, and testing R packages using the container.
-
 
 ## Installing singularity
 
 Singularity requires a GNU Linux operating system. Most modern GNU Linux
-systems include Linux kernels that will work.
+systems include Linux kernels that will work. 
 
-On Ubuntu/Debian, one can install using `apt-get install
-singularity-container`.  See https://www.sylabs.io/guides/3.0/user-guide/installation.html
-for installation examples and instructions for other Linux systems. 
-Alternatively, you may install Singularity directly from its source code in
-GitHub with (requires the `git` command line client, GNU make and a C
-compiler:
+On Ubuntu/Debian, one can install using `apt-get install singularity-container`, but 
+a newer version may be available from
+[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container).
 
-```
-git clone https://github.com/singularityware/singularity.git
-cd singularity
-./autogen.sh
-./configure --prefix=/usr/local
-make
-sudo make install
-``` 
-
-Singularity is simply a program. No daemon process/server is needed.
-
+More information can be found at
+https://www.sylabs.io/guides/3.0/user-guide/installation.html.
 
 ## Building an rchk container image
 
@@ -51,7 +40,7 @@ LLVM-6.0.  Singularity containers may be built as single files or, for
 experimentation, sandbox directories.
 
 Note! If you're running on Red Hat or CentOS, you'll need the `debootstrap`
-program: `sudo yum install debootstrap`. See the Singularity documentation for
+program: `sudo yum install debootstrap`. See the singularity documentation for
 more information. You need to use a recent version of `debootstrap` that
 supports Ubuntu 18.04 (bionic). On Debian Stretch as host system, on needs
 to install `debootstrap` from backports (1.0.110 works fine, 1.0.89 does
@@ -61,23 +50,25 @@ Build the rchk singularity image with:
 ```
 sudo singularity build rchk.img singularity.def       # makes rchk.img
 ```
-See the Singularity documentation and the example below
-for alternative output formats (like
-a sandboxed directory that you can investigate easily).
 
+See the singularity documentation and the example below for alternative
+output formats (like a sandboxed directory that you can investigate easily).
+
+<!--
 The container build process concludes with a usage message, or an error if
 something goes wrong.
+-->
 
 ## Checking a package with the rchk.img container
 
 We've set the container up to make it easy to check R packages installed from
 CRAN or from a local source file. The packages are built and installed into a
 directory determined by the `PKG_ROOT` shell variable. If that variable is not
-set then the current working directory is used for output.  Output are placed
+set then the current working directory is used for output.  Outputs are placed
 in ${PKG_ROOT}/build and ${PKG_ROOT}/lib directories, which are created if they
 do not exist.
 
-Depending on the configuration of Singularity, it may not be possible to
+Depending on the configuration of singularity, it may not be possible to
 save the outputs in the current directory for security reasons (it worked
 for me with the default configuration on Ubuntu 18.04 but not Debian 9.7;
 setting PKG_ROOT=/tmp worked in both cases).
@@ -102,12 +93,13 @@ cat ./lib/curl/libs/curl.so.bcheck
 
 ## Analyzed 86 functions, traversed 864 states.
 ```
+This output means that `rchk/bcheck` found no problems.
 
 The following example checks a local source package, placing the rchk
 output in `/tmp`:
 ```
 wget https://cran.r-project.org/src/contrib/irlba_2.3.1.tar.gz
-PKG_ROOT=/tmp singularity run rchk.img   irlba   $(pwd)/irlba_2.3.1.tar.gz
+PKG_ROOT=/tmp singularity run rchk.img irlba $(pwd)/irlba_2.3.1.tar.gz
 
 cat /tmp/lib/irlba/libs/irlba.so.bcheck 
 
