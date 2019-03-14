@@ -66,6 +66,7 @@ the tarball.
 
 Further information:
 
+* [Installation](doc/INSTALLATION.md) - installation instructions.
 * [User documentation](doc/USAGE.md) - how to use the tools and what they check.
 * [Internals](doc/INTERNALS.md) - how the tools work internally.
 * [Building](doc/BUILDING.md) - how to get the necessary bitcode files for R/packages; this is now encapsulated in scripts, but the background is here
