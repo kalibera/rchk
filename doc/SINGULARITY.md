@@ -34,10 +34,10 @@ https://www.sylabs.io/guides/3.0/user-guide/installation.html.
 
 ## Building an rchk container image
 
-The `singularity.def` file includes a singularity definition file for
-building a singularity container image based on Ubuntu 18.04 and the
-LLVM-6.0.  Singularity containers may be built as single files or, for
-experimentation, sandbox directories.
+The `singularity.def` file in directory `image` includes a singularity
+definition file for building a singularity container image based on Ubuntu
+18.04 and the LLVM-6.0.  Singularity containers may be built as single files
+or, for experimentation, sandbox directories.
 
 Note! If you're running on Red Hat or CentOS, you'll need the `debootstrap`
 program: `sudo yum install debootstrap`. See the singularity documentation for
@@ -46,7 +46,7 @@ supports Ubuntu 18.04 (bionic). On Debian Stretch as host system, on needs
 to install `debootstrap` from backports (1.0.110 works fine, 1.0.89 does
 not).
 
-Build the rchk singularity image with:
+Build the rchk singularity image with (run in directory `image`):
 ```
 sudo singularity build rchk.img singularity.def       # makes rchk.img
 ```
