@@ -28,7 +28,7 @@ in and out.
 # Automated installation (Singularity)
 
 On Linux, one can install also into a singularity container
-([instructions](README_SINGULARITY.md) and configuration contributed by B. 
+([instructions](SINGULARITY.md) and configuration contributed by B. 
 W.  Lewis, with some maintenance/updates from me).  This setup is aimed
 directly at checking of packages, one normally would not log into the
 virtual machine, but the machine keeps some state on the host system
