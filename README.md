@@ -7,12 +7,29 @@ whole-program static analysis on LLVM bitcode and run on Linux.  About
 rchk is now regularly used to check [CRAN
 packages](https://github.com/kalibera/cran-checks/tree/master/rchk).
 
-The tools can be installed automatically into a Singularity container and
-invoke that container from command line to check a single package.  This is
-the easiest way to checking a package (Singularity requires Linux, it has
-similar features to Docker).  See [Singularity
-Instructions](doc/SINGULARITY.md), [Installation](doc/INSTALLATION.md). 
-I've tested on Ubuntu 18.04 as host system.
+The tools can be used from a pre-built Singularity container on Linux
+systems. To check R package `jpeg`, one needs to do
+
+```
+singularity pull shub://kalibera/rchk:def
+singularity run kalibera-rchk-master-def.simg jpeg
+```
+
+The results will appear in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck`
+and `lib/jpeg/libs/jpeg.so.maacheck`). I've tested this on Ubuntu 18.04
+(singularity 2.6 from 
+[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
+and on Debian 9.8 (singularity 2.6 from stretch-backports).
+
+One can also build the Singularity container from source, this is also fully
+automated, it takes longer than downloading the pre-built container, but it
+does not depend on external binaries and in Ubuntu 18.04 one can use the old
+`singularity-container` package from the distribution.  On Debian 9.8, one
+needs to use debootstrap from stretch-backports.
+
+See [Singularity Instructions](doc/SINGULARITY.md), [Installation](doc/INSTALLATION.md)
+for more details how to use the containers. An initial version of the
+Singularity container has been contributed by B. W. Lewis.
 
 The tools can also be installed automatically into a Virtualbox or Docker
 container and log into that virtual machine and use it from command line
@@ -27,7 +44,7 @@ most flexible way to use `rchk` for users working on Linux.  See
 [Installation](doc/INSTALLATION.md) and the steps below on checking the
 first package.
 
-## Checking the first package
+## Checking the first package (not for Singularity containers)
 
 For this that one also needs to install `subversion`, `rsync` (`apt-get
 install subversion rsync`, but already available in the automated install). 
@@ -70,3 +87,5 @@ Further information:
 * [User documentation](doc/USAGE.md) - how to use the tools and what they check.
 * [Internals](doc/INTERNALS.md) - how the tools work internally.
 * [Building](doc/BUILDING.md) - how to get the necessary bitcode files for R/packages; this is now encapsulated in scripts, but the background is here
+
+[![https://www.singularity-hub.org/static/img/hosted-singularity--hub-%23e32929.svg](https://www.singularity-hub.org/static/img/hosted-singularity--hub-%23e32929.svg)](https://singularity-hub.org/collections/2534)

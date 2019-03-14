@@ -34,7 +34,8 @@ directly at checking of packages, one normally would not log into the
 virtual machine, but the machine keeps some state on the host system
 (package library, temporary build files, and rchk reports).  For just
 checking of packages on Linux, this is easier to use than the Docker/Virtualbox
-one. Even the text may seem long, the installation can be as simple as:
+one. Even the text may seem long, the installation can be as simple as
+(running on Ubuntu 18.04 as host system):
 
 ```
 apt-get install singularity-container debootstrap
@@ -46,6 +47,8 @@ and the checking just (package memisc).
 ```
 /usr/bin/singularity run rchk.img memisc
 ```
+
+and the results appear under subdirectory "lib" of the current directory.
 
 # Alternative automated installations
 

@@ -1,4 +1,5 @@
-The singularity support and this text is originally by B. W. Lewis.
+The original version of the Singularity support and of this note has been
+contributed by B. W. Lewis.
 
 The rchk project, https://github.com/kalibera/rchk is an important tool for
 detecting memory protection errors and related subtle bugs in R packages that
@@ -51,7 +52,10 @@ experimentation, sandbox directories.
 
 Note! If you're running on Red Hat or CentOS, you'll need the `debootstrap`
 program: `sudo yum install debootstrap`. See the Singularity documentation for
-more information.
+more information. You need to use a recent version of `debootstrap` that
+supports Ubuntu 18.04 (bionic). On Debian Stretch as host system, on needs
+to install `debootstrap` from backports (1.0.110 works fine, 1.0.89 does
+not).
 
 Build the rchk singularity image with:
 ```
@@ -71,8 +75,15 @@ CRAN or from a local source file. The packages are built and installed into a
 directory determined by the `PKG_ROOT` shell variable. If that variable is not
 set then the current working directory is used for output.  Output are placed
 in ${PKG_ROOT}/build and ${PKG_ROOT}/lib directories, which are created if they
-do not exist. The container uses the http://cran.ma.imperial.ac.uk repository
-for network-installed packages.
+do not exist.
+
+Depending on the configuration of Singularity, it may not be possible to
+save the outputs in the current directory for security reasons (it worked
+for me with the default configuration on Ubuntu 18.04 but not Debian 9.7;
+setting PKG_ROOT=/tmp worked in both cases).
+
+The container uses the http://cran.ma.imperial.ac.uk repository for
+network-installed packages.
 
 Generic container invocation is:
 ```
@@ -115,7 +126,7 @@ sandbox directory as needed.
 The following example builds a sandboxed container directory. We then try to
 install the Rmpfr library for multi-precision arithmetic, which fails due to
 unsatisifed library dependencies in the container image. The example proceeds
-to manually install the required dependencies and then chkecks the package.
+to manually install the required dependencies and then checks the package.
 
 
 ### Step 1. Build the sandboxed container
