@@ -42,13 +42,15 @@ apt-get install singularity-container debootstrap
 singularity build rchk.img singularity.def
 ```
 
-and the checking just (package memisc).
+and the checking just (package memisc from CRAN).
 
 ```
 /usr/bin/singularity run rchk.img memisc
 ```
 
-and the results appear under subdirectory "lib" of the current directory.
+and the results appear under subdirectory "lib" of the current directory. 
+Full path to the package tarball can be given as 4th argument to check a
+version not on CRAN.
 
 # Alternative automated installations
 

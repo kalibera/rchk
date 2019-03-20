@@ -16,9 +16,10 @@ singularity run kalibera-rchk-master-def.simg jpeg
 ```
 
 The results will appear in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck`
-and `lib/jpeg/libs/jpeg.so.maacheck`). I've tested this on Ubuntu 18.04
-(singularity 2.6 from 
-[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
+and `lib/jpeg/libs/jpeg.so.maacheck`).  Full path to the package tarball can
+be given as 4th argument to check a version not on CRAN.  I've tested this
+on Ubuntu 18.04 (singularity 2.6 from [Neuro
+Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
 and on Debian 9.8 (singularity 2.6 from stretch-backports).
 
 One can also build the singularity container from source, this is also fully
