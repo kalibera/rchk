@@ -62,7 +62,9 @@ EOF
   cat << EOF
 
 Usage:
-   singularity run <rchk_image> <package_name> [package source path]
+   singularity run <rchk_image> <package_tarball_full_path>
+   singularity run <rchk_image> <package_name>
+   singularity run <rchk_image> R [arguments]
 
 Local package installation is performed when a package source path is provided.
 Otherwise, a default CRAN repository is used.  Output are placed in
@@ -135,11 +137,13 @@ EOF
   export LD="clang++ -stdlib=libc++"  
   mkdir -p "${PKG_BUILD_DIR}"
   mkdir -p "${R_LIBS}"
-  cd /opt/R-devel
   if test "$PKG_NAME" = R ; then
-    ./bin/R
-    exit 0
+    cd /tmp
+    shift
+    /opt/R-devel/bin/R $*
+    exit
   fi
+  cd /opt/R-devel
   if test "$REPO" = NULL ; then
     if [ ! -r "$PKG_PATH" ] ; then
       echo
