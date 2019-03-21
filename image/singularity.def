@@ -89,22 +89,35 @@ EOF
 %runscript
   if test -z "$1"; then
     echo
-    echo "Usage: singularity run <rchk_image> <package_name> [package path]"
+    echo "Usage: singularity run <rchk_image> <package_tarball_full_path>"
+    echo "       singularity run <rchk_image> <package_name>"
+    echo "       singularity run <rchk_image> R"
+    # for compatibility with older version, also <package_name> <package_tarball_full_path>
     echo
     exit 1
   fi
-  REPO="'http://cran.ma.imperial.ac.uk'"
-  PKG_NAME="$1"
-  PKG_PATH="$1"
   if test -n "$2"; then
     REPO="NULL"
+    PKG_NAME="$1"
     PKG_PATH="$2"
+  else
+    REPO="'https://cloud.r-project.org'"
+    PKG_PATH="$1"
+    if echo "$1" | grep -q "tar\.gz$" ; then
+      REPO="NULL"
+      PKG_NAME=`echo $1 | sed -e 's/.*\///g' | sed -e 's/\(.*\)_.*/\1/g'`
+    else
+      PKG_NAME="$1"
+    fi
   fi
   if test -z "$PKG_ROOT"; then
     export PKG_ROOT=`pwd`
     echo
     echo "Note: Setting PKG_ROOT variable to the current directory."
     echo "Output will be in ./lib and ./build subdirectories."
+    echo "If it is not, maybe your local singularity configuration does"
+    echo "not allow singularity container to access your current directory;"
+    echo "it may help to try with PKG_ROOT=/tmp or check the configurarion."
     echo
   fi
   export LLVM=/usr/lib/llvm-6.0
@@ -123,7 +136,32 @@ EOF
   mkdir -p "${PKG_BUILD_DIR}"
   mkdir -p "${R_LIBS}"
   cd /opt/R-devel
+  if test "$PKG_NAME" = R ; then
+    ./bin/R
+    exit 0
+  fi
+  if test "$REPO" = NULL ; then
+    if [ ! -r "$PKG_PATH" ] ; then
+      echo
+      echo "The container cannot access package tarball $PKG_PATH."
+      echo "Please specify it as full path."
+      echo
+      exit 2
+    fi
+  fi
   echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
-  echo "install.packages(\"$PKG_PATH\", repos=$REPO)" |  ./bin/R --slave
+  echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --slave
+  if test "$REPO" = NULL ; then
+    echo "q(status=\"$PKG_NAME\" %in% installed.packages())" | ./bin/R --slave
+    if test $? -ne 1 ; then
+        echo
+        echo "Re-trying with installation from CRAN first."
+        echo
+        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")"
+        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")" | ./bin/R --slave
+        echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
+        echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --slave
+    fi
+  fi
   /opt/rchk/scripts/check_package.sh "$PKG_NAME"
   exit
