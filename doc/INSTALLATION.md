@@ -49,8 +49,8 @@ and the checking just (package memisc from CRAN).
 ```
 
 and the results appear under subdirectory "lib" of the current directory. 
-Full path to the package tarball can be given as 4th argument to check a
-version not on CRAN.
+Full path to the package tarball can be given instead as argument to check a
+testing version of the package.
 
 # Alternative automated installations
 

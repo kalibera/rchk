@@ -8,18 +8,19 @@ rchk is now regularly used to check [CRAN
 packages](https://github.com/kalibera/cran-checks/tree/master/rchk).
 
 The tools can be used from a pre-built singularity container on Linux
-systems. To check R package `jpeg`, one needs to do
+systems. To check R package `jpeg` from CRAN, one needs to do
 
 ```
 singularity pull shub://kalibera/rchk:def
 singularity run kalibera-rchk-master-def.simg jpeg
 ```
 
-The results will appear in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck`
-and `lib/jpeg/libs/jpeg.so.maacheck`).  Full path to the package tarball can
-be given as 4th argument to check a version not on CRAN.  I've tested this
-on Ubuntu 18.04 (singularity 2.6 from [Neuro
-Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
+Note that the default image file name may be different, based on the version
+of singularity used.  The results will appear in `lib` directory
+(`lib/jpeg/libs/jpeg.so.bcheck` and `lib/jpeg/libs/jpeg.so.maacheck`).  Full
+path to the package tarball can be given instead to check a version of the
+package not yet on CRAN.  I've tested this on Ubuntu 18.04 (singularity 2.6
+from [Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
 and on Debian 9.8 (singularity 2.6 from stretch-backports).
 
 One can also build the singularity container from source, this is also fully

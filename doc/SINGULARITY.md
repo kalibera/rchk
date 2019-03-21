@@ -42,7 +42,7 @@ or, for experimentation, sandbox directories.
 Note! If you're running on Red Hat or CentOS, you'll need the `debootstrap`
 program: `sudo yum install debootstrap`. See the singularity documentation for
 more information. You need to use a recent version of `debootstrap` that
-supports Ubuntu 18.04 (bionic). On Debian Stretch as host system, on needs
+supports Ubuntu 18.04 (bionic). On Debian Stretch as host system, one needs
 to install `debootstrap` from backports (1.0.110 works fine, 1.0.89 does
 not).
 
@@ -73,10 +73,18 @@ save the outputs in the current directory for security reasons (it worked
 for me with the default configuration on Ubuntu 18.04 but not Debian 9.7;
 setting PKG_ROOT=/tmp worked in both cases).
 
-The container uses the http://cran.ma.imperial.ac.uk repository for
-network-installed packages.
-
 Generic container invocation is:
+```
+singularity run <container image file> <package name>
+singularity run <container image file> <full path to package tarball>
+singularity run R
+```
+The last form is to run R interactively, e.g. to install packages needed as
+dependencies. Note though that for CRAN packages and tarballs of new
+versions of CRAN packages, this is done automatically.
+
+For compatibility reasons, one can also invoke as:
+
 ```
 singularity run <container image file> <package name>  [source package path]
 ```
@@ -105,6 +113,12 @@ cat /tmp/lib/irlba/libs/irlba.so.bcheck
 
 # Analyzed 71 functions, traversed 489 states.
 ```
+
+If installation of a package from a tarball fails, but the package of that
+name has not previously been installed, the container automatically attempts
+to install the same package from CRAN and then again from the local tarball. 
+This is to handle automatically the common case when the installation has
+originally failed because of missing package dependencies.
 
 ## Sandboxed images
 
