@@ -15,13 +15,15 @@ singularity pull shub://kalibera/rchk:def
 singularity run kalibera-rchk-master-def.simg jpeg
 ```
 
-Note that the default image file name may be different, based on the version
-of singularity used.  The results will appear in `lib` directory
-(`lib/jpeg/libs/jpeg.so.bcheck` and `lib/jpeg/libs/jpeg.so.maacheck`).  Full
-path to the package tarball can be given instead to check a version of the
-package not yet on CRAN.  I've tested this on Ubuntu 18.04 (singularity 2.6
-from [Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
-and on Debian 9.8 (singularity 2.6 from stretch-backports).
+Note that the default image file name may be different (e.g. 
+`rchk_def.sif`), based on the version of singularity used.  The results will
+appear in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck` and
+`lib/jpeg/libs/jpeg.so.maacheck`).  Full path to the package tarball can be
+given instead to check a version of the package not yet on CRAN.  I've
+tested this on Ubuntu 18.04 (singularity 2.6 from [Neuro
+Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
+and on Debian 9.8 (singularity 2.6 from stretch-backports) and on Debian
+buster/testing (singularity 3.0.3 from the distribution).
 
 One can also build the singularity container from source, this is also fully
 automated, it takes longer than downloading the pre-built container, but it
