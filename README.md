@@ -17,7 +17,7 @@ singularity run kalibera-rchk-master-def.simg jpeg
 
 Note that the default image file name may be different (e.g. 
 `rchk_def.sif`), based on the version of singularity used.  The results will
-appear in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck` and
+be printed and saved in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck` and
 `lib/jpeg/libs/jpeg.so.maacheck`).  Full path to the package tarball can be
 given instead to check a version of the package not yet on CRAN.  I've
 tested this on Ubuntu 18.04 (singularity 2.6 from [Neuro
