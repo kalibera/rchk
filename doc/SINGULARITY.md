@@ -207,5 +207,5 @@ singularity run --overlay myoverlay.img rchk.simg BoolNet
 ```
 
 Also, one can build a writeable Singularity image from the container
-definition.  See (https://www.sylabs.io/docs/)[Singularity documentation]
+definition.  See [Singularity documentation](https://www.sylabs.io/docs/)
 for more information.
