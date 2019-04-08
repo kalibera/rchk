@@ -31,10 +31,13 @@ does not depend on external binaries and in Ubuntu 18.04 one can use the old
 `singularity-container` package from the distribution.  On Debian 9.8, one
 needs to use debootstrap from stretch-backports.
 
-See [Singularity Instructions](doc/SINGULARITY.md), [Installation](doc/INSTALLATION.md)
-for more details how to use the container and how to build it.  
-An initial version of the singularity container has been contributed by B. 
-W.  Lewis.
+See [Singularity Instructions](doc/SINGULARITY.md),
+[Installation](doc/INSTALLATION.md) for more details how to use the
+container and how to build it.  External libraries needed for some R
+packages can be installed into the container using an *overlay* (also works
+for the pre-built image) or using a *sandbox* (documented
+[here](doc/SINGULARITY.md)).  An initial version of the singularity
+container has been contributed by B.  W.  Lewis.
 
 The tools can also be installed automatically into a Virtualbox or Docker
 container and log into that virtual machine and use it from command line

@@ -127,7 +127,8 @@ not included in the container recipe `singularity.def` above. You can add
 additional Ubuntu-packaged libraries to the container recipe before building
 it. Alternatively, you can build a container `sandbox` directory instead of a
 single container image file, and dynamically add required libraries to the
-sandbox directory as needed.
+sandbox directory as needed. You can also use an `overlay` (see below),
+which works also with the pre-built image available from Singularity hub.
 
 The following example builds a sandboxed container directory. We then try to
 install the Rmpfr library for multi-precision arithmetic, which fails due to
@@ -188,3 +189,23 @@ cat /tmp/lib/Rmpfr/libs/Rmpfr.so.bcheck
 Now that the library dependencies are satisfied, we're able to check the
 package with rchk. In this case, at least at the time of this writing,
 we see a few potential issues.
+
+## Overlays
+
+The pre-built image available from Singularity hub is read-only, but one can
+install Ubuntu packages into a writeable overlay.  To check package
+`BoolNet`, which needs package `XML`, which needs Ubuntu package
+`libxml2-dev`, one can proceed as follows (unfortunately, to become root
+inside the container, one needs to run singularity as root):
+
+```
+singularity image.create myoverlay.img
+sudo singularity shell --overlay myoverlay.img rchk.simg
+  apt-get update
+  apt-get install libxml2-dev
+singularity run --overlay myoverlay.img rchk.simg BoolNet
+```
+
+Also, one can build a writeable Singularity image from the container
+definition.  See (https://www.sylabs.io/docs/)[Singularity documentation]
+for more information.
