@@ -41,6 +41,11 @@ MirrorURL: http://archive.ubuntu.com/ubuntu/
   export CXX11PICFLAGS=-fPIC
   export CXX14PICFLAGS=-fPIC
   export CXX17PICFLAGS=-fPIC
+  export R_LIBS=
+  export R_LIBS_SITE=
+  export R_LIBS_USER=
+  export R_MAKEVARS_USER=
+  export R_MAKEVARS_SITE=
   /opt/rchk/scripts/build_r.sh
 
   # fix up cmpconfig.inc to use user-defined PKG_BUILD, R_LIBS
@@ -79,7 +84,7 @@ singularity run rchk.img curl
 
 # Local package install
 wget https://cran.r-project.org/src/contrib/irlba_2.3.1.tar.gz
-singularity run rchk.img irlba $(pwd)/irlba_2.3.1.tar.gz
+singularity run rchk.img $(pwd)/irlba_2.3.1.tar.gz
 
 # Set the output directory to /tmp
 PKG_ROOT=/tmp singularity run rchk.img curl
@@ -134,6 +139,9 @@ EOF
   export PKG_BUILD_DIR="${PKG_ROOT}/build"
   export R_LIBS="${PKG_ROOT}/lib"
   export R_LIBS_USER="${PKG_ROOT}/lib"
+  export R_LIBS_SITE=
+  export R_MAKEVARS_USER=
+  export R_MAKEVARS_SITE=
   export LD="clang++ -stdlib=libc++"  
   mkdir -p "${PKG_BUILD_DIR}"
   mkdir -p "${R_LIBS}"
@@ -167,5 +175,8 @@ EOF
         echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --slave
     fi
   fi
+  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" \) -exec rm {} \;
   /opt/rchk/scripts/check_package.sh "$PKG_NAME"
+  echo
+  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" \) -exec cat {} \;
   exit
