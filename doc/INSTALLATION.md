@@ -131,7 +131,7 @@ These instructions are for LLVM 4.
 	* `git clone https://github.com/kalibera/rchk.git`
 	* `cd rchk/src ; env LLVM=/usr/lib/llvm-4.0 make ; cd ..`
 	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
-	is `/usr/lib/llvm-4.0`, WLLVM is `/usr/local/bin`, RCHK is the
+	is `/usr/lib/llvm-4.0`, WLLVM is `~/.local/bin`, RCHK is the
 	path to rchk directory created by git.
 
 To use rchk with LLVM 6, modify the steps above as follows:
