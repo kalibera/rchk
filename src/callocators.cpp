@@ -557,19 +557,22 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
         CallSite cs(in);
         const CalledFunctionTy *ct = cm->getCalledFunction(in, true);
         if (cs) {
-          myassert(ct);
           Function *t = cs.getCalledFunction();
+          if (t && ct) {
+            // t/ct can be NULL - LLVM returns NULL for cs.getCalledFunction() for some internal calls
+          
             // note that this is a heuristic, best-effort approach that is not equivalent to what allocators.cpp do
             //   this heuristic may treat a function as wrapped even when allocators.cpp will not
             //
             // on the other hand, we may discover that a call is in a context that makes it non-allocating/non-allocator
             // it would perhaps be cleaner to re-use the context-insensitive algorithm here
             // or just improve performance so that we don't run out of states in the first place
-          if (originAllocating && cm->isAllocating(t)) {
-            called.insert(ct);
-          }
-          if (originAllocator && cm->isPossibleAllocator(t)) {
-            wrapped.insert(ct);
+            if (originAllocating && cm->isAllocating(t)) {
+              called.insert(ct);
+            }
+            if (originAllocator && cm->isPossibleAllocator(t)) {
+              wrapped.insert(ct);
+            }
           }
         }
       }
