@@ -61,7 +61,8 @@ An alternative docker image is also available from third parties on R-hub
 # Native installation on Linux
 
 Once the installation is finished, check the first R package using
-instructions provided [here](../README.md).
+instructions provided [here](../README.md). Note that rchk currently does
+not work with LLVM 8 and newer due to a change in the LLVM API. 
 
 ## Debian (Buster)
 
