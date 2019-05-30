@@ -11,7 +11,7 @@ ifeq ($(HOST), prg)
   CALLOCATORS_MAX_STATES := 1000000
 
 else ifeq ($(HOST), ra)
-  LLVM := /usr
+  LLVM = /usr/lib/llvm-7
   CXX := g++
 #  CXX := $(LLVM)/bin/clang++
   BCHECK_MAX_STATES := 800000
