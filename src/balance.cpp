@@ -681,6 +681,7 @@ std::string cs_name(CountState cs) {
     case CS_DIFF: return "differential";
   }
   myassert(false);
+  return "internal-error";
 }
 
 void StateWithBalanceTy::dump(bool verbose) {

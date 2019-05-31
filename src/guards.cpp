@@ -98,6 +98,7 @@ std::string igs_name(IntGuardState gs) {
     case IGS_UNKNOWN: return "unknown";
   }
   myassert(false);
+  return "internal-error";
 }
 
 IntGuardState IntGuardsChecker::getGuardState(const IntGuardsTy& intGuards, AllocaInst* var) {
@@ -428,6 +429,7 @@ std::string sgs_name(SEXPGuardTy& g) {
     case SGS_VECTOR: return "vector";
   }
   myassert(false);
+  return "internal-error";
 }
 
 SEXPGuardState SEXPGuardsChecker::getGuardState(const SEXPGuardsTy& sexpGuards, AllocaInst* var, std::string& symbolName) {
