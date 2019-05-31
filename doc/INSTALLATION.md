@@ -61,11 +61,9 @@ An alternative docker image is also available from third parties on R-hub
 # Native installation on Linux
 
 Once the installation is finished, check the first R package using
-instructions provided [here](../README.md).  Note that rchk currently does
-not work with LLVM 8 and newer due to a change in the LLVM API.  The
-description below assumes that wllvm is installed via running pip as root;
-when run as a regular user, the installation directory will be different
-(e.g.  `~/.local/bin`).
+instructions provided [here](../README.md).  The description below assumes
+that wllvm is installed via running pip as root; when run as a regular user,
+the installation directory will be different (e.g.  `~/.local/bin`).
 
 ## Debian (Buster)
 

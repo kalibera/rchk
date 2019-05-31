@@ -11,6 +11,7 @@ void myassert_fail (const char *assertion, const char *file, unsigned int line, 
   #define myassert(x) (static_cast<void>(0))
 #endif
 
+
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
@@ -20,6 +21,10 @@ void myassert_fail (const char *assertion, const char *file, unsigned int line, 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
+
+#if LLVM_VERSION_MAJOR>=8
+  #define TerminatorInst Instruction
+#endif
 
 using namespace llvm;
 
