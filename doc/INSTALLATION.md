@@ -61,8 +61,11 @@ An alternative docker image is also available from third parties on R-hub
 # Native installation on Linux
 
 Once the installation is finished, check the first R package using
-instructions provided [here](../README.md). Note that rchk currently does
-not work with LLVM 8 and newer due to a change in the LLVM API. 
+instructions provided [here](../README.md).  Note that rchk currently does
+not work with LLVM 8 and newer due to a change in the LLVM API.  The
+description below assumes that wllvm is installed via running pip as root;
+when run as a regular user, the installation directory will be different
+(e.g.  `~/.local/bin`).
 
 ## Debian (Buster)
 
@@ -77,7 +80,7 @@ of Debian testing (buster/sid).
 	* `apt-get install llvm clang clang-7 llvm-7-dev llvm-7 libllvm7 libc\+\+-dev libc\+\+abi-dev`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	* `apt-get install python-pip`
-	* `pip install wllvm`
+	* `pip install wllvm` (as root)
 3. Install [rchk](https://github.com/kalibera/rchk.git):
 	* `apt-get install git`
 	* `git clone https://github.com/kalibera/rchk.git`
@@ -104,7 +107,7 @@ It seems these messages can be ignored.
 	* `dnf install llvm llvm-devel clang`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	* `dnf install python-pip`
-	* `pip install wllvm`
+	* `pip install wllvm` (as root)
 3. Install [rchk](https://github.com/kalibera/rchk.git):
 	* `dnf install git`
 	* `git clone https://github.com/kalibera/rchk.git`
@@ -125,7 +128,7 @@ These instructions are for LLVM 4.
 	* `apt-get install clang-4.0 llvm-4.0-dev clang\+\+-4.0 llvm-4.0 libllvm4.0 libc\+\+-dev libc\+\+abi-dev`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	* `apt-get install python-pip`
-	* `pip install wllvm`
+	* `pip install wllvm` (as root)
 3. Install [rchk](https://github.com/kalibera/rchk.git):
 	* `apt-get install git`
 	* `git clone https://github.com/kalibera/rchk.git`
@@ -154,7 +157,7 @@ These instructions are for LLVM 3.8.
 	* `apt-get install clang-3.8 llvm-3.8-dev clang\+\+-3.8 llvm-3.8 libllvm3.8 libc\+\+-dev libc\+\+abi-dev`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	* `apt-get install python-pip`
-	* `pip install wllvm`
+	* `pip install wllvm` (as root)
 3. Install [rchk](https://github.com/kalibera/rchk.git):
 	* `apt-get install git`
 	* `git clone https://github.com/kalibera/rchk.git`
@@ -176,7 +179,7 @@ These instructions are for LLVM 6.
 1. Install clang and llvm:
 	* `yum install llvm llvm-devel clang`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
-	* `pip install wllvm`
+	* `pip install wllvm` (as root)
 3. Install [rchk](https://github.com/kalibera/rchk.git):
 	* `yum install git`
 	* `git clone https://github.com/kalibera/rchk.git`
