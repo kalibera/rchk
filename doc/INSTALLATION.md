@@ -143,6 +143,27 @@ To use rchk with LLVM 6, modify the steps above as follows:
 	* `cd rchk/src ; make ; cd ..`
 	* customize `scripts/config.inc` to include export `LLVM=/usr`
 
+## Ubuntu 19.04 (Disco Dingo)
+
+These instructions are for LLVM 8.
+
+0. Install build dependencies for R:
+	* enable source repositories in `/etc/apt/sources.list`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base-dev`
+1. Install clang and llvm:
+	* `apt-get install clang-8 llvm-8-dev clang\+\+-8 llvm-8 libllvm8 libc\+\+-dev libc\+\+abi-dev`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install python-pip`
+	* `pip install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; env LLVM=/usr/lib/llvm-8 make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr/lib/llvm-8`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
 ## Debian 9 (Stretch)
 
 These instructions are for LLVM 3.8.
