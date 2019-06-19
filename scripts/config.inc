@@ -16,7 +16,7 @@ elif [ X"`hostname -s`" == Xr-lnx400 ] ; then
 elif [ X"`hostname -s`" == Xra ] ; then
 
   export WLLVM=/usr/local/bin
-  export LLVM=/usr/lib/llvm-7
+  export LLVM=/usr/lib/llvm-8
   export RCHK=/home/tomas/git/rchk
 
 elif [ X"`hostname -s`" == Xvagrant ] ; then
