@@ -24,6 +24,13 @@ else ifeq ($(HOST), r-lnx400)
   BCHECK_MAX_STATES := 6000000
   CALLOCATORS_MAX_STATES := 1000000
 
+else ifeq ($(HOST), pod)
+  LLVM = /usr/lib/llvm-8
+  CXX := g++
+#  CXX := $(LLVM)/bin/clang++
+  BCHECK_MAX_STATES := 800000
+  CALLOCATORS_MAX_STATES := 1000000
+
 else
   # ------  CUSTOMIZE HERE --------- 
   # or provide these variables to make
@@ -99,7 +106,7 @@ OBJECTS := $(SOURCES:.cpp=.o)
 DWOBJECTS := $(SOURCES:.cpp=.dwo)
 SOBJECTS := $(filter-out %check.o, $(OBJECTS))
 
-TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck cgcheck
+TOOLS := errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck cgcheck fficheck
 
 all: $(TOOLS)
 
@@ -124,6 +131,8 @@ symcheck: symcheck.o $(SOBJECTS)
 veccheck: veccheck.o $(SOBJECTS)
 
 glcheck: glcheck.o $(SOBJECTS)
+
+fficheck: fficheck.o $(SOBJECTS)
 
 clean:
 	rm -f $(OBJECTS) $(DEPENDS) $(TOOLS) $(DWOBJECTS)
