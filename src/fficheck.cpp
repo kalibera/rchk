@@ -47,6 +47,7 @@ void check_type(Value *v) {
   CT(GlobalVariable)
   CT(Function)
   CT(GlobalIFunc)
+  CT(BitCastInst)
     
   #undef CT
   #undef CTTOSTRING
@@ -176,23 +177,30 @@ int main(int argc, char* argv[])
   for(inst_iterator ini = inst_begin(*initf), ine = inst_end(*initf); ini != ine; ++ini) {
     Instruction *in = &*ini;
     CallSite cs(in);
-    if (!cs) continue;
-    
-    Function *tgt = cs.getCalledFunction();
-    if (tgt != regf)
+    if (!cs) {
       continue;
+    }
+    Function *tgt = cs.getCalledFunction();
+    if (!tgt) {
+      if (ConstantExpr *ce = dyn_cast<ConstantExpr>(cs.getCalledValue())) {
+        tgt = dyn_cast<Function>(ce->getOperand(0));
+      }
+    }
+    if (tgt != regf) {
+      continue;
+    }
       
     /* call to R_registerRoutines */
     Value *cval = cs.getArgument(2); /* .Call */
     Value *eval = cs.getArgument(4); /* .External */
     
-    /* errs() << "Call to R_registerRoutinets:\n    .Call: " << *cval << "\n    .External " << *eval << "\n"; */
+    /* errs() << "Checking call to R_registerRoutines:\n    .Call: " << *cval << "\n    .External " << *eval << "\n"; */
     
     checkTable(cval);
     checked = true;
   }
   
-  errs() << "Checked call to R_registerRoutinets: " << checked << "\n";
+  errs() << "Checked call to R_registerRoutines: " << checked << "\n";
   
   delete m;
   return 0;
