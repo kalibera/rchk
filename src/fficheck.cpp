@@ -120,9 +120,15 @@ bool checkTable(Value *v) {
             errs() << "ERROR: function " << fname << " (" << funName(fun) << ") does not return SEXP\n";
           }
           
-          int64_t real_arity = fun->getFunctionType()->getNumParams();
+          FunctionType *ft = fun->getFunctionType();
+          int64_t real_arity = ft->getNumParams();
           if (arity > -1 && arity != real_arity) {
             errs() << "ERROR: function " << fname << " (" << funName(fun) << ") has arity " << real_arity << " but registered arity " << arity << "\n";
+          }
+          
+          for(int i = 0; i < real_arity; i++) {
+            if (!isSEXP(ft->getParamType(i)))
+              errs() << "ERROR: function " << fname << " (" << funName(fun) << ") parameter " << (i + 1) << " is not SEXP\n";
           }
           
           /* errs() << "checked function " << fname << " (" << funName(fun) << ") arity " << arity << "\n"; */
