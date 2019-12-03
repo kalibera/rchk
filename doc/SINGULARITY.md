@@ -77,7 +77,7 @@ Generic container invocation is:
 ```
 singularity run <container image file> <package name>
 singularity run <container image file> <full path to package tarball>
-singularity run R
+singularity run <container image file> R
 ```
 The last form is to run R interactively, e.g. to install packages needed as
 dependencies. Note though that for CRAN packages and tarballs of new
