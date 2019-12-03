@@ -86,7 +86,7 @@ bool checkTable(Value *v) {
             }
           }
           
-          int64_t arity = -1;
+          int64_t arity;
           if (ConstantInt *ci = dyn_cast<ConstantInt>(cstr->getAggregateElement(2U))) {
             arity = ci->getSExtValue();
           } else {
@@ -121,7 +121,7 @@ bool checkTable(Value *v) {
           }
           
           int64_t real_arity = fun->getFunctionType()->getNumParams();
-          if (arity != real_arity) {
+          if (arity > -1 && arity != real_arity) {
             errs() << "ERROR: function " << fname << " (" << funName(fun) << ") has arity " << real_arity << " but registered arity " << arity << "\n";
           }
           
@@ -142,6 +142,11 @@ int main(int argc, char* argv[])
 
   // get package name from the last argument
   // there should be a more reliable way..
+  
+  if (argc < 1) {
+    errs() << "Need R and package bitcode files.\n";
+    return 2;
+  }
   
   char *s = argv[argc-1];
   int i;
@@ -165,7 +170,11 @@ int main(int argc, char* argv[])
   if (pkgname[0] == 0) {
     errs() << "ERROR: cannot detect package name\n";
   }
-  errs() << "Package name: " << pkgname << "\n";
+  errs() << "Library name (usually package name): " << pkgname << "\n";
+  /* 
+     This is often a package name, but not always, but it is always the name that
+     defines the suffix in R_init_suffix and it is used here only for that purpose.
+  */
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
  
