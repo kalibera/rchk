@@ -175,8 +175,8 @@ EOF
         echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --slave
     fi
   fi
-  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" \) -exec rm {} \;
+  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec rm {} \;
   /opt/rchk/scripts/check_package.sh "$PKG_NAME"
   echo
-  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" \) -exec cat {} \;
+  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec cat {} \;
   exit

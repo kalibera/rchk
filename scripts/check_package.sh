@@ -58,7 +58,7 @@ fi
 
 shift 1
 if [ X"$*" == X ] ; then
-  TOOLS="bcheck maacheck"
+  TOOLS="bcheck maacheck fficheck"
 else
   TOOLS="$*"
 fi
