@@ -117,12 +117,12 @@ bool checkTable(Value *v) {
           }
           
           if (!isSEXP(fun->getReturnType())) {
-            errs() << "ERROR: Function " << fname << " (" << funName(fun) << ") does not return SEXP\n";
+            errs() << "ERROR: function " << fname << " (" << funName(fun) << ") does not return SEXP\n";
           }
           
           int64_t real_arity = fun->getFunctionType()->getNumParams();
           if (arity != real_arity) {
-            errs() << "ERROR: Function " << fname << " (" << funName(fun) << ") has arity " << real_arity << " but registered arity " << arity << "\n";
+            errs() << "ERROR: function " << fname << " (" << funName(fun) << ") has arity " << real_arity << " but registered arity " << arity << "\n";
           }
           
           /* errs() << "checked function " << fname << " (" << funName(fun) << ") arity " << arity << "\n"; */
@@ -139,11 +139,44 @@ int main(int argc, char* argv[])
   LLVMContext context;
   FunctionsOrderedSetTy functionsOfInterestSet;
   FunctionsVectorTy functionsOfInterestVector;
+
+  // get package name from the last argument
+  // there should be a more reliable way..
+  
+  char *s = argv[argc-1];
+  int i;
+  int sep = -1;
+  for(i = 0; s[i] != 0; i++)
+    if (s[i] == '/')
+      sep = i;
+  if (sep != -1)
+    s += sep + 1;
+    
+  char pkgname[PATH_MAX];
+  pkgname[0] = 0;
+  for(i = 0; s[i] != 0; i++) {
+    if (!strcmp(s + i, ".so") || !strcmp(s + i, ".bc") || !strcmp(s + i, ".so.bc")) {    
+      break;
+    }
+    pkgname[i] = s[i];
+  }
+  pkgname[i] = 0;
+  
+  if (pkgname[0] == 0) {
+    errs() << "ERROR: cannot detect package name\n";
+  }
+  errs() << "Package name: " << pkgname << "\n";
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
-    // NOTE: functionsOfInterest ignored but (re-)analyzing the R core is necessary
  
-  std::string initfn = "";
+  std::string initfn = "R_init_";
+  initfn.append(pkgname);
+  
+  std::string cxxinitfn = "R_init_";
+  cxxinitfn.append(pkgname);
+  cxxinitfn.append("(_DllInfo*)");
+  
+  bool foundInit = false;
     
   for(FunctionsVectorTy::iterator fi = functionsOfInterestVector.begin(), fe = functionsOfInterestVector.end(); fi != fe; ++fi) {
     Function *fun = *fi;
@@ -151,16 +184,19 @@ int main(int argc, char* argv[])
     if (fn.find("R_init_"))
       continue;
       
-    if (initfn.length() > 0) {
-      errs() << "ERROR: Multiple initialization functions, now " << fn << " before " << initfn << "\n";
-      return 1;
-    } else {
-      initfn = fn;
+    if (!fn.compare(initfn)) {
+      foundInit = true;
+      continue;
+    }
+      
+    errs() << "WARNING: possible initialization function " << fn << " will not be used by R\n";
+    if (!fn.compare(cxxinitfn)) {
+      errs() << "ERROR: initialization function " + fn + " in C++ will not be used by R\n";
     }
   }
   
-  if (!initfn.length()) {
-    errs() << "ERROR: Did not find initialization function\n";
+  if (!foundInit) {
+    errs() << "ERROR: did not find initialization function " << initfn << "\n";
     return 1;
   }
     
@@ -169,7 +205,7 @@ int main(int argc, char* argv[])
 
   Function *regf = m->getFunction("R_registerRoutines");
   if (!regf) {
-    errs() << "ERROR: Cannot get R_registerRoutines()\n";
+    errs() << "ERROR: cannot get R_registerRoutines()\n";
     return 1;
   }
   
