@@ -20,8 +20,12 @@
 
 #include "symbols.h"
 
+#include <stdio.h>
+#include <string.h>
+
 using namespace llvm;
 
+/* check_type is just for debugging */
 void check_type(Value *v) {
 
   #define CTSTRINGIFY(x) #x
@@ -54,7 +58,42 @@ void check_type(Value *v) {
   #undef CTSTRINGIFY
 }
 
+std::string funId(std::string symname, Function *fun) {
+  if (symname.length()) {
+    return symname + " (" + funName(fun) + ")";
+  } else {
+    return funName(fun);
+  }
+}
+
+void checkFunction(Function *fun, std::string symname, int arity) {
+
+  static FunctionsSetTy alreadyChecked;
+  
+  if (alreadyChecked.find(fun) != alreadyChecked.end()) {
+    return;
+  }
+  alreadyChecked.insert(fun);
+
+  if (!isSEXP(fun->getReturnType())) {
+    errs() << "ERROR: function " << funId(symname, fun) << " does not return SEXP\n";
+  }
+          
+  FunctionType *ft = fun->getFunctionType();
+  int64_t real_arity = ft->getNumParams();
+  if (arity > -1 && arity != real_arity) {
+    errs() << "ERROR: function " << funId(symname, fun) << " has arity " << real_arity << " but registered arity " << arity << "\n";
+  }
+
+  for(int i = 0; i < real_arity; i++) {
+    if (!isSEXP(ft->getParamType(i))) {
+      errs() << "ERROR: function " << funId(symname, fun) << " parameter " << (i + 1) << " is not SEXP\n";
+    }
+  }
+}
+
 bool checkTable(Value *v) {
+
   if (ConstantExpr *ce = dyn_cast<ConstantExpr>(v)) {
     if (GlobalVariable *gv = dyn_cast<GlobalVariable>(ce->getOperand(0))) {
  
@@ -71,10 +110,9 @@ bool checkTable(Value *v) {
       }
       
       errs() << "Functions: " << nfuns << "\n";
-    
-    
+        
       if (ConstantArray *ca = dyn_cast<ConstantArray>(gv->getInitializer())) {
-        for(unsigned i = 0; i < nfuns; i++) {
+        for(int i = 0; i < nfuns; i++) {
           ConstantStruct *cstr = dyn_cast<ConstantStruct>(ca->getAggregateElement(i));
           if (!cstr) {
             if (i == nfuns - 1)
@@ -116,20 +154,7 @@ bool checkTable(Value *v) {
             return false;
           }
           
-          if (!isSEXP(fun->getReturnType())) {
-            errs() << "ERROR: function " << fname << " (" << funName(fun) << ") does not return SEXP\n";
-          }
-          
-          FunctionType *ft = fun->getFunctionType();
-          int64_t real_arity = ft->getNumParams();
-          if (arity > -1 && arity != real_arity) {
-            errs() << "ERROR: function " << fname << " (" << funName(fun) << ") has arity " << real_arity << " but registered arity " << arity << "\n";
-          }
-          
-          for(int i = 0; i < real_arity; i++) {
-            if (!isSEXP(ft->getParamType(i)))
-              errs() << "ERROR: function " << fname << " (" << funName(fun) << ") parameter " << (i + 1) << " is not SEXP\n";
-          }
+          checkFunction(fun, fname, arity);
           
           /* errs() << "checked function " << fname << " (" << funName(fun) << ") arity " << arity << "\n"; */
         }
@@ -146,12 +171,24 @@ int main(int argc, char* argv[])
   FunctionsOrderedSetTy functionsOfInterestSet;
   FunctionsVectorTy functionsOfInterestVector;
 
+  /* fficheck [-i] base.bc packagelib.bc */
+  
+  // most likely the base.bc is not really needed, at least for now
+  // -i means read (additional) list of functions to check from the command line  
+
   // get package name from the last argument
   // there should be a more reliable way..
   
   if (argc < 1) {
     errs() << "Need R and package bitcode files.\n";
     return 2;
+  }
+
+  bool readFunList = false;
+  if (!strcmp(argv[1], "-i")) {
+    readFunList = true;
+    argv++;
+    argc--;
   }
   
   char *s = argv[argc-1];
@@ -248,10 +285,36 @@ int main(int argc, char* argv[])
     /* errs() << "Checking call to R_registerRoutines:\n    .Call: " << *cval << "\n    .External " << *eval << "\n"; */
     
     checkTable(cval);
+    checkTable(eval);
     checked = true;
   }
   
   errs() << "Checked call to R_registerRoutines: " << checked << "\n";
+  
+  if (readFunList) {
+    char fname[1024];
+    int checked = 0;
+    for(;;) {
+      if (fgets(fname, 1024, stdin)) {
+        size_t len = strlen(fname);
+        if (len > 0 && fname[len - 1] == '\n')
+          fname[len - 1 ] = 0;
+        /* intentionally checking first the properly registered functions,
+           because there is more information for them, and each function
+           is checked at most once */
+        Function *fun = m->getFunction(fname);
+        if (fun) {
+          checkFunction(fun, "", -1);
+        } else {
+          errs() << "WARNING: function " << fname << " not found and not checked\n";
+        }
+        checked++;
+      } else
+        break;
+    }
+    errs() << "Checked additional specified functions: " << checked << "\n";
+  }
+  
   
   delete m;
   return 0;
