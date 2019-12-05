@@ -178,17 +178,32 @@ int main(int argc, char* argv[])
 
   // get package name from the last argument
   // there should be a more reliable way..
-  
-  if (argc < 1) {
-    errs() << "Need R and package bitcode files.\n";
+
+  if (argc < 2) {
+    errs() << "fficheck [-i] R.bc pkg.so.bc\n";
     return 2;
   }
 
   bool readFunList = false;
   if (!strcmp(argv[1], "-i")) {
     readFunList = true;
-    argv++;
+    char **argvc = (char **) malloc(argc * sizeof(char *));
+    if (!argvc) {
+      errs() << "Out of memory.\n";
+      return 1;
+    }
+    argvc[0] = argv[0];
+    int j = 1;
+    for(int i = 2; i < argc; i++)
+      argvc[j++] = argv[i];
+    argvc[j++] = NULL;
     argc--;
+    argv = argvc;
+
+    if (argc < 2) {
+      errs() << "fficheck [-i] R.bc pkg.so.bc\n";
+      return 2;
+    }
   }
   
   char *s = argv[argc-1];
@@ -313,6 +328,7 @@ int main(int argc, char* argv[])
         break;
     }
     errs() << "Checked additional specified functions: " << checked << "\n";
+    free(argv);
   }
   
   
