@@ -92,7 +92,7 @@ void checkFunction(Function *fun, std::string symname, int arity) {
   }
 }
 
-bool checkTable(Value *v) {
+bool checkTable(Value *v, bool checkDotCallArity) {
 
   if (ConstantExpr *ce = dyn_cast<ConstantExpr>(v)) {
     if (GlobalVariable *gv = dyn_cast<GlobalVariable>(ce->getOperand(0))) {
@@ -154,6 +154,9 @@ bool checkTable(Value *v) {
             return false;
           }
           
+          if (!checkDotCallArity)
+            arity = -1; /* do not check arity, e.g. because it is .External */
+            
           checkFunction(fun, fname, arity);
           
           /* errs() << "checked function " << fname << " (" << funName(fun) << ") arity " << arity << "\n"; */
@@ -299,8 +302,8 @@ int main(int argc, char* argv[])
     
     /* errs() << "Checking call to R_registerRoutines:\n    .Call: " << *cval << "\n    .External " << *eval << "\n"; */
     
-    checkTable(cval);
-    checkTable(eval);
+    checkTable(cval, true);
+    checkTable(eval, false);
     checked = true;
   }
   
