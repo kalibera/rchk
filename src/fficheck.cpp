@@ -109,9 +109,10 @@ bool checkTable(Value *v, bool checkDotCallArity) {
         return false;    
       }
       
-      errs() << "Functions: " << nfuns << "\n";
+      
         
       if (ConstantArray *ca = dyn_cast<ConstantArray>(gv->getInitializer())) {
+        int realfuns = 0;
         for(int i = 0; i < nfuns; i++) {
           ConstantStruct *cstr = dyn_cast<ConstantStruct>(ca->getAggregateElement(i));
           if (!cstr) {
@@ -158,9 +159,11 @@ bool checkTable(Value *v, bool checkDotCallArity) {
             arity = -1; /* do not check arity, e.g. because it is .External */
             
           checkFunction(fun, fname, arity);
+          realfuns++;
           
           /* errs() << "checked function " << fname << " (" << funName(fun) << ") arity " << arity << "\n"; */
         }
+        errs() << "Functions: " << realfuns << "\n";
       }
     }
   }
