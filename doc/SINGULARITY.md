@@ -199,11 +199,19 @@ install Ubuntu packages into a writeable overlay.  To check package
 inside the container, one needs to run singularity as root):
 
 ```
-singularity image.create myoverlay.img
+dd if=/dev/zero of=myoverlay.img bs=1M count=500 && mkfs.ext3 myoverlay.img
 sudo singularity shell --overlay myoverlay.img rchk.simg
   apt-get update
   apt-get install libxml2-dev
 singularity run --overlay myoverlay.img rchk.simg BoolNet
+```
+
+The above should work both in Singularity 2.x and 3.x.  In Singularity 2.x,
+one could also create the image using `image.create` instead of
+`dd`/`mkfs.ext3`:
+
+```
+singularity image.create myoverlay.img
 ```
 
 Also, one can build a writeable Singularity image from the container
