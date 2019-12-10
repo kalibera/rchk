@@ -58,6 +58,11 @@ void check_type(Value *v) {
   #undef CTSTRINGIFY
 }
 
+typedef std::map<std::string, std::string> StringMapTy;
+
+StringMapTy callMap;
+StringMapTy externalMap;
+
 std::string funId(std::string symname, Function *fun) {
   if (symname.length()) {
     return symname + " (" + funName(fun) + ")";
@@ -92,7 +97,7 @@ void checkFunction(Function *fun, std::string symname, int arity) {
   }
 }
 
-bool checkTable(Value *v, bool checkDotCallArity) {
+bool checkTable(Value *v, bool checkDotCallArity, StringMapTy& smap) {
 
   if (ConstantExpr *ce = dyn_cast<ConstantExpr>(v)) {
     if (GlobalVariable *gv = dyn_cast<GlobalVariable>(ce->getOperand(0))) {
@@ -108,8 +113,6 @@ bool checkTable(Value *v, bool checkDotCallArity) {
         errs() << "ERROR: did not get the number of elements in function table\n";
         return false;    
       }
-      
-      
         
       if (ConstantArray *ca = dyn_cast<ConstantArray>(gv->getInitializer())) {
         int realfuns = 0;
@@ -161,6 +164,8 @@ bool checkTable(Value *v, bool checkDotCallArity) {
           checkFunction(fun, fname, arity);
           realfuns++;
           
+          smap.insert({fname, funName(fun)});
+          
           /* errs() << "checked function " << fname << " (" << funName(fun) << ") arity " << arity << "\n"; */
         }
         errs() << "Functions: " << realfuns << "\n";
@@ -180,7 +185,10 @@ int main(int argc, char* argv[])
   /* fficheck [-i] base.bc packagelib.bc */
   
   // most likely the base.bc is not really needed, at least for now
-  // -i means read (additional) list of functions to check from the command line  
+  // -i means read (additional) list of functions to check from the command line
+  //   such functions are given using symbol names that are translated using
+  //   the registration table to function names where the registration exists
+  //   (called with names found in .Call() and .External() calls in R source code)
 
   // get package name from the last argument
   // there should be a more reliable way..
@@ -262,10 +270,10 @@ int main(int argc, char* argv[])
       continue;
     }
       
-    errs() << "WARNING: possible initialization function " << fn << " will not be used by R\n";
     if (!fn.compare(cxxinitfn)) {
       errs() << "ERROR: initialization function " + fn + " in C++ will not be used by R\n";
-    }
+    } else
+          errs() << "WARNING: possible initialization function " << fn << " will not be used by R\n";
   }
   
   if (!foundInit) {
@@ -305,8 +313,8 @@ int main(int argc, char* argv[])
     
     /* errs() << "Checking call to R_registerRoutines:\n    .Call: " << *cval << "\n    .External " << *eval << "\n"; */
     
-    checkTable(cval, true);
-    checkTable(eval, false);
+    checkTable(cval, true, callMap);
+    checkTable(eval, false, externalMap);
     checked = true;
   }
   
@@ -323,7 +331,13 @@ int main(int argc, char* argv[])
         /* intentionally checking first the properly registered functions,
            because there is more information for them, and each function
            is checked at most once */
-        Function *fun = m->getFunction(fname);
+        auto nsearch = callMap.find(fname);
+        Function *fun;
+        if (nsearch != callMap.end()) {
+          fun = m->getFunction(nsearch->second);
+        } else {
+          fun = m->getFunction(fname);
+        }
         if (fun) {
           checkFunction(fun, "", -1);
         } else {
