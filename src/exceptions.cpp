@@ -39,11 +39,13 @@ bool isAssertedNonAllocating(Function *f) {
   if (f->getName() == "ALTREAL_ELT") return true;
 
   if (f->getName() == "ALTSTRING_ELT") return true;
-
   
   if (f->getName() == "ALTSTRING_SET_ELT") return true;
   
-
+  if (f->getName() == "ALTINTEGER_MIN") return true;  
+  if (f->getName() == "ALTINTEGER_MAX") return true;
+  if (f->getName() == "ALTREAL_MIN") return true;  
+  if (f->getName() == "ALTREAL_MAX") return true;
   return false;
 }
 
