@@ -2,6 +2,7 @@
 
 #include <llvm/Analysis/CallGraph.h>
 #include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/InstIterator.h>
