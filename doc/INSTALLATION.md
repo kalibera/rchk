@@ -9,8 +9,8 @@ takes slightly longer (within 15 minutes on my laptop) to automatically
 install. The installation will create a virtual machine into which one can
 log in and perform the checks, all state is kept inside the machine.
 
-Run `vagrant up` in `image` directory to use VirtualBox or `vagrant up
---provider docker` to use Docker.
+Run `vagrant up --provider virtualbox` in `image` directory to use VirtualBox
+or `vagrant up --provider docker` to use Docker.
 
 One needs to install [Vagrant](https://www.vagrantup.com/) (`apt-get install
 vagrant`) and [VirtualBox](https://www.virtualbox.org/wiki/Downloads)
@@ -18,12 +18,12 @@ vagrant`) and [VirtualBox](https://www.virtualbox.org/wiki/Downloads)
 [Docker](https://www.docker.com/get-started) (`apt-get install docker
 docker.io`, add current user to the `docker` group).
 
-If `vagrant up` fails or times out due to network connectivity issues,
-`vagrant provision` restarts it.  To log into the installed machined, use
-`vagrant ssh` and check the first R package using instructions provided
-[here](../README.md).  One can access the host file system in directory
-`/vagrant` inside the virtual installation, e.g.  to copy package tarballs
-in and out.
+If `vagrant up --provider virtualbox` fails or times out due to network
+connectivity issues, `vagrant provision` restarts it.  To log into the
+installed machined, use `vagrant ssh` and check the first R package using
+instructions provided [here](../README.md).  One can access the host file
+system in directory `/vagrant` inside the virtual installation, e.g.  to
+copy package tarballs in and out.
 
 # Automated installation (Singularity)
 
