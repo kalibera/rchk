@@ -50,7 +50,9 @@ and the checking just (package memisc from CRAN).
 
 and the results appear under subdirectory "lib" of the current directory. 
 Full path to the package tarball can be given instead as argument to check a
-testing version of the package.
+testing version of the package.  On Ubuntu 20.04, install
+`singularity-container` from Neuro Debian (see
+[instructions](SINGULARITY.md)).
 
 # Alternative automated installations
 

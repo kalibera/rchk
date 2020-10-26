@@ -1,5 +1,5 @@
 BootStrap: debootstrap
-OSVersion: bionic
+OSVersion: focal
 MirrorURL: http://archive.ubuntu.com/ubuntu/
 
 %post
@@ -9,38 +9,30 @@ MirrorURL: http://archive.ubuntu.com/ubuntu/
   apt-get update
 
   # Install required R, Python, misc. utilities
-  apt-get install -y libopenblas-dev libcurl4-openssl-dev libopenmpi-dev openmpi-bin openmpi-common openmpi-doc openssh-client openssh-server libssh-dev wget vim git cmake curl wget python autoconf bzip2 libtool libtool-bin python-pip python-dev locales
+  apt-get install -y libopenblas-dev libcurl4-openssl-dev libopenmpi-dev openmpi-bin openmpi-common openmpi-doc openssh-client openssh-server libssh-dev wget vim git cmake curl wget python autoconf bzip2 libtool libtool-bin python3-pip python-dev locales
   apt-get build-dep -y r-base-core
   # LLVM
-  apt-get install -y clang-6.0 llvm-6.0-dev clang++-6.0 clang llvm-dev libc++-dev libc++abi-dev
+  apt-get install -y clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev
   apt-get clean
   locale-gen en_US.UTF-8
 
   # wllvm
-  pip install wllvm
+  pip3 install wllvm
 
   # rchk
   cd /opt
   git clone git://www.github.com/kalibera/rchk &&  \
     cd rchk && \
     cd src && \
-    make -j `cat /proc/cpuinfo | grep "core id" | wc -l` LLVM=/usr/lib/llvm-6.0 CXX=g++
+    make -j `cat /proc/cpuinfo | grep "core id" | wc -l` CXX=g++
 
   # download, build r-devel
   cd /opt
   wget -O - -q https://cran.r-project.org/src/base-prerelease/R-devel.tar.gz | tar zxvf -
   cd /opt/R-devel
   export WLLVM=/usr/local/bin
-  export LLVM=/usr/lib/llvm-6.0
+  export LLVM=/usr
   export RCHK=/opt/rchk
-  export CPICFLAGS=-fPIC
-  export FPICFLAGS=-fPIC
-  export FCPICFLAGS=-fPIC
-  export CXXPICFLAGS=-fPIC
-  export CXX98PICFLAGS=-fPIC
-  export CXX11PICFLAGS=-fPIC
-  export CXX14PICFLAGS=-fPIC
-  export CXX17PICFLAGS=-fPIC
   export R_LIBS=
   export R_LIBS_SITE=
   export R_LIBS_USER=
@@ -127,7 +119,7 @@ EOF
     echo "it may help to try with PKG_ROOT=/tmp or check the configurarion."
     echo
   fi
-  export LLVM=/usr/lib/llvm-6.0
+  export LLVM=/usr
   export WLLVM=/usr/local/bin
   export RCHK=/opt/rchk
   export CFLAGS="-Wall -g -O0 -fpic"  
@@ -162,21 +154,25 @@ EOF
     fi
   fi
   echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
-  echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --slave
+  echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --no-echo
   if test "$REPO" = NULL ; then
-    echo "q(status=\"$PKG_NAME\" %in% installed.packages())" | ./bin/R --slave
+    echo "q(status=\"$PKG_NAME\" %in% installed.packages())" | ./bin/R --no-echo
     if test $? -ne 1 ; then
         echo
         echo "Re-trying with installation from CRAN first."
         echo
         echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")"
-        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")" | ./bin/R --slave
+        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")" | ./bin/R --no-echo
         echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
-        echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --slave
+        echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --no-echo
     fi
   fi
   find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec rm {} \;
   /opt/rchk/scripts/check_package.sh "$PKG_NAME"
   echo
   find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec cat {} \;
+  echo
+  echo "Rchk version: "`cd /opt/rchk && git rev-parse HEAD`
+  echo "R version: "`/opt/R-devel/bin/Rscript -e 'cat(paste(R.version$svn, R.version$version.string, sep="/"))'`
+  echo "LLVM version: "`/usr/bin/llvm-config --version`
   exit

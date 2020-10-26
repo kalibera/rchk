@@ -25,9 +25,11 @@ building a container for rchk, and testing R packages using the container.
 Singularity requires a GNU Linux operating system. Most modern GNU Linux
 systems include Linux kernels that will work. 
 
-On Ubuntu/Debian, one can install using `apt-get install singularity-container`, but 
-a newer version may be available from
-[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container).
+For Ubuntu/Debian, one can install singularity from
+[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container),
+package `singularity-container` (not `singularity`, that is a computer
+game). Some earlier version of Ubuntu/Debian included
+`singularity-container` in the distribution.
 
 More information can be found at
 https://www.sylabs.io/guides/3.0/user-guide/installation.html.
@@ -36,15 +38,13 @@ https://www.sylabs.io/guides/3.0/user-guide/installation.html.
 
 The `singularity.def` file in directory `image` includes a singularity
 definition file for building a singularity container image based on Ubuntu
-18.04 and the LLVM-6.0.  Singularity containers may be built as single files
-or, for experimentation, sandbox directories.
+20.04 (focal) and the LLVM-10.0.  Singularity containers may be built as
+single files or, for experimentation, sandbox directories.
 
 Note! If you're running on Red Hat or CentOS, you'll need the `debootstrap`
 program: `sudo yum install debootstrap`. See the singularity documentation for
 more information. You need to use a recent version of `debootstrap` that
-supports Ubuntu 18.04 (bionic). On Debian Stretch as host system, one needs
-to install `debootstrap` from backports (1.0.110 works fine, 1.0.89 does
-not).
+supports Ubuntu 20.04 (focal). 
 
 Build the rchk singularity image with (run in directory `image`):
 ```
