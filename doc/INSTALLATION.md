@@ -65,6 +65,80 @@ instructions provided [here](../README.md).  The description below assumes
 that wllvm is installed via running pip as root; when run as a regular user,
 the installation directory will be different (e.g.  `~/.local/bin`).
 
+## Ubuntu 20.04 (Focal Fossa)
+
+These instructions are for LLVM 10. Tested October 21, 2020.
+
+0. Install build dependencies for R:
+	* enable source repositories in `/etc/apt/sources.list`, e.g. using
+	  `sed -i 's/^# deb-src/deb-src/g' /etc/apt/sources.list`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base`
+1. Install clang and llvm:
+	* `apt-get install clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install python3-pip`
+	* `pip3 install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
+## Debian (Bullseye)
+
+These instructions are for LLVM 9. Tested October 21, 2020 on a clean
+install of Debian testing (bullseye/sid).
+
+0. Install build dependencies for R:
+	* enable source repositories in `/etc/apt/sources.list`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base`
+1. Install clang and llvm:
+	* `apt-get install llvm clang clang-9 llvm-9-dev llvm-9 libllvm9 libc\+\+-dev libc\+\+abi-dev`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install python3-pip`
+	* `pip3 install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
+## Fedora 32
+
+These instructions are for LLVM 10. Tested October 21, 2020 on a clean install
+of Fedora 32.
+
+0. Install development tools and build dependencies for R:
+	* `dnf install dnf-plugins-core diffutils which`
+	* `dnf install redhat-rpm-config hostname java-1.8.0-openjdk-devel`
+        * `dnf install 'dnf-command(builddep)'`
+	* `dnf builddep R`
+	* `dnf groupinstall "Development Tools"`
+	* `dnf groupinstall "C Development Tools and Libraries"`
+1. Install clang and llvm:
+	* `dnf install llvm llvm-devel clang`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `dnf install python-pip`
+	* `pip install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `dnf install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ;  make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
+# Installing on older systems
+
+There instructions will probably still work on older systems, but are not
+re-tested as those systems evolve.
+
 ## Debian (Buster)
 
 These instructions are for LLVM 7. Tested March 5, 2019 on a clean install
@@ -207,7 +281,7 @@ These instructions are for LLVM 6.
 	is `/usr`, WLLVM is `/usr/bin`, RCHK is the
 	path to rchk directory created by git.
 
-# Installing on older systems
+# Installing on even older systems
 
 While rchk used to work on older systems, it is not being backported to them
 and cannot be compiled with older versions of LLVM due to incompatibility of
