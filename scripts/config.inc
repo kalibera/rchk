@@ -3,9 +3,9 @@
 
 if [ X"`hostname -s`" == Xprg ] ; then
 
-  export WLLVM=/home/tomas/.local/bin
+  export WLLVM=/usr/local/bin
   export LLVM=/usr
-  export RCHK=/home/tomas/work/git/rchk
+  export RCHK=/home/tomas/git/rchk
 
 elif [ X"`hostname -s`" == Xr-lnx400 ] ; then
 
