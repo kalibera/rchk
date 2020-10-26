@@ -9,8 +9,8 @@ MirrorURL: http://archive.ubuntu.com/ubuntu/
   apt-get update
 
   # Install required R, Python, misc. utilities
-  apt-get install -y libopenblas-dev libcurl4-openssl-dev libopenmpi-dev openmpi-bin openmpi-common openmpi-doc openssh-client openssh-server libssh-dev wget vim git cmake curl wget python autoconf bzip2 libtool libtool-bin python3-pip python-dev locales
-  apt-get build-dep -y r-base-core
+  apt-get install -y libopenblas-dev libcurl4-openssl-dev libopenmpi-dev openmpi-bin openmpi-common openmpi-doc openssh-client openssh-server libssh-dev wget vim git cmake curl wget python autoconf bzip2 libtool libtool-bin python3-pip python-dev locales rsync
+  apt-get build-dep -y r-base-core libpcre2-dev
   # LLVM
   apt-get install -y clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev
   apt-get clean
