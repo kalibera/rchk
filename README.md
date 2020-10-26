@@ -29,7 +29,10 @@ One can also build the singularity container from source, this is also fully
 automated, it takes longer than downloading the pre-built container, but it
 does not depend on external binaries and in Ubuntu 18.04 one can use the old
 `singularity-container` package from the distribution.  On Debian 9.8, one
-needs to use debootstrap from stretch-backports.
+needs to use debootstrap from stretch-backports. Currently, Singularity Hub
+used for pre-building packages uses an old version of debootstrap, which
+does not support Ubuntu 20.04, hence an older version of the image is used,
+based on Ubuntu 18.04.
 
 See [Singularity Instructions](doc/SINGULARITY.md),
 [Installation](doc/INSTALLATION.md) for more details how to use the
