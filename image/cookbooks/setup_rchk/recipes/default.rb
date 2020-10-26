@@ -129,7 +129,7 @@ end
 
 # install LLVM
 
-["llvm clang clang-6.0 llvm-6.0-dev llvm-6.0 libllvm6.0 libc\+\+-dev libc\+\+abi-dev"].each do |pkg|
+["clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
@@ -166,7 +166,7 @@ llvmdir = "/usr"
 
  # pip needed to install wllvm
 
-["python-pip"].each do |pkg|
+["python3-pip"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
@@ -186,7 +186,7 @@ wllvmdir = "/home/#{username}/.local/bin"
 
 execute "wllvm install" do
 #  command "sudo -u #{username} -H pip install --user #{wllvmsrcdir}"
-  command "sudo -u #{username} -H pip install wllvm"
+  command "sudo -u #{username} -H pip3 install wllvm"
   user "#{username}"
   action :run
   not_if {File.exists?("#{wllvmdir}/wllvm")}
@@ -199,7 +199,7 @@ bcheck = "#{rchkdir}/src/bcheck"
 
 git rchkdir do
   repository "git://www.github.com/kalibera/rchk"
-  revision "b8da998ff22a97c970f26f741abe169fec834ab3"
+  revision "0cb0860c7b7b6a7a8cf532c3a8be73427c265fcc"
   action :export
   user "root"
   not_if {File.exists?("#{rchkdir}/src")}
