@@ -68,7 +68,7 @@ More importantly, one also needs any dependencies needed by that package.
 	* `. ../scripts/cmpconfig.inc` (*in automated install*, `. /opt/rchk/scripts/cmpconfig.inc`)
 	* `../scripts/build_r.sh` (*in automated install*, `/opt/rchk/scripts/build_r.sh`)
 2. Install and check the package
-	* `echo 'install.packages("jpeg",repos="http://cloud.r-project.org")' |  ./bin/R --slave`
+	* `echo 'install.packages("jpeg",repos="http://cloud.r-project.org")' |  ./bin/R --no-echo`
 	* `../scripts/check_package.sh jpeg` (in VM install, `/opt/rchk/scripts/check_package.sh jpeg`)
 
 The output of the checking is in files
