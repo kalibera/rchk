@@ -38,6 +38,8 @@ MirrorURL: http://archive.ubuntu.com/ubuntu/
   export R_LIBS_USER=
   export R_MAKEVARS_USER=
   export R_MAKEVARS_SITE=
+  export R_PROFILE=
+  export R_PROFILE_USER=
   /opt/rchk/scripts/build_r.sh
 
   # fix up cmpconfig.inc to use user-defined PKG_BUILD, R_LIBS
@@ -134,13 +136,15 @@ EOF
   export R_LIBS_SITE=
   export R_MAKEVARS_USER=
   export R_MAKEVARS_SITE=
+  export R_PROFILE=
+  export R_PROFILE_USER=
   export LD="clang++ -stdlib=libc++"  
   mkdir -p "${PKG_BUILD_DIR}"
   mkdir -p "${R_LIBS}"
   if test "$PKG_NAME" = R ; then
     cd /tmp
     shift
-    /opt/R-devel/bin/R $*
+    /opt/R-devel/bin/R --vanilla $*
     exit
   fi
   cd /opt/R-devel
@@ -154,17 +158,17 @@ EOF
     fi
   fi
   echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
-  echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --no-echo
+  echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --vanilla --no-echo
   if test "$REPO" = NULL ; then
-    echo "q(status=\"$PKG_NAME\" %in% installed.packages())" | ./bin/R --no-echo
+    echo "q(status=\"$PKG_NAME\" %in% installed.packages())" | ./bin/R --vanilla --no-echo
     if test $? -ne 1 ; then
         echo
         echo "Re-trying with installation from CRAN first."
         echo
         echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")"
-        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")" | ./bin/R --no-echo
+        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")" | ./bin/R --vanilla --no-echo
         echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
-        echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --no-echo
+        echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --vanilla --no-echo
     fi
   fi
   find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec rm {} \;
@@ -173,6 +177,6 @@ EOF
   find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec cat {} \;
   echo
   echo "Rchk version: "`cd /opt/rchk && git rev-parse HEAD`
-  echo "R version: "`/opt/R-devel/bin/Rscript -e 'cat(paste(R.version$svn, R.version$version.string, sep="/"))'`
+  echo "R version: "`echo 'cat(paste(R.version$svn, R.version$version.string, sep="/"))'  | ./bin/R --vanilla --no-echo`
   echo "LLVM version: "`/usr/bin/llvm-config --version`
   exit
