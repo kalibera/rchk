@@ -24,7 +24,8 @@ MirrorURL: http://archive.ubuntu.com/ubuntu/
   git clone git://www.github.com/kalibera/rchk &&  \
     cd rchk && \
     cd src && \
-    make -j `cat /proc/cpuinfo | grep "core id" | wc -l` CXX=g++
+    make -j `cat /proc/cpuinfo | grep "core id" | wc -l` \
+        CXX=g++ BCHECK_MAX_STATES=3000000 CALLOCATORS_MAX_STATES=1000000 LLVM=/usr
 
   # download, build r-devel
   cd /opt
