@@ -79,9 +79,10 @@ install_package_libs <- function(package,
                    available = ap,  Ncpus = Ncpus,
                    INSTALL_opts = c("--no-byte-compile"))
                    
-  install.packages(pkgname, contriburl = contriburl, lib = target,
-                   available = ap, libs_only = TRUE, dependencies = FALSE,
-                   INSTALL_opts = c("--no-test-load"))
+  suppressWarnings(
+    install.packages(pkgname, contriburl = contriburl, lib = target,
+                     available = ap, libs_only = TRUE, dependencies = FALSE,
+                     INSTALL_opts = c("--no-test-load")))
                    
   soname <- file.path(target, pkgname, "libs", paste0(pkgname, ".so"))
   if (!file.exists(soname)) {
@@ -100,10 +101,13 @@ install_package_libs <- function(package,
                      Ncpus = Ncpus, INSTALL_opts = c("--no-test-load"))    
   }
   
-  if (file.exists(soname))
+  if (file.exists(soname)) {
+    cat("Installed libraries of package ", pkgname, "\n")
     soname
-  else
+  } else {
+    cat("Could not install package ", pkgname, "\n")
     character(0)
+  }
 }
 
 check_rchk_variables <- function() {
