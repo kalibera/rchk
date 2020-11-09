@@ -66,15 +66,15 @@ Usage:
    singularity run <rchk_image> <package_name>
    singularity run <rchk_image> R [arguments]
 
-Local package installation is performed when a package source path is provided.
-Otherwise, a default CRAN repository is used.  Output are placed in
-${PKG_ROOT}/build and ${PKG_ROOT}/lib directories, which are created if they do
-not exist. If not set, the PKG_ROOT shell variable is set to be the current
-working directory.
+Local package installation is performed when a package source path is
+provided.  Otherwise, default CRAN and BIOC repositories are used.  Outputs
+are placed in ${PKG_ROOT}/build, ${PKG_ROOT}/lib, and ${PKG_ROOT}/libsonly
+directories, which are created if they do not exist.  If not set, the
+PKG_ROOT shell variable is set to be the current working directory.
 
 Usage examples:
 
-# Install curl from cran and check:
+# Install curl from CRAN and check:
 singularity run rchk.img curl
 
 # Local package install
@@ -99,14 +99,11 @@ EOF
     exit 1
   fi
   if test -n "$2"; then
-    REPO="NULL"
     PKG_NAME="$1"
     PKG_PATH="$2"
   else
-    REPO="'https://cloud.r-project.org'"
     PKG_PATH="$1"
     if echo "$1" | grep -q "tar\.gz$" ; then
-      REPO="NULL"
       PKG_NAME=`echo $1 | sed -e 's/.*\///g' | sed -e 's/\(.*\)_.*/\1/g'`
     else
       PKG_NAME="$1"
@@ -116,7 +113,7 @@ EOF
     export PKG_ROOT=`pwd`
     echo
     echo "Note: Setting PKG_ROOT variable to the current directory."
-    echo "Output will be in ./lib and ./build subdirectories."
+    echo "Output will be in ./lib, ./build and ./libsonly subdirectories."
     echo "If it is not, maybe your local singularity configuration does"
     echo "not allow singularity container to access your current directory;"
     echo "it may help to try with PKG_ROOT=/tmp or check the configurarion."
@@ -133,6 +130,7 @@ EOF
   export LLVM_COMPILER=clang
   export PKG_BUILD_DIR="${PKG_ROOT}/build"
   export R_LIBS="${PKG_ROOT}/lib"
+  export R_LIBSONLY="${PKG_ROOT}/libsonly"
   export R_LIBS_USER="${PKG_ROOT}/lib"
   export R_LIBS_SITE=
   export R_MAKEVARS_USER=
@@ -142,6 +140,7 @@ EOF
   export LD="clang++ -stdlib=libc++"  
   mkdir -p "${PKG_BUILD_DIR}"
   mkdir -p "${R_LIBS}"
+  mkdir -p "${R_LIBSONLY}"
   if test "$PKG_NAME" = R ; then
     cd /tmp
     shift
@@ -149,7 +148,7 @@ EOF
     exit
   fi
   cd /opt/R-devel
-  if test "$REPO" = NULL ; then
+  if test "$PKG_PATH" != "$PKG_NAME" ; then
     if [ ! -r "$PKG_PATH" ] ; then
       echo
       echo "The container cannot access package tarball $PKG_PATH."
@@ -158,20 +157,8 @@ EOF
       exit 2
     fi
   fi
-  echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
-  echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --vanilla --no-echo
-  if test "$REPO" = NULL ; then
-    echo "q(status=\"$PKG_NAME\" %in% installed.packages())" | ./bin/R --vanilla --no-echo
-    if test $? -ne 1 ; then
-        echo
-        echo "Re-trying with installation from CRAN first."
-        echo
-        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")"
-        echo "install.packages(\"$PKG_NAME\", repos=\"https://cloud.r-project.org\")" | ./bin/R --vanilla --no-echo
-        echo "install.packages(\"$PKG_PATH\", repos=$REPO)"
-        echo "install.packages(\"$PKG_PATH\", repos=$REPO)" | ./bin/R --vanilla --no-echo
-    fi
-  fi
+  echo "source(\"${RCHK}/scripts/utils.r\"); install_package_libs(\"${PKG_PATH}\")"
+  echo "source(\"${RCHK}/scripts/utils.r\"); install_package_libs(\"${PKG_PATH}\")" | ./bin/R --vanilla --no-echo
   find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec rm {} \;
   /opt/rchk/scripts/check_package.sh "$PKG_NAME"
   echo
