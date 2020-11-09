@@ -5,16 +5,17 @@
 # the packages have to be installed with cmpconfig.inc included into shell
 #   they are placed into packages/lib and their build dirs are kept in packages/build
 #
+# packages can also be installed using install_package_libs from utils.r, then only their
+#   shared libraries are installed (--libs-only) into packages/libsonly
+#
 # this script is to be run from the R source directory
-
+#
 # Usage:
 #
 #   check_package.sh package_name tool1 tool2 etc
-#   package_name can be "all" (by default)
 #
 # Examples:
 #
-#   check all packages with default tools:  ./check_package.sh
 #   check png package with default tools:   ./check_package.sh png
 #   check ggplot2 package with bcheck tool: ./check_package.sh ggplot2 bcheck
 
@@ -45,14 +46,16 @@ fi
 . $RCHK/scripts/cmpconfig.inc
 
 PKGDIR=$R_LIBS
-
 PKGARG=$1
 
-if [ "X$PKGARG" != X ] && [ "X$PKGARG" != "all" ] ; then
-  PKGDIR=$PKGDIR/$PKGARG
+if [ "X$PKGARG" != X ] ; then
+  PKGDIR=${R_LIBSONLY}/$PKGARG
   if [ ! -d $PKGDIR ] ; then
-    echo "Cannot find package $PKGARG ($PKGDIR does not exist)." >&2
-    exit 2
+    PKGDIR=$R_LIBS/$PKGARG
+    if [ ! -d $PKGDIR ] ; then
+      echo "Cannot find package $PKGARG ($PKGDIR does not exist)." >&2
+      exit 2
+    fi
   fi
 fi
 
