@@ -22,5 +22,9 @@ else
   export LLVM_COMPILER=clang
   export PKG_BUILD_DIR=`pwd`/packages/build
   export R_LIBS=`pwd`/packages/lib
+  export R_LIBSONLY=`pwd`/packages/libsonly
   export LD="clang++ -stdlib=libc++"
+
+  # it is too easy to forget and then not find packages to check
+  mkdir -p $R_LIBS
 fi
