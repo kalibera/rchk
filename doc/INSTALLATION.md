@@ -77,7 +77,7 @@ These instructions are for LLVM 10. Tested October 21, 2020.
 	* `apt-get update`
 	* `apt-get build-dep -y r-base`
 1. Install clang and llvm:
-	* `apt-get install clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev
+	* `apt-get install clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev`
 2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
 	* `apt-get install python3-pip`
 	* `pip3 install wllvm` (as root)
