@@ -1,21 +1,23 @@
 The original version of the Singularity support and of this note has been
-contributed by B. W. Lewis.
+contributed by B. W. Lewis. Both has been updated by rchk author.
 
-<!--
-The rchk project, https://github.com/kalibera/rchk is an important tool for
-detecting memory protection errors and related subtle bugs in R packages that
-contain compiled code and the R source code itself.
+This note and the corresponding `Singularity.def` and `Singularity.bionic`
+files present an alternative simple container recipe using the Singularity
+container system (https://www.sylabs.io/docs/).  Singularity is a serverless
+(that is, no daemon process) container system for GNU Linux popular in HPC
+settings.
 
-The project uses the LLVM compiler toolchain with the whole program LLVM
-extensions.  The rchk project includes recipes for Docker and Vagrant
-systems to help automate the set up process to build either containers or
-virtual machines that can then be used to check R packages.
+These two configurations are used to build container images via Singularity
+hub. Those images can be used for checking R package tarballs and packages
+from CRAN/BIOC repositories. Required dependencies (R packages) are
+automatically downloaded and installed from CRAN/BIOC. One does not need a
+root account on the machine to use these pre-built containers.
 
-This note and the corresponding `singularity.def` file present an alternative
-simple container recipe using the Singularity container system
-(https://www.sylabs.io/docs/). Singularity is a lightweight, serverless (that
-is, no daemon process), container system for GNU Linux popular in HPC settings.
--->
+However, some R packages require OS libraries and not all of those needed by
+all CRAN and BIOC packages are present in the image (it would be too large,
+otherwise). More effort is needed to install such libraries into the
+container and with Singularity, this requires root account. Building the
+singularity container from its definition also requires root account.
 
 This note outlines system requirements and installation of singularity,
 building a container for rchk, and testing R packages using the container.
@@ -25,26 +27,35 @@ building a container for rchk, and testing R packages using the container.
 Singularity requires a GNU Linux operating system. Most modern GNU Linux
 systems include Linux kernels that will work. 
 
-For Ubuntu/Debian, one can install singularity from
-[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container),
-package `singularity-container` (not `singularity`, that is a computer
-game). Some earlier version of Ubuntu/Debian included
-`singularity-container` in the distribution.
+For Ubuntu/Debian, the package name is `singularity-container` and it is
+available in the main distribution (Debian Sid, Ubuntu 18.04) or from 
+[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container)
+(Debian 9, 10, 11, Ubuntu 20.04, 18.04, 16.04). For Fedora and openSUSE, the
+package name is `singularity` and it is available from the main
+distribution.
 
 More information can be found at
 https://www.sylabs.io/guides/3.0/user-guide/installation.html.
 
 ## Building an rchk container image
 
-The `singularity.def` file in directory `image` includes a singularity
+The `Singularity.def` file in directory `image` includes a singularity
 definition file for building a singularity container image based on Ubuntu
-20.04 (focal) and the LLVM-10.0.  Singularity containers may be built as
-single files or, for experimentation, sandbox directories.
+20.04 (focal) and the LLVM-10.0.  The `Singularity.bionic` file in directory
+`image` is an older version based on Ubuntu 18.04 (bionic). It does not get
+all the updates and improvements, but is still provided to build an image on
+Singularity hub for use with older versions of singularity (Ubuntu 20.04 on
+Singularity hub is only supported by a builder which requires a newer
+version of singularity than available on some systems).
 
-Note! If you're running on Red Hat or CentOS, you'll need the `debootstrap`
-program: `sudo yum install debootstrap`. See the singularity documentation for
-more information. You need to use a recent version of `debootstrap` that
-supports Ubuntu 20.04 (focal). 
+Singularity containers may be built as single files or, for experimentation,
+sandbox directories.
+
+Note!  If you're running on Red Hat, Fedora or CentOS, you'll need the
+`debootstrap` program: `sudo yum install debootstrap`.  See the singularity
+documentation for more information.  You need to use a recent version of
+`debootstrap` that supports Ubuntu 20.04 (focal), or you need to build the
+older container based on Ubuntu 18.04 (bionic).
 
 Build the rchk singularity image with (run in directory `image`):
 ```
@@ -54,24 +65,19 @@ sudo singularity build rchk.img singularity.def       # makes rchk.img
 See the singularity documentation and the example below for alternative
 output formats (like a sandboxed directory that you can investigate easily).
 
-<!--
-The container build process concludes with a usage message, or an error if
-something goes wrong.
--->
-
 ## Checking a package with the rchk.img container
 
-We've set the container up to make it easy to check R packages installed from
-CRAN or from a local source file. The packages are built and installed into a
-directory determined by the `PKG_ROOT` shell variable. If that variable is not
-set then the current working directory is used for output.  Outputs are placed
-in ${PKG_ROOT}/build and ${PKG_ROOT}/lib directories, which are created if they
-do not exist.
+We've set the container up to make it easy to check R packages installed
+from CRAN or BIOC or from a local source file.  The packages are built and
+installed into a directory determined by the `PKG_ROOT` shell variable.  If
+that variable is not set then the current working directory is used for
+output.  Outputs are placed in ${PKG_ROOT}/build, ${PKG_ROOT}/lib and
+${PKG_ROOT}/libsonly directories, which are created if they do not exist.
 
 Depending on the configuration of singularity, it may not be possible to
 save the outputs in the current directory for security reasons (it worked
-for me with the default configuration on Ubuntu 18.04 but not Debian 9.7;
-setting PKG_ROOT=/tmp worked in both cases).
+for me with the default configuration on Ubuntu 18.04 and 20.04 but not
+Debian 9.7; setting PKG_ROOT=/tmp worked in both cases).
 
 Generic container invocation is:
 ```
@@ -81,13 +87,15 @@ singularity run <container image file> R
 ```
 The last form is to run R interactively, e.g. to install packages needed as
 dependencies. Note though that for CRAN packages and tarballs of new
-versions of CRAN packages, this is done automatically.
+versions of CRAN packages, this is done automatically, so this should not be
+really needed.
 
-For compatibility reasons, one can also invoke as:
-
-```
-singularity run <container image file> <package name>  [source package path]
-```
+In Singularity, environment variables and home directories are by default
+inherited from the host system. Some care is taken for R running inside the
+container to be robust against this (setting R_LIBS variables, not running R
+init files, etc), but it is possible that some of these variables have been
+left unhandled, and that has been the case in the past. In case of
+surprising behavior of the container, this may be worth checking.
 
 Here is an example that checks the R package `curl` installed from CRAN,
 placing rchk output in the current directory:
@@ -114,20 +122,29 @@ cat /tmp/lib/irlba/libs/irlba.so.bcheck
 # Analyzed 71 functions, traversed 489 states.
 ```
 
-If installation of a package from a tarball fails, but the package of that
-name has not previously been installed, the container automatically attempts
-to install the same package from CRAN and then again from the local tarball. 
-This is to handle automatically the common case when the installation has
-originally failed because of missing package dependencies.
+The container uses `install_package_libraries` from `utils.r` to install
+just shared libraries of the package to check (using `R CMD INSTALL
+--libs-only`).  Packages (shared libraries) installed this way are kept in
+`libsonly`.  Dependent R packages are installed fully and are kept in
+`libs`.  `build` includes build directories of both kinds of packages (what
+normally is in temporary session directory when using R, but with rchk,
+these are needed to extract LLVM bitcode).  `libsonly` is in fact not
+re-used across runs of the container, but `lib` and `build` are when
+available.  They may be deleted when the container is not running, and
+dependencies will then be re-installed as needed. Outputs from the checks
+are kept in files ending with `check` next to the shared library objects
+checked, so under `libsonly` with the def image and `libs` with the bionic
+image.
+
 
 ## Sandboxed images
 
 Some R packages may require additional operating system library dependencies
-not included in the container recipe `singularity.def` above. You can add
-additional Ubuntu-packaged libraries to the container recipe before building
-it. Alternatively, you can build a container `sandbox` directory instead of a
+not included in the container recipe above.  You can add additional
+Ubuntu-packaged libraries to the container recipe before building it. 
+Alternatively, you can build a container `sandbox` directory instead of a
 single container image file, and dynamically add required libraries to the
-sandbox directory as needed. You can also use an `overlay` (see below),
+sandbox directory as needed.  You can also use an `overlay` (see below),
 which works also with the pre-built image available from Singularity hub.
 
 The following example builds a sandboxed container directory. We then try to
@@ -214,6 +231,7 @@ one could also create the image using `image.create` instead of
 singularity image.create myoverlay.img
 ```
 
+The overlay image can be inserted into the same SIMG container image file.
 Also, one can build a writeable Singularity image from the container
 definition.  See [Singularity documentation](https://www.sylabs.io/docs/)
 for more information.
