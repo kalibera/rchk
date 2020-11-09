@@ -159,10 +159,10 @@ EOF
   fi
   echo "source(\"${RCHK}/scripts/utils.r\"); install_package_libs(\"${PKG_PATH}\")"
   echo "source(\"${RCHK}/scripts/utils.r\"); install_package_libs(\"${PKG_PATH}\")" | ./bin/R --vanilla --no-echo
-  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec rm {} \;
+  find "${PKG_ROOT}/libsonly/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec rm {} \;
   /opt/rchk/scripts/check_package.sh "$PKG_NAME"
   echo
-  find "${PKG_ROOT}/lib/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec cat {} \;
+  find "${PKG_ROOT}/libsonly/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec cat {} \;
   echo
   echo "Rchk version: "`cd /opt/rchk && git rev-parse HEAD`
   echo "R version: "`echo 'cat(paste(R.version$svn, R.version$version.string, sep="/"))'  | ./bin/R --vanilla --no-echo`
