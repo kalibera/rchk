@@ -71,14 +71,15 @@ fi
 RBC=nonexistent
 if [ -r ./src/main/R.bin.bc ] ; then
   RBC=./src/main/R.bin.bc
-elif [ -r ./build/lib/R/bin/exec/R.bc ] ; then
-  RBC=./build/lib/R/bin/exec/R.bc
+elif [ -r ./build/R.bc ] ; then
+  RBC=./build/R.bc
 elif [ -r ./src/main/R.bin ] ; then
   $WLLVM/extract-bc ./src/main/R.bin
   RBC=./src/main/R.bin.bc
 elif [ -r ./build/lib/R/bin/exec/R ] ; then
   $WLLVM/extract-bc ./build/lib/R/bin/exec/R
-  RBC=./build/lib/R/bin/exec/R.bc
+  mv ./build/lib/R/bin/exec/R.bc ./build
+  RBC=./build/R.bc
 fi
 
 if [ ! -r $RBC ] ; then
