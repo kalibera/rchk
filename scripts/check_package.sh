@@ -38,8 +38,8 @@ if ! check_config ; then
   exit 2
 fi
 
-if [ ! -r ./src/main/R.bin.bc ] ; then
-  echo "This script has to be run from the root of R source directory with bitcode files (e.g. src/main/R.bin.bc)." >&2
+if [ ! -r ./src/main/R.bin ] && [ ! -r ./build/lib/R/bin/exec/R ] ; then
+  echo "This script has to be run from the root of R source directory with bitcode files (e.g. src/main/R.bin exists) or R binary installation (./build/lib/R/bin/exec/R exists)." >&2
   exit 2
 fi
 
@@ -66,8 +66,27 @@ else
   TOOLS="$*"
 fi
 
+# find or extract R bitcode file
 
-# extract bitcode if needed
+RBC=nonexistent
+if [ -r ./src/main/R.bin.bc ] ; then
+  RBC=./src/main/R.bin.bc
+elif [ -r ./build/lib/R/bin/exec/R.bc ] ; then
+  RBC=./build/lib/R/bin/exec/R.bc
+elif [ -r ./src/main/R.bin ] ; then
+  $WLLVM/extract-bc ./src/main/R.bin
+  RBC=./src/main/R.bin.bc
+elif [ -r ./build/lib/R/bin/exec/R ] ; then
+  $WLLVM/extract-bc ./build/lib/R/bin/exec/R
+  RBC=./build/lib/R/bin/exec/R.bc
+fi
+
+if [ ! -r $RBC ] ; then
+  echo "Cannot find R bitcode file ($RBC does not exist)." >&2
+  exit 2
+fi
+
+# extract package bitcode if needed
 
 find $PKGDIR -name "*.so" | while read SOF ; do
   if [ ! -r $SOF.bc ] || [ $SOF.bc -nt $SOF ] ; then
@@ -80,8 +99,8 @@ done
 for T in $TOOLS ; do
   find $PKGDIR -name "*.bc" | grep -v '\.o\.bc' | while read F ; do
     FOUT=`echo $F | sed -e 's/\.bc$/.'$T'/g'`
-    if [ ! -r $FOUT ] || [ $F -nt $FOUT ] || [ ./src/main/R.bin.bc -nt $FOUT ] ; then
-      $RCHK/src/$T ./src/main/R.bin.bc $F >$FOUT 2>&1
+    if [ ! -r $FOUT ] || [ $F -nt $FOUT ] || [ $RBC -nt $FOUT ] ; then
+      $RCHK/src/$T $RBC $F >$FOUT 2>&1
     fi
   done
 done
