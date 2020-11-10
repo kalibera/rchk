@@ -69,7 +69,7 @@ install_package_libs <- function(package,
   sodir <- file.path(target, pkgname)
   unlink(sodir, recursive = TRUE)
   
-  Sys.setenv("_R_INSTALL_LIBSONLY_FORCE_DEPENDS_IMPORTS_" = "FALSE")
+  Sys.setenv("_R_INSTALL_LIBS_ONLY_FORCE_DEPENDS_IMPORTS_" = "FALSE")
   
   ip <- installed.packages()[,"Package"]
   deps <- direct_linking_to[!(direct_linking_to %in% ip)]
