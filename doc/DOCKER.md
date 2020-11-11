@@ -1,6 +1,6 @@
-Rchk is available also as a docker image intended to be run as a command,
-which checks a particular package from a source tarball or CRAN/BIOC.  The
-image automatically installs R package dependencies from CRAN and BIOC.
+Rchk is available also in a docker container intended to be run as a
+command. It checks a package from tarball or CRAN/BIOC, dependencies from
+CRAN/BIOC are installed automatically.
 
 A pre-built image is available on Docker hub:
 
@@ -14,7 +14,7 @@ docker pull kalibera/rchk:latest
 docker run kalibera/rchk:latest audio
 ```
 
-At the time of this writing (audio version 0.1-7), the output ends with
+The output ends with
 
 ```
 Installed libraries of package  audio 
@@ -32,24 +32,23 @@ WARNING Suspicious call (two or more unprotected arguments) to Rf_setAttrib at l
 ```
 
 `ERROR: too many states (abstraction error?)` can be ignored, it informs
-about that `strptime_internal` function in R is too complicated to analyze.
-`ERROR: did not find initialization function R_init_audio` is from
-`fficheck` (checking foreign function call registration). `WARNING Suspicious
-call` are from `maacheck` (checking for likely PROTECT bugs due to multiple
-allocating arguments in a function). `src/driver.c:241` is
+about that `strptime_internal` function in R is too complicated to be
+analyzed.  `ERROR: did not find initialization function R_init_audio` is
+from `fficheck` (checking foreign function call registration).  `WARNING
+Suspicious call` are from `maacheck` (checking for likely PROTECT bugs due
+to multiple allocating arguments in a function).  `src/driver.c:241` is
 
 ```
        Rf_setAttrib(ptr, Rf_install("class"), Rf_mkString("audioInstance"));
 ```
 
-The unprotected result of `Rf_mkString` can be destroyed by GC run during
+The unprotected result of `Rf_mkString` can be destroyed by GC during
 allocating function `Rf_install`.
 
-## Container state in `packages`
+## Keeping container state
 
 When invoked as above, R package dependencies are installed automatically on
-every invocation of the container, the container itself does not keep any
-state
+every invocation of the container.
 
 To avoid this overhead, one can create directory `packages` and make it
 available to the container to keep state across invocations.
@@ -57,14 +56,13 @@ available to the container to keep state across invocations.
 This allows to re-use R packages installed as dependencies (in
 `packages/libs`), to keep record of built package sources (in
 `packages/build`) and of checking outputs (in `packages/libsonly`).  These
-directories also include additional state used by the container.  Also,
-mounting this directory allows to check source package tarballs (they need
-to be somewhere accessible to the container).  This is demonstrated in the
-following.
+directories also include additional state used by the container.  Also, this
+directory can be used for storing tarballs of packages to check, so that the
+container can access them. More details are provided in the following.
 
 ## Checking a package from a tarball
 
-To check source tarball of a package
+To check a package tarball
 
 ```
 # wget https://cran.r-project.org/src/contrib/lazy_1.2-16.tar.gz
@@ -134,7 +132,7 @@ Split outputs from checking by tool are in `./packages/libsonly/lazy/libs/`:
 
 ## Checking a package with R package dependencies
 
-R package dependencies are installed automatically, so e.g. running
+R package dependencies are installed automatically, so running
 
 ```
 mkdir -p packages
