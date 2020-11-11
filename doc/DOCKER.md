@@ -2,6 +2,11 @@ Rchk is available also in a docker container intended to be run as a
 command. It checks a package from tarball or CRAN/BIOC, dependencies from
 CRAN/BIOC are installed automatically.
 
+[Docker](https://www.docker.com/) is available for free for Linux, macOS and
+Windows.  I've tested the rchk container on Ubuntu 20.04 (package docker.io,
+19.03.8), on macOS (Docker Desktop, 19.03.13) and on Windows (Docker
+Desktop, 19.03.13). 
+
 A pre-built image is available on Docker hub:
 
 ```
@@ -71,6 +76,14 @@ cp lazy_1.2-16.tar.gz packages
 docker run -v `pwd`/packages:/rchk/packages kalibera/rchk:latest /rchk/packages/lazy_1.2-16.tar.gz
 ```
 
+On Windows, use Windows full path in `-v`, instead:
+
+```
+cd
+# prints current directory, e.g. C:\Users\tomas
+docker run -v C:\Users\tomas\packages:/rchk/packages kalibera/rchk:latest --install-deb "libgmp-dev libmpfr-dev"  Rmpfr
+````
+
 In the above, directory `packages` is made available to the container under
 `/rchk/packages`, hence the full path to the tarball
 `packages/lazy_1.2-16.tar.gz` is `/rchk/packages/lazy_1.2-16.tar.gz`.
@@ -132,7 +145,7 @@ Split outputs from checking by tool are in `./packages/libsonly/lazy/libs/`:
 
 ## Checking a package with R package dependencies
 
-R package dependencies are installed automatically, so running
+R package dependencies are installed automatically, so running (omit `-p` on Windows)
 
 ```
 mkdir -p packages
@@ -154,7 +167,7 @@ other reason, it will fail twice.
 
 ## Checking a package depending on unavailable library
 
-For example, checking Rmpfr
+For example, checking Rmpfr (omit `-p` on Windows)
 
 ```
 mkdir -p packages
@@ -165,11 +178,12 @@ fails, because it needs mpfr library to be installed in the container, but
 it is not, and as explained above compilation of specifically Rmpfr is tried
 twice. It is not possible to include all libraries needed by CRAN/BIOC
 packages in the container, because it would be too large. One can, however,
-instruct the container to install these Ubuntu packages before checking:
+instruct the container to install these Ubuntu packages before checking
+(omit `-p` on Windows):
 
 ```
 mkdir -p packages
-docker run -v `pwd`/packages:/rchk/packages --install-deb "libgmp-dev libmpfr-dev" kalibera/rchk:latest Rmpfr
+docker run -v `pwd`/packages:/rchk/packages kalibera/rchk:latest --install-deb "libgmp-dev libmpfr-dev"  Rmpfr
 ```
 
 Note that while `packages`, when made available to the container, can keep the
@@ -223,7 +237,7 @@ Successfully built 1be53728bdf4
 
 Now, the resulting container `1be53728bdf4` is a modified rchk container
 with installed `libgmp-dev` and `libmpfr-dev`, so one can check Rmpfr as
-follows:
+follows (omit `-p` on Windows):
 
 ```
 mkdir -p packages

@@ -21,18 +21,19 @@ The tool is available in pre-built containers, Docker and Singularity, for
 particular package:
 
 ```
-singularity pull shub://kalibera/rchk:def
-singularity run kalibera-rchk-master-def.simg jpeg
-```
- 
-```
 docker pull kalibera/rchk:latest
 docker run kalibera/rchk:latest audio
 ```
 
+```
+singularity pull shub://kalibera/rchk:def
+singularity run kalibera-rchk-master-def.simg jpeg
+```
+
 For more details, see [Docker rchk container](doc/DOCKER.md) and 
 [Singularity rchk container](doc/SINGULARITY.md). This setup is good for
-occasional checking of a single package, for Linux users.
+occasional checking of a single package. Docker clients are
+available for Linux, macOS and Windows. Singularity only for Linux.
 
 The tool can also be used interactively in a virtual machine running Ubuntu,
 which can be automatically installed using Vagrant scripts. This setup is
