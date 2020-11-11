@@ -5,7 +5,8 @@ CRAN/BIOC are installed automatically.
 [Docker](https://www.docker.com/) is available for free for Linux, macOS and
 Windows.  I've tested the rchk container on Ubuntu 20.04 (package docker.io,
 19.03.8), on macOS (Docker Desktop, 19.03.13) and on Windows (Docker
-Desktop, 19.03.13). 
+Desktop, 19.03.13). The rchk docker image is inspired by an earlier image
+from Filip Krikava.
 
 A pre-built image is available on Docker hub:
 
@@ -67,7 +68,7 @@ container can access them. More details are provided in the following.
 
 ## Checking a package from a tarball
 
-To check a package tarball
+To check a package tarball (on Linux and macOS)
 
 ```
 # wget https://cran.r-project.org/src/contrib/lazy_1.2-16.tar.gz
@@ -76,12 +77,12 @@ cp lazy_1.2-16.tar.gz packages
 docker run -v `pwd`/packages:/rchk/packages kalibera/rchk:latest /rchk/packages/lazy_1.2-16.tar.gz
 ```
 
-On Windows, use Windows full path in `-v`, instead:
+On Windows:
 
 ```
-cd
-# prints current directory, e.g. C:\Users\tomas
-docker run -v C:\Users\tomas\packages:/rchk/packages kalibera/rchk:latest --install-deb "libgmp-dev libmpfr-dev"  Rmpfr
+mkdir packages
+copy lazy_1.2-16.tar.gz packages
+docker run -v %cd%/packages:/rchk/packages kalibera/rchk:latest --install-deb "libgmp-dev libmpfr-dev"  Rmpfr
 ````
 
 In the above, directory `packages` is made available to the container under
