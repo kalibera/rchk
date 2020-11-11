@@ -5,8 +5,10 @@ CRAN/BIOC are installed automatically.
 [Docker](https://www.docker.com/) is available for free for Linux, macOS and
 Windows.  I've tested the rchk container on Ubuntu 20.04 (package docker.io,
 19.03.8), on macOS (Docker Desktop, 19.03.13) and on Windows (Docker
-Desktop, 19.03.13). The rchk docker image is inspired by an earlier image
-from Filip Krikava.
+Desktop, 19.03.13). Docker is not officially supported on Fedora 32 (one may
+use rchk singularity container, instead).
+
+The rchk docker image is inspired by an earlier image from Filip Krikava.
 
 A pre-built image is available on Docker hub:
 
