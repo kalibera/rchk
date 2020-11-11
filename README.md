@@ -7,71 +7,55 @@ whole-program static analysis on LLVM bitcode and run on Linux.  About
 rchk is now regularly used to check [CRAN
 packages](https://github.com/kalibera/cran-checks/tree/master/rchk).
 
-The tools can be used from a pre-built singularity container on Linux
-systems. To check R package `jpeg` from CRAN, one needs to do
+To use the tool, one needs to build R from source using a special compiler
+wrapper, which builds LLVM bitcode in addition to native code (both shared
+libraries and executables). R packages are then installed using this version
+of R, providing LLVM bitcode for their shared libraries as well. The core of
+rchk is implemented in C++ and analyzes the LLVM bitcode of R packages and R
+itself. Several installation options are provided, including containers.
 
-```
-singularity pull shub://kalibera/rchk:bionic
-singularity run kalibera-rchk-master-bionic.simg jpeg
-```
+## Installation
 
-Note that the default image file name may be different (e.g. 
-`rchk_def.sif`), based on the version of singularity used.  The results will
-be printed and saved in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck` and
-`lib/jpeg/libs/jpeg.so.maacheck`).  Full path to the package tarball can be
-given instead to check a version of the package not yet on CRAN.  
-
-I've
-tested this on Ubuntu 18.04 (singularity 2.6 from
-[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
-and on Debian 9.8 (singularity 2.6 from stretch-backports) and on Debian
-buster/testing (singularity 3.0.3 from the distribution) and on Ubuntu 20.04
-(singularity 2.6 from
-[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container)).
-
-There is also a newer singularity image with tag "def", it uses Ubuntu 20.04
-as guest systems, but requires singularity at least version 3.5 (available
-in Debian Sid as "singularity-container", in Fedora 31-33 as "singularity"
-and in openSUSE as "singularity", not in Ubuntu 20.04 or earlier):
+The tool is available in pre-built containers, Docker and Singularity, for
+*non-interactive* use. The container is invoked as a command to check a
+particular package:
 
 ```
 singularity pull shub://kalibera/rchk:def
 singularity run kalibera-rchk-master-def.simg jpeg
-``` 
+```
+ 
+```
+docker pull kalibera/rchk:latest
+docker run kalibera/rchk:latest audio
+```
 
-One can also build the singularity container from source, this is also fully
-automated, it takes longer than downloading the pre-built container, but it
-does not depend on external binaries and in Ubuntu 18.04 one can use the old
-`singularity-container` package from the distribution.  On Debian 9.8, one
-needs to use debootstrap from stretch-backports. Building the container,
-however, requires root access on the (host) machine.
+For more details, see [Docker rchk container](doc/DOCKER.md) and 
+[Singularity rchk container](doc/SINGULARITY.md). This setup is good for
+occasional checking of a single package, for Linux users.
 
-See [Singularity Instructions](doc/SINGULARITY.md),
-[Installation](doc/INSTALLATION.md) for more details how to use the
-container and how to build it.  External libraries needed for some R
-packages can be installed into the container using an *overlay* (also works
-for the pre-built image) or using a *sandbox* (documented
-[here](doc/SINGULARITY.md)).  An initial version of the singularity
-container has been contributed by B.  W.  Lewis.
+The tool can also be used interactively in a virtual machine running Ubuntu,
+which can be automatically installed using Vagrant scripts. This setup is
+good for Linux, Windows and macOS users and makes it faster to repeatedly
+check the same package and easier to customize the process. See
+[Automated installation (Docker/Virtualbox) for interactive use](doc/INSTALLATION.md).
 
-The tools can also be installed automatically into a Virtualbox or Docker
-container and log into that virtual machine and use it from command line
-interactively to check packages, check R itself, etc.  Virtualbox
-installation is possible on Windows, macOS and Linux; Docker installation
-only on Linux.  See [Installation](doc/INSTALLATION.md) and the steps below
-on checking the first package.
+Finally, the tool can be installed natively on Linux, compiled from source.
+This setup is good for interactive use and reduces disk space overhead. The
+setup is not automated, but only requires several steps described for recent
+Linux distributions. See [Native installation on Linux for interactive use](doc/INSTALLATION.md).
 
-On Linux, one can also install `rchk` natively, which has been tested on
-recent Ubuntu, Debian and Fedora distributions.  This is the fastest and
-most flexible way to use `rchk` for users working on Linux.  See
-[Installation](doc/INSTALLATION.md) and the steps below on checking the
-first package.
+An alternative docker image is also available from third parties on R-hub
+(`rhub/ubuntu-rchk`,
+[source](https://github.com/r-hub/rhub-linux-builders/tree/master/ubuntu-rchk)).
 
-## Checking the first package (not for Singularity containers)
+## Checking the first package (interactive use)
 
-For this that one also needs to install `subversion`, `rsync` (`apt-get
-install subversion rsync`, but already available in the automated install). 
-More importantly, one also needs any dependencies needed by that package.
+This part applies to interactive installation of rchk (natively or automated
+install in Docker/Virtualbox).  For this that one also needs to install
+`subversion`, `rsync` (`apt-get install subversion rsync`, but already
+available in the automated install).  More importantly, one also needs any
+dependencies needed by that package.
 
 1. Build R producing also LLVM bitcode
 	* `svn checkout https://svn.r-project.org/R/trunk`
@@ -103,6 +87,14 @@ this customized version of R.  When checking a tarball, one would typically
 first install the CRAN/BIOC version of the package to get all dependencies
 in, and then use `R CMD INSTALL` to install the newest version to check from
 the tarball.
+
+One can reduce the number of required R package dependencies by only
+installing LinkingTo dependencies of the package and then installing the
+package with `--libs-only` option (only shared libraries are built and
+installed). This is enough to build shared libraries of most but not all
+packages. Docker and singularity rchk containers for non-interactive use do
+this, see `scripts/utils.r` and definitions of the containers for more
+details.
 
 Further information:
 

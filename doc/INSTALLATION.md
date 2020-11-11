@@ -1,4 +1,4 @@
-# Automated installation (Docker/Virtualbox)
+# Automated installation (Docker/Virtualbox) for interactive use
 
 One can use a pre-installed virtual machine with rchk (or, more precisely,
 use an automated script that installs such machine without user
@@ -25,42 +25,7 @@ instructions provided [here](../README.md).  One can access the host file
 system in directory `/vagrant` inside the virtual installation, e.g.  to
 copy package tarballs in and out.
 
-# Automated installation (Singularity)
-
-On Linux, one can install also into a singularity container
-([instructions](SINGULARITY.md) and configuration contributed by B. 
-W.  Lewis, with some maintenance/updates from me).  This setup is aimed
-directly at checking of packages, one normally would not log into the
-virtual machine, but the machine keeps some state on the host system
-(package library, temporary build files, and rchk reports).  For just
-checking of packages on Linux, this is easier to use than the Docker/Virtualbox
-one. Even the text may seem long, the installation can be as simple as
-(running on Ubuntu 18.04 as host system):
-
-```
-apt-get install singularity-container debootstrap
-singularity build rchk.img singularity.def
-```
-
-and the checking just (package memisc from CRAN).
-
-```
-/usr/bin/singularity run rchk.img memisc
-```
-
-and the results appear under subdirectory "lib" of the current directory. 
-Full path to the package tarball can be given instead as argument to check a
-testing version of the package.  On Ubuntu 20.04, install
-`singularity-container` from Neuro Debian (see
-[instructions](SINGULARITY.md)).
-
-# Alternative automated installations
-
-An alternative docker image is also available from third parties on R-hub
-(`rhub/ubuntu-rchk`,
-[source](https://github.com/r-hub/rhub-linux-builders/tree/master/ubuntu-rchk)).
-
-# Native installation on Linux
+# Native installation on Linux for interactive use
 
 Once the installation is finished, check the first R package using
 instructions provided [here](../README.md).  The description below assumes

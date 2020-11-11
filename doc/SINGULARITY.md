@@ -1,11 +1,52 @@
-The original version of the Singularity support and of this note has been
-contributed by B. W. Lewis. Both has been updated by rchk author.
+Rchk is available in pre-built singularity container on Linux
+systems. To check R package `jpeg` from CRAN, one needs to do
+
+```
+singularity pull shub://kalibera/rchk:bionic
+singularity run kalibera-rchk-master-bionic.simg jpeg
+```
+
+Note that the default image file name may be different (e.g. 
+`rchk_def.sif`), based on the version of singularity used.  The results will
+be printed and saved in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck` and
+`lib/jpeg/libs/jpeg.so.maacheck`).  Full path to the package tarball can be
+given instead to check a version of the package not yet on CRAN.  
+
+I've tested this on Ubuntu 18.04 (singularity 2.6 from
+[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
+and on Debian 9.8 (singularity 2.6 from stretch-backports) and on Debian
+buster/testing (singularity 3.0.3 from the distribution) and on Ubuntu 20.04
+(singularity 2.6 from
+[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container)).
+
+There is also a newer singularity image with tag "def", it uses Ubuntu 20.04
+as guest systems, but requires singularity at least version 3.5 (available
+in Debian Sid as "singularity-container", in Fedora 31-33 as "singularity"
+and in openSUSE as "singularity", not in Ubuntu 20.04 or earlier):
+
+```
+singularity pull shub://kalibera/rchk:def
+singularity run kalibera-rchk-master-def.simg jpeg
+``` 
+
+One can also build the singularity container from source, this is also fully
+automated, it takes longer than downloading the pre-built container, but it
+does not depend on external binaries and in Ubuntu 18.04 one can use the old
+`singularity-container` package from the distribution.  On Debian 9.8, one
+needs to use debootstrap from stretch-backports. Building the container,
+however, requires root access on the (host) machine.
+
+External libraries needed for some R packages can be installed into the
+container using an *overlay* (also works for the pre-built image) or using a
+*sandbox*.  An initial version of the singularity container has been
+contributed by B.  W.  Lewis.
+
+## Introduction
 
 This note and the corresponding `Singularity.def` and `Singularity.bionic`
-files present an alternative simple container recipe using the Singularity
-container system (https://www.sylabs.io/docs/).  Singularity is a serverless
-(that is, no daemon process) container system for GNU Linux popular in HPC
-settings.
+files present a simple container recipe using the Singularity container
+system (https://www.sylabs.io/docs/).  Singularity is a serverless (that is,
+no daemon process) container system for GNU Linux popular in HPC settings.
 
 These two configurations are used to build container images via Singularity
 hub. Those images can be used for checking R package tarballs and packages
