@@ -255,8 +255,20 @@ which Ubuntu packages are needed, etc:
 docker run -it --entrypoint /bin/bash kalibera/rchk:latest
 ```
 
+The container entry point is in `/container.sh` script, which can be run
+also in interactive sessions.
+
 Note that rchk provides already other containers intended for interactive
 use (installed automatically using vagrant, the virtual machine is backed by
 virtualbox or docker), which have simpler setup for interactive use. Also,
 Linux users can install rchk natively on their system.
 
+## Building the container
+
+The container description (Dockerfile) and entrypoint script (container.sh)
+are in directory `image/docker`.  To build it, run
+
+```
+cd image/docker
+docker build .
+```
