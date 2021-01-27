@@ -75,6 +75,8 @@ else
 fi
 
 if test "$PKG_NAME" = R ; then
+  # In principle we would get here for a tarball for a package named R,
+  # but that would not be an acceptable name of a package.
   shift
   R --vanilla $*
   exit

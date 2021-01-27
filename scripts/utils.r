@@ -38,9 +38,12 @@ install_package_libs <- function(package,
   }
 
   ap <- available.packages(contriburl)
+
   
   # extract names of direct dependencies (linking to, all default)
   if (grepl(".tar.gz$", package)) {
+    if (!file.exists(package))
+      stop("Package archive", package, "not found.")
     tdir <- tempfile(pattern = "dir", tmpdir = tempdir(), fileext = "")
     utils::untar(package, exdir=tdir)
     pkgname <- list.files(tdir)
@@ -55,7 +58,7 @@ install_package_libs <- function(package,
     direct_linking_to <- unique(c(names(pkgInfo$LinkingTo)))
     default <- unique(c(names(pkgInfo$Depends), names(pkgInfo$Imports),
                         names(pkgInfo$LinkingTo)))
-    
+    tarball <- TRUE
   } else {
     pkgname <- package    
     direct_linking_to <- unique(unlist(
@@ -64,6 +67,7 @@ install_package_libs <- function(package,
     default <- unique(unlist(
         tools::package_dependencies(package, db = ap, recursive = TRUE)
     ))
+    tarball <- FALSE
   }
 
   sodir <- file.path(target, pkgname)
@@ -78,11 +82,16 @@ install_package_libs <- function(package,
   install.packages(deps, contriburl = contriburl, 
                    available = ap,  Ncpus = Ncpus,
                    INSTALL_opts = c("--no-byte-compile"))
-                   
-  suppressWarnings(
-    install.packages(package, contriburl = contriburl, lib = target,
-                     available = ap, libs_only = TRUE, dependencies = FALSE,
-                     INSTALL_opts = c("--no-test-load")))
+  if (tarball)
+    suppressWarnings(
+      install.packages(package, repos = NULL, lib = target,
+                       libs_only = TRUE, dependencies = FALSE,
+                       INSTALL_opts = c("--no-test-load")))
+  else  
+    suppressWarnings(
+      install.packages(package, contriburl = contriburl, lib = target,
+                       available = ap, libs_only = TRUE, dependencies = FALSE,
+                       INSTALL_opts = c("--no-test-load")))
                    
   soname <- file.path(target, pkgname, "libs", paste0(pkgname, ".so"))
   if (!file.exists(soname)) {
@@ -96,9 +105,14 @@ install_package_libs <- function(package,
                      available = ap,  Ncpus = Ncpus,
                      INSTALL_opts = c("--no-byte-compile"))
     
-    install.packages(package, contriburl = contriburl, lib = target,
-                     available = ap, libs_only = TRUE, dependencies = FALSE,
-                     Ncpus = Ncpus, INSTALL_opts = c("--no-test-load"))    
+    if (tarball)
+      install.packages(package, repos = NULL, lib = target,
+                       libs_only = TRUE, dependencies = FALSE,
+                       INSTALL_opts = c("--no-test-load"))    
+    else
+      install.packages(package, contriburl = contriburl, lib = target,
+                       available = ap, libs_only = TRUE, dependencies = FALSE,
+                       INSTALL_opts = c("--no-test-load"))    
   }
   
   if (file.exists(soname)) {
