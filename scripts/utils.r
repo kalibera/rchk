@@ -80,7 +80,7 @@ install_package_libs <- function(package,
                    INSTALL_opts = c("--no-byte-compile"))
                    
   suppressWarnings(
-    install.packages(pkgname, contriburl = contriburl, lib = target,
+    install.packages(package, contriburl = contriburl, lib = target,
                      available = ap, libs_only = TRUE, dependencies = FALSE,
                      INSTALL_opts = c("--no-test-load")))
                    
@@ -96,7 +96,7 @@ install_package_libs <- function(package,
                      available = ap,  Ncpus = Ncpus,
                      INSTALL_opts = c("--no-byte-compile"))
     
-    install.packages(pkgname, contriburl = contriburl, lib = target,
+    install.packages(package, contriburl = contriburl, lib = target,
                      available = ap, libs_only = TRUE, dependencies = FALSE,
                      Ncpus = Ncpus, INSTALL_opts = c("--no-test-load"))    
   }
