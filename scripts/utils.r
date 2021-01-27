@@ -43,7 +43,7 @@ install_package_libs <- function(package,
   # extract names of direct dependencies (linking to, all default)
   if (grepl(".tar.gz$", package)) {
     if (!file.exists(package))
-      stop("Package archive", package, "not found.")
+      stop("Package archive ", package, " not found.")
     tdir <- tempfile(pattern = "dir", tmpdir = tempdir(), fileext = "")
     utils::untar(package, exdir=tdir)
     pkgname <- list.files(tdir)
