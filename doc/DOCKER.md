@@ -84,7 +84,7 @@ On Windows:
 ```
 mkdir packages
 copy lazy_1.2-16.tar.gz packages
-docker run -v %cd%/packages:/rchk/packages kalibera/rchk:latest --install-deb "libgmp-dev libmpfr-dev"  Rmpfr
+docker run -v %cd%/packages:/rchk/packages kalibera/rchk:latest /rchk/packages/lazy_1.2-16.tar.gz
 ````
 
 In the above, directory `packages` is made available to the container under
