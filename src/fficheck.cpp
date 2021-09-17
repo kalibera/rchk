@@ -6,7 +6,6 @@
 
 #include "common.h"
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
@@ -140,7 +139,7 @@ bool checkTable(Value *v, bool checkDotCallArity, StringMapTy& smap) {
           if (ConstantExpr *ce = dyn_cast<ConstantExpr>(cstr->getAggregateElement(0U))) {
             if (GlobalVariable *ngv = dyn_cast<GlobalVariable>(ce->getOperand(0))) {
               if (ConstantDataArray *nda = dyn_cast<ConstantDataArray>(ngv->getInitializer())) {
-                fname = nda->getAsCString();
+                fname = nda->getAsCString().str();
               }
             }
           }
@@ -293,13 +292,16 @@ int main(int argc, char* argv[])
   bool checked = false;
   for(inst_iterator ini = inst_begin(*initf), ine = inst_end(*initf); ini != ine; ++ini) {
     Instruction *in = &*ini;
-    CallSite cs(in);
+    if (!CallBase::classof(in)) {
+      continue;
+    }
+    CallBase *cs = cast<CallBase>(in);
     if (!cs) {
       continue;
     }
-    Function *tgt = cs.getCalledFunction();
+    Function *tgt = cs->getCalledFunction();
     if (!tgt) {
-      if (ConstantExpr *ce = dyn_cast<ConstantExpr>(cs.getCalledValue())) {
+      if (ConstantExpr *ce = dyn_cast<ConstantExpr>(cs->getCalledOperand())) {
         tgt = dyn_cast<Function>(ce->getOperand(0));
       }
     }
@@ -308,8 +310,8 @@ int main(int argc, char* argv[])
     }
       
     /* call to R_registerRoutines */
-    Value *cval = cs.getArgument(2); /* .Call */
-    Value *eval = cs.getArgument(4); /* .External */
+    Value *cval = cs->getArgOperand(2); /* .Call */
+    Value *eval = cs->getArgOperand(4); /* .External */
     
     /* errs() << "Checking call to R_registerRoutines:\n    .Call: " << *cval << "\n    .External " << *eval << "\n"; */
     

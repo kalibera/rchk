@@ -1,7 +1,6 @@
 
 #include "balance.h"
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
@@ -136,9 +135,11 @@ bool isProtectionCounterVariable(AllocaInst* var, Function* unprotectFunction) {
         }
       }
       
-      CallSite cs(cast<Value>(unprotectArg));
-      if (cs && cs.getCalledFunction() == unprotectFunction) {
-        passedToUnprotect = true;
+      if (CallBase::classof(unprotectArg)) {
+        CallBase *cs = cast<CallBase>(unprotectArg);
+        if (cs->getCalledFunction() == unprotectFunction) {
+          passedToUnprotect = true;
+        }
       }
       continue;
     }
@@ -165,11 +166,10 @@ bool isProtectionCounterVariable(AllocaInst* var, Function* unprotectFunction, V
 
 static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBoolCacheTy& counterVarsCache, LineMessenger& msg, unsigned& refinableInfos) {
   
-  CallSite cs(cast<Value>(in));
-  if (!cs) {
+  if (!CallBase::classof(in))
     return;
-  }
-  const Function* targetFunc = cs.getCalledFunction();
+  CallBase *cs = cast<CallBase>(in);
+  const Function* targetFunc = cs->getCalledFunction();
   if (!targetFunc) {
     return;
   }
@@ -188,7 +188,7 @@ static void handleCall(Instruction *in, BalanceStateTy& b, GlobalsTy& g, VarBool
     return;
   }
   if (targetFunc == g.unprotectFunction) {
-    Value* unprotectValue = cs.getArgument(0);
+    Value* unprotectValue = cs->getArgOperand(0);
     if (ConstantInt::classof(unprotectValue)) { // e.g. UNPROTECT(3)
       uint64_t arg = (cast<ConstantInt>(unprotectValue))->getZExtValue();
       b.depth -= (int) arg;
@@ -621,9 +621,11 @@ bool handleBalanceForTerminator(TerminatorInst* t, StateWithBalanceTy& s, Global
   if (it == unprotectSucc->end()) {
     return false;
   }
-  CallSite cs(cast<Value>(it));
-  if (!cs || cs.getCalledFunction() != g.unprotectFunction || cs.getArgument(0) != loadInst) {
-    return false;
+  if (CallBase::classof(cast<Value>(it))) {
+    CallBase *cs = cast<CallBase>(cast<Value>(it));
+    if (cs->getCalledFunction() != g.unprotectFunction || cs->getArgOperand(0) != loadInst) {
+      return false;
+    }
   }
   ++it;
 

@@ -1,7 +1,6 @@
 
 #include "errors.h"
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Instructions.h>
 
 using namespace llvm;
@@ -23,9 +22,9 @@ static bool checkAndAnalyzeErrorFunction(Function *fun, FunctionsSetTy *knownErr
       goto classified_block;
     }
     for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
-      CallSite cs(cast<Value>(in));
-      if (cs) {
-        Function *tgt = cs.getCalledFunction();
+      if (CallBase::classof(cast<Value>(in))) {
+        CallBase *cs = cast<CallBase>(cast<Value>(in));
+        Function *tgt = cs->getCalledFunction();
         if (knownErrorFunctions->find(tgt) != knownErrorFunctions->end()) {
           // this block calls into a function that does not return,
           // but does not have the noreturn attribute

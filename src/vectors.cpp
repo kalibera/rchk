@@ -9,7 +9,6 @@
 #include <vector>
 
 #include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/InstIterator.h>
@@ -252,28 +251,28 @@ struct VectorsBlockState {
 typedef std::unordered_map<BasicBlock*, VectorsBlockState> BlocksTy;
 typedef std::vector<BasicBlock*> BlockWorkListTy;
 
-static bool callReturnsOnlyVector(CallSite& cs, VectorsFunctionState& fstate, VectorsBlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
+static bool callReturnsOnlyVector(CallBase *cs, VectorsFunctionState& fstate, VectorsBlockState& s, ArgsTy& context, FunctionTableTy& functions, FunctionListTy& functionsWorkList, CalledModuleTy *cm) {
 
   if (!cs) {
     return false;
   }
 
-  Function *tgt = cs.getCalledFunction();
+  Function *tgt = cs->getCalledFunction();
   if (!tgt) {
     return false;
   }
   
-  const CalledFunctionTy *ctgt = cm->getCalledFunction(cs.getInstruction(), NULL, NULL, false); // this will infer some uses of symbols
+  const CalledFunctionTy *ctgt = cm->getCalledFunction(cs, NULL, NULL, false); // this will infer some uses of symbols
   if (isKnownVectorReturningFunction(ctgt)) {
     return true;
   }
   
   // build arguments (context)
-  unsigned tnargs = cs.arg_size();
+  unsigned tnargs = cs->arg_size();
   ArgsTy targs(tnargs, false);
   
   for(unsigned i = 0; i < tnargs; i++) {
-    Value *targ = cs.getArgument(i);
+    Value *targ = cs->getArgOperand(i);
     if (LoadInst *li = dyn_cast<LoadInst>(targ)) {
       if (AllocaInst *avar = dyn_cast<AllocaInst>(li->getPointerOperand())) { // passing a variable
         unsigned avidx = fstate.varIndex.indexOf(avar);
@@ -295,7 +294,7 @@ static bool callReturnsOnlyVector(CallSite& cs, VectorsFunctionState& fstate, Ve
   }
   
   if (tgt->getName() == "Rf_allocVector") { // must handle this one specially
-    if (DEBUG) errs() << " = allocVector [ = " << (targs.at(0) ? "vector" : "unknown") << " ]" << sourceLocation(cs.getInstruction()) << "\n";
+    if (DEBUG) errs() << " = allocVector [ = " << (targs.at(0) ? "vector" : "unknown") << " ]" << sourceLocation(cast<Instruction>(cs)) << "\n";
     return targs.at(0); // the first argument of allocVector
   }
   
@@ -305,7 +304,7 @@ static bool callReturnsOnlyVector(CallSite& cs, VectorsFunctionState& fstate, Ve
   unsigned tcontextIdx = tstate.contextIndex.indexOf(targs);
 
   if (tcontextIdx < tstate.returnsOnlyVector.size()) {
-    if (DEBUG) errs() << " = foo() in context [ = " << (tstate.returnsOnlyVector.at(tcontextIdx) ? "vector" : "unknown") << " ] " << sourceLocation(cs.getInstruction()) << "\n";
+    if (DEBUG) errs() << " = foo() in context [ = " << (tstate.returnsOnlyVector.at(tcontextIdx) ? "vector" : "unknown") << " ] " << sourceLocation(cast<Instruction>(cs)) << "\n";
     return tstate.returnsOnlyVector.at(tcontextIdx);
 
   } else {
@@ -316,7 +315,7 @@ static bool callReturnsOnlyVector(CallSite& cs, VectorsFunctionState& fstate, Ve
     tstate.addToWorkList(functionsWorkList);
                 
     // and lets use the default context for the function
-    if (DEBUG) errs() << " = foo() in DEFAULT context [ = " << (tstate.returnsOnlyVector.at(0) ? "vector" : "unknown") << " ] " << sourceLocation(cs.getInstruction()) << "\n";
+    if (DEBUG) errs() << " = foo() in DEFAULT context [ = " << (tstate.returnsOnlyVector.at(0) ? "vector" : "unknown") << " ] " << sourceLocation(cast<Instruction>(cs)) << "\n";
     if (DEBUG) {
       errs() << "Function " << funName(tgt) << " now has these contexts: (fstate=" << &tstate << ")\n";
       unsigned ntcontexts = tstate.contextIndex.size();
@@ -356,10 +355,12 @@ static bool valueIsVector(Value *val, VectorsFunctionState& fstate, VectorsBlock
     unsigned type = ci->getZExtValue();
     return isVectorType(type);
   }
-          
-  CallSite cs(val);  // = foo()
-  if (cs && cs.getCalledFunction()) {
-    Function *tgt = cs.getCalledFunction();
+  CallBase *cs = NULL;
+  if (CallBase::classof(val))
+    cs = cast<CallBase>(val);
+  // = foo()
+  if (cs && cs->getCalledFunction()) {
+    Function *tgt = cs->getCalledFunction();
     if (isSEXP(tgt->getReturnType())) {
       return callReturnsOnlyVector(cs, fstate, s, context, functions, functionsWorkList, cm);
     }
@@ -632,19 +633,21 @@ bool isVectorProducingCall(Value *inst, CalledModuleTy* cm, SEXPGuardsChecker* s
   if (isKnownVectorReturningFunction(ctgt)) {
     return true;
   }
-  
-  CallSite cs(inst);
-  if (!cs || !cs.getCalledFunction()) {
+
+  CallBase *cs = NULL;
+  if (CallBase::classof(inst))
+    cs = cast<CallBase>(inst);
+  if (!cs || !cs->getCalledFunction()) {
     return false;
   }
   
   if (sexpGuards && sexpGuardsChecker) {
     // turn SEXP guards into vector-return-function guards
-    unsigned tnargs = cs.arg_size();
+    unsigned tnargs = cs->arg_size();
     ArgsTy targs(tnargs, false);
   
     for(unsigned i = 0; i < tnargs; i++) {
-      Value *targ = cs.getArgument(i);
+      Value *targ = cs->getArgOperand(i);
       if (LoadInst *li = dyn_cast<LoadInst>(targ)) {
         if (AllocaInst *avar = dyn_cast<AllocaInst>(li->getPointerOperand())) { // passing a variable
       
@@ -662,7 +665,7 @@ bool isVectorProducingCall(Value *inst, CalledModuleTy* cm, SEXPGuardsChecker* s
       }
     }
     
-    return isVectorReturningFunction(cs.getCalledFunction(), targs, cm);
+    return isVectorReturningFunction(cs->getCalledFunction(), targs, cm);
   }
   
   return false;

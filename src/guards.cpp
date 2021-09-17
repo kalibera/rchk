@@ -3,7 +3,6 @@
 #include "patterns.h"
 #include "vectors.h"
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/GlobalVariable.h>
 
@@ -356,16 +355,18 @@ bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
         }
         continue;
       }
-      CallSite cs(cast<Value>(uu));
+      CallBase *cs = NULL;
+      if (CallBase::classof(cast<Value>(uu)))
+        cs = cast<CallBase>(cast<Value>(uu));
       if (cs) {
-        if (isVectorGuard(cs.getCalledFunction())) {
+        if (isVectorGuard(cs->getCalledFunction())) {
           nVectorTests++;
           // FIXME: could perhaps increment only if one of the branches is an error block?
         }
         
-        if (isTypeTest(cs.getCalledFunction(), g) || isVectorGuard(cs.getCalledFunction())) { // isNull(guard);
+        if (isTypeTest(cs->getCalledFunction(), g) || isVectorGuard(cs->getCalledFunction())) { // isNull(guard);
           nComparisons++;
-        } else if (cs.getCalledFunction()) {
+        } else if (cs->getCalledFunction()) {
           nEscapesToCalls++;
         }
         continue;
@@ -393,8 +394,7 @@ bool SEXPGuardsChecker::uncachedIsGuard(AllocaInst* var) {
         // guard = function_argument; (implicit store)
         nStoresFromArgument++;
       }
-      CallSite cs(v);
-      if (cs) {
+      if (CallBase::classof(v)) {
         nStoresFromFunction++;
       }
       continue;
@@ -488,11 +488,13 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
 
   // sexpguard = PROTECT( ... )
   // FIXME: they may be more filtering functions like PROTECT
-  CallSite cs(storeValueOp);
+  CallBase *cs = NULL;
+  if (CallBase::classof(storeValueOp))
+        cs = cast<CallBase>(storeValueOp);
   if (cs) {
-    Function *pfun = cs.getCalledFunction();
+    Function *pfun = cs->getCalledFunction();
     if (pfun && (pfun->getName() == "Rf_protect" || pfun->getName() == "Rf_protectWithIndex")) {
-      storeValueOp = cs.getArgument(0); // fall through
+      storeValueOp = cs->getArgOperand(0); // fall through
       if (msg->debug()) msg->debug("sexp guard variable " + varName(storePointerVar) + " receiving its value from call to PROTECT/PROTECT_WITH_INDEX", store);
     }
   }
@@ -548,7 +550,9 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
       } 
     }
   } else {
-    CallSite acs(storeValueOp);
+    CallBase *acs = NULL;
+    if (CallBase::classof(storeValueOp))
+      acs = cast<CallBase>(storeValueOp);
     const CalledFunctionTy *atgt = msg->debug() ? cm->getCalledFunction(storeValueOp, this, &sexpGuards, true) : NULL; // just for debugging - seeing the context
 
     if (acs && isVectorProducingCall(storeValueOp, cm, this, &sexpGuards)) {
@@ -569,7 +573,7 @@ void SEXPGuardsChecker::handleForNonTerminator(Instruction* in, SEXPGuardsTy& se
     }
     
     if (acs && possibleAllocators) { // sexpguard = fooAlloc()
-      Function *afun = acs.getCalledFunction();
+      Function *afun = acs->getCalledFunction();
       if (possibleAllocators->find(afun) != possibleAllocators->end()) {
         SEXPGuardTy newGS(SGS_NONNIL);
         sexpGuards[storePointerVar] = newGS;
@@ -846,12 +850,14 @@ bool SEXPGuardsChecker::handleForTerminator(TerminatorInst* t, StateWithGuardsTy
     Function *f = NULL;
     SEXPType tcType = RT_UNKNOWN;
     if (op) {
-      CallSite cs(op);
+      CallBase *cs = NULL;
+      if (CallBase::classof(op))
+        cs = cast<CallBase>(op);
       if (cs) {
-        f = cs.getCalledFunction();
+        f = cs->getCalledFunction();
         
-        if (cs.arg_size()>0 && LoadInst::classof(cs.getArgument(0))) {
-          Value *loadOp = cast<LoadInst>(cs.getArgument(0))->getPointerOperand();
+        if (cs->arg_size()>0 && LoadInst::classof(cs->getArgOperand(0))) {
+          Value *loadOp = cast<LoadInst>(cs->getArgOperand(0))->getPointerOperand();
           if (AllocaInst::classof(loadOp)) {
             guard = cast<AllocaInst>(loadOp);
           }

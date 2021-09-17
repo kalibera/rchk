@@ -10,7 +10,6 @@
 #include "common.h"
        
 #include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Dominators.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
@@ -42,11 +41,13 @@ StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instru
       continue;
     }
     Value *ssrc = s->getValueOperand();
-    CallSite cs(ssrc);
+    if (!CallBase::classof(ssrc))
+      continue;
+    CallBase *cs = cast<CallBase>(ssrc);
     if (!cs) {
       continue;
     } 
-    Function *f = cs.getCalledFunction();
+    Function *f = cs->getCalledFunction();
     if (!f) continue;
 
     if (possibleAllocators.find(f) == possibleAllocators.end()) {
@@ -69,9 +70,11 @@ StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instru
         u = *++ui;
       }
 
-      CallSite pcs(u);
-      if (pcs && isProtectingFunction(pcs.getCalledFunction())) {
-        return s;
+      if (CallBase::classof(u)) {
+        CallBase *pcs = cast<CallBase>(u);
+        if (pcs && isProtectingFunction(pcs->getCalledFunction())) {
+          return s;
+        }
       }
     }
   }
@@ -89,20 +92,23 @@ Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instru
     LoadInst *l = cast<LoadInst>(*ui);
     for(Value::user_iterator lui = l->user_begin(), lue = l->user_end(); lui != lue; ++lui) {
       Value *luv = *lui;
-      CallSite cs(luv);
-      if (!cs || !cs.getCalledFunction()) {
+      if (!CallBase::classof(luv)) {
         continue;
       }
-      if (!dominatorTree.dominates(cs.getInstruction(), useInst)) {
+      CallBase *cs = cast<CallBase>(luv);
+      if (!cs || !cs->getCalledFunction()) {
+        continue;
+      }
+      if (!dominatorTree.dominates(cs, useInst)) {
         continue;
       }
       if (!dominatorTree.dominates(allocStore, l)) {
         continue;
       }
-      if (!isProtectingFunction(cs.getCalledFunction())) {
+      if (!isProtectingFunction(cs->getCalledFunction())) {
         continue;
       }
-      return cs.getInstruction();
+      return cs;
     }
   }
 
@@ -112,17 +118,20 @@ Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instru
   if (!allocValue->hasOneUse()) {
     for(Value::user_iterator ui = allocValue->user_begin(), ue = allocValue->user_end(); ui != ue; ++ui) {
       Value *u = *ui;
-      CallSite cs(u);
-      if (!cs || !cs.getCalledFunction()) {
+      if (!CallBase::classof(u)) {
         continue;
       }
-      if (!dominatorTree.dominates(cs.getInstruction(), useInst)) {
+      CallBase *cs = cast<CallBase>(u);
+      if (!cs || !cs->getCalledFunction()) {
         continue;
       }
-      if (!isProtectingFunction(cs.getCalledFunction())) {
+      if (!dominatorTree.dominates(cs, useInst)) {
         continue;
       }
-      return cs.getInstruction();
+      if (!isProtectingFunction(cs->getCalledFunction())) {
+        continue;
+      }
+      return cs;
     }
   }
   return NULL;

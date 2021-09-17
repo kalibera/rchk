@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/InstIterator.h>
 
@@ -394,8 +393,12 @@ static void analyzeFunction(CProtectFunctionState& fstate, FunctionTableTy& func
         continue;
       }
       
-      CallSite cs(in);
-      if (cs && !cs.getCalledFunction()) { // call to external function
+      bool isCS = CallBase::classof(in);
+      CallBase *cs = NULL;
+      if (isCS)
+        cs = cast<CallBase>(in);
+      if (isCS && !cs->getCalledFunction()) {
+        // call to external function
         // in allocation detection, this is treated as an allocating call, so for consistency we should
         // be also that conservative here, otherwise allocating functions that are allocating just because
         // of external calls would be reported as callee-protect... 
@@ -409,8 +412,8 @@ static void analyzeFunction(CProtectFunctionState& fstate, FunctionTableTy& func
         }
         continue;
       }
-      if (cs && cs.getCalledFunction() && allocatingFunctions.find(cs.getCalledFunction()) != allocatingFunctions.end()) { // call to allocating function
-        Function *tgtFun = cs.getCalledFunction();
+      if (isCS && allocatingFunctions.find(cs->getCalledFunction()) != allocatingFunctions.end()) { // call to allocating function
+        Function *tgtFun = cs->getCalledFunction();
 
         ArgsTy protects = protectedArgs(s.pstack, nargs);
         ArgsTy passedInCall(nargs, false);        
@@ -419,7 +422,7 @@ static void analyzeFunction(CProtectFunctionState& fstate, FunctionTableTy& func
         ArgsTy usedAfterExposureInCall(nargs, false);
         
         unsigned tgtAidx = 0;
-        for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++tgtAidx) {
+        for(CallBase::op_iterator ai = cs->arg_begin(), ae = cs->arg_end(); ai != ae; ++ai, ++tgtAidx) {
           Value* val = *ai;
           unsigned aidx;
           bool passingArg = false;
@@ -493,13 +496,13 @@ static void analyzeFunction(CProtectFunctionState& fstate, FunctionTableTy& func
       }
       
       std::string cfname = "";
-      if (cs && cs.getCalledFunction()) {
-        cfname = cs.getCalledFunction()->getName();
+      if (isCS && cs->getCalledFunction()) {
+        cfname = cs->getCalledFunction()->getName().str();
       }
       
       if (cfname == "Rf_protect" || cfname == "R_ProtectWithIndex") {
         // FIXME: should interpret the index in protectWithIndex
-        Value* val = cs.getArgument(0);
+        Value* val = cs->getArgOperand(0);
         int protValue = -1; // by default, -1 means non-argument
         
         if (Argument *arg = dyn_cast<Argument>(val)) { // PROTECT(arg)
@@ -529,7 +532,7 @@ static void analyzeFunction(CProtectFunctionState& fstate, FunctionTableTy& func
       
       // FIXME: what about unprotect_ptr ?
       if (cfname == "Rf_unprotect") {
-        Value *val = cs.getArgument(0);
+        Value *val = cs->getArgOperand(0);
         if (ConstantInt* ci = dyn_cast<ConstantInt>(val)) {
           uint64_t ival = ci->getZExtValue();
           if (DEBUG) errs() << "unprotecting " << std::to_string(ival) << " values, stack size " << std::to_string(s.pstack.size()) << " " << sourceLocation(in) << "\n";

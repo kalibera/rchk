@@ -4,7 +4,6 @@
 #include "exceptions.h"
 #include "patterns.h"
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
@@ -169,9 +168,11 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
   if (!tgt) {
     return;
   }
-  CallSite cs(cast<Value>(in));
+  if (!CallBase::classof(cast<Value>(in)))
+    myassert(0);
+  CallBase *cs = cast<CallBase>(cast<Value>(in));
   myassert(cs);
-  myassert(cs.getCalledFunction());
+  myassert(cs->getCalledFunction());
   Function *f = tgt->fun;
 
   // handle protect
@@ -179,7 +180,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
   if (!confused) {
       // FIXME: get rid of copy paste between PreserveObject and PROTECT handling
     if (f->getName() == "R_PreserveObject") {
-      Value* arg = cs.getArgument(0);
+      Value* arg = cs->getArgOperand(0);
       AllocaInst* var = NULL;
     
       if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PreserveObject(x)
@@ -218,7 +219,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
   
     if (f->getName() == "Rf_protect" || f->getName() == "R_ProtectWithIndex" || f->getName() == "R_Reprotect") {
     
-      Value* arg = cs.getArgument(0);
+      Value* arg = cs->getArgOperand(0);
       AllocaInst* var = NULL;
     
       if (LoadInst* li = dyn_cast<LoadInst>(arg)) { // PROTECT(x)
@@ -252,13 +253,15 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
           
           for(Value::user_iterator ui = in->user_begin(), ue = in->user_end(); ui != ue; ++ui) { 
             User *u = *ui;
-            CallSite cs2(u);
+            if (!CallBase::classof(u))
+              continue;
+            CallBase *cs2 = cast<CallBase>(u);
             if (!cs2) continue;
-            Function *tgt = cs2.getCalledFunction();
+            Function *tgt = cs2->getCalledFunction();
             if (!tgt) continue;
             // heuristic - handle functions usually protecting like setAttrib(x, ...) where x is protected (say, non-fresh, as approximation)
-            if (cs2.arg_size() > 1 && isSetterFunction(tgt)) {
-              if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs2.getArgument(0))) {
+            if (cs2->arg_size() > 1 && isSetterFunction(tgt)) {
+              if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs2->getArgOperand(0))) {
                 if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
                   if (firstArg != var) {
                     auto vsearch = freshVars.vars.find(firstArg);
@@ -369,7 +372,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
     }
   
     if (f->getName() == "Rf_unprotect") {
-      Value* arg = cs.getArgument(0);
+      Value* arg = cs->getArgOperand(0);
       
       uint64_t unprotectCount = 0;
       bool haveCount = false;
@@ -423,7 +426,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
   if (!protectsArguments(tgt) && !cprotect.isCalleeSafe(tgt->fun, false)) {
     // this check can be done even when the tool is confused
     unsigned aidx = 0;
-    for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++aidx) {
+    for(CallBase::op_iterator ai = cs->arg_begin(), ae = cs->arg_end(); ai != ae; ++ai, ++aidx) {
       Value *arg = *ai;
       const CalledFunctionTy *src = cm->getCalledFunction(arg, sexpGuardsChecker, sexpGuards, false);
       if (!src || !cm->isPossibleCAllocator(src)) {
@@ -456,7 +459,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
     unsigned nParams = ftype->getNumParams();
     
     unsigned i = 0;
-    for(CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae; ++ai, ++i) {
+    for(CallBase::op_iterator ai = cs->arg_begin(), ae = cs->arg_end(); ai != ae; ++ai, ++i) {
       Value *arg = *ai;
       
       if (i < nParams && !isSEXP(ftype->getParamType(i))) {
@@ -542,14 +545,15 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
   for(Value::user_iterator ui = li->user_begin(), ue = li->user_end(); ui != ue; ++ui) {
     User *u = *ui;
     
-    CallSite cs(u);  // variable passed to a call as argument
-    if (cs) {
-      Function *tgt = cs.getCalledFunction();
+    // variable passed to a call as argument
+    if (CallBase::classof(u)) {
+      CallBase *cs = cast<CallBase>(u);
+      Function *tgt = cs->getCalledFunction();
       if (tgt) {
 
         // heuristic - handle functions usually protecting like setAttrib(x, ...) where x is protected (say, non-fresh, as approximation)
-        if (cs.arg_size() > 1 && isSetterFunction(tgt)) {
-          if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs.getArgument(0))) {
+        if (cs->arg_size() > 1 && isSetterFunction(tgt)) {
+          if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs->getArgOperand(0))) {
             if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
             
               if (firstArg != var) {
@@ -602,15 +606,17 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
   }    
 
   unsigned aidx = 0;
-  CallSite cs(cast<Value>(li->user_back()));
-  myassert(cs);
+  Value *csval = cast<Value>(li->user_back());
+  if (!CallBase::classof(csval))
+    myassert(0);
+  CallBase *cs = cast<CallBase>(csval);
   
-  for(aidx = 0; aidx < cs.arg_size(); aidx++) {
-    if (cs.getArgument(aidx) == li) {
+  for(aidx = 0; aidx < cs->arg_size(); aidx++) {
+    if (cs->getArgOperand(aidx) == li) {
       break;
     }
   }
-  myassert(aidx < cs.arg_size());
+  myassert(aidx < cs->arg_size());
 
   if (aidx < tgt->fun->arg_size() && cprotect.isCalleeProtect(tgt->fun, aidx, false)) {
     return; // the variable is callee-protect for the given argument
@@ -632,7 +638,7 @@ static void handleLoad(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker* s
   // the function the argument is passed to is callee-safe for the respective parameter
   // a warning has to be reported if the value of this argument were to be used again
   
-  Instruction *callIn = cs.getInstruction();
+  Instruction *callIn = cs;
   myassert(callIn == li->user_back());
   
   std::string message = "allocating function " + funName(tgt) + " may destroy its unprotected argument ("
@@ -760,9 +766,11 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
 
       for(Value::user_iterator ui = storeValueOp->user_begin(), ue = storeValueOp->user_end(); ui != ue; ++ui) {
         User *u = *ui;
-        CallSite cs(u);
-        if (cs && cs.getCalledFunction()) {
-          Function* otherFun = cs.getCalledFunction();
+        if (!CallBase::classof(u))
+          continue;
+        CallBase *cs = cast<CallBase>(u);
+        if (cs && cs->getCalledFunction()) {
+          Function* otherFun = cs->getCalledFunction();
           if (otherFun->getName() == "Rf_protect" || otherFun->getName() == "Rf_protectWithIndex" || otherFun->getName() == "R_Reprotect") {
             // this case is handled in handleCall
             return;
@@ -770,15 +778,15 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
             // handle setter calls with indirect loads, e.g.
             // SET_VECTOR_ELT(ans, 2, cosines = allocVector(REALSXP, shiftlen));
     
-          if (cs.arg_size() > 1 && isSetterFunction(otherFun)) {
-            if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs.getArgument(0))) {
+          if (cs->arg_size() > 1 && isSetterFunction(otherFun)) {
+            if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs->getArgOperand(0))) {
               if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
             
                 auto vsearch = freshVars.vars.find(firstArg);
                 if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
                   // first argument of the setter is not fresh
 
-                  Value *protArg = cs.getArgument(1); // the argument being implicitly protected
+                  Value *protArg = cs->getArgOperand(1); // the argument being implicitly protected
                   if (protArg != storeValueOp) {
                     if (msg.debug()) msg.debug(MSG_PFX + "indirect protect using setter call for variable " + varName(var), in);
                     freshVars.vars.erase(var);

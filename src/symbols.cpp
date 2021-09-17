@@ -3,7 +3,6 @@
 
 using namespace llvm;
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -14,15 +13,17 @@ using namespace llvm;
 #include <llvm/Support/raw_ostream.h>
 
 bool isInstallConstantCall(Value *inst, std::string& symbolName) {
-  CallSite cs(inst);
+  if (!CallBase::classof(inst))
+    return false;
+  CallBase *cs = cast<CallBase>(inst);
   if (!cs) {
     return false;
   }
-  Function *tgt = cs.getCalledFunction();
+  Function *tgt = cs->getCalledFunction();
   if (!tgt || tgt->getName() != "Rf_install") {
     return false;
   }
-  Value *arg = cs.getArgument(0);
+  Value *arg = cs->getArgOperand(0);
   
   // getting a constant string from the IR is not very straightforward
   // http://lists.cs.uiuc.edu/pipermail/llvmdev/2012-January/047147.html
@@ -48,7 +49,7 @@ bool isInstallConstantCall(Value *inst, std::string& symbolName) {
   if (!cda->isCString()) {
     return false;
   }
-  symbolName = cda->getAsCString();
+  symbolName = cda->getAsCString().str();
   return true;   
 }
 

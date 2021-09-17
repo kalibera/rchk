@@ -82,7 +82,10 @@ int main(int argc, char* argv[])
 
     Function *fun = *FI;
     auto fisearch = functionsMap.find(fun);
-    myassert (fisearch != functionsMap.end());
+    if (fisearch == functionsMap.end()) {
+      // e.g. llvm.dbg.declare, llvm.dbg.label
+      continue;
+    }
     FunctionInfo& finfo = fisearch->second;
 
     for(std::vector<CallInfo>::const_iterator CI = finfo.callInfos.begin(), CE = finfo.callInfos.end(); CI != CE; ++CI) {

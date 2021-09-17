@@ -46,9 +46,9 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
      
   for (CallGraph::const_iterator MI = cg->begin(), ME = cg->end(); MI != ME; ++MI) {
     Function* fun = const_cast<Function*>(MI->first);
-    const CallGraphNode* sourceCGN = MI->second.get();
     if (!fun) continue;
-    
+
+    const CallGraphNode* sourceCGN = MI->second.get();
     if (onlyFunctions && onlyFunctions->find(fun) == onlyFunctions->end()) {
       continue;
     }
@@ -73,9 +73,10 @@ void buildCGClosure(Module *m, FunctionsInfoMapTy& functionsMap, bool ignoreErro
     }
 
     for(CallGraphNode::const_iterator RI = sourceCGN->begin(), RE = sourceCGN->end(); RI != RE; ++RI) {
-      const CallGraphNode::CallRecord *cr = &*RI;
-      Value *callVal = cr->first;
-      CallGraphNode* targetCGN = cr->second;
+      if (!RI->first)
+        continue;
+      Value *callVal = *RI->first;
+      CallGraphNode* targetCGN = RI->second;
       
       if (!callVal || !Instruction::classof(callVal)) {
         // value can be null

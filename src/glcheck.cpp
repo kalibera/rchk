@@ -5,7 +5,6 @@
 
 #include "common.h"
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -32,10 +31,18 @@ bool containsSEXP(Type *t, TypeSetTy& visited) {
   }
   visited.insert(t);
   
-  if (SequentialType *st = dyn_cast<SequentialType>(t)) {
-    return containsSEXP(st->getElementType(), visited);
+  if (ArrayType *at = dyn_cast<ArrayType>(t)) {
+    return containsSEXP(at->getElementType(), visited);
+  }
+
+  if (PointerType *pt = dyn_cast<PointerType>(t)) {
+    return containsSEXP(pt->getElementType(), visited);
   }
   
+  if (VectorType *vt = dyn_cast<VectorType>(t)) {
+    return containsSEXP(vt->getElementType(), visited);
+  }
+
   if (StructType *st = dyn_cast<StructType>(t)) {
 
     if (st->hasName() && st->getName() == "struct.SEXPREC") {

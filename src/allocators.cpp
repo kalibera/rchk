@@ -6,7 +6,6 @@
 using namespace llvm;
 
 #include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
@@ -128,9 +127,9 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
         return true;
       }
     }
-    CallSite cs(u);
-    if (cs) {
-      Function *tgt = cs.getCalledFunction();
+    if (CallBase::classof(u)) {
+      CallBase *cs = cast<CallBase>(u);
+      Function *tgt = cs->getCalledFunction();
       if (tgt && (tgt->getName() == "Rf_protect" || tgt->getName() == "Rf_protectWithIndex") && valueMayBeReturned(u, possiblyReturned)) {
         if (DEBUG) errs() << "  callsite result is returned indirectly via PROTECT" << *u << "\n";
         return true;
@@ -154,9 +153,9 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
   for(Function::iterator bb = f->begin(), bbe = f->end(); bb != bbe; ++bb) {
     for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
       Value *v = &*in;
-      CallSite cs(v);
-      if (!cs) continue;
-      Function *tgt = cs.getCalledFunction();
+      if (!CallBase::classof(v)) continue;
+      CallBase *cs = cast<CallBase>(v);
+      Function *tgt = cs->getCalledFunction();
       if (tgt == gcFunction) {
         // an exception: treat a call to R_gc_internal as an indication this is a direct allocator
         // (note: R_gc_internal itself does not return an SEXP)

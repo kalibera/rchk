@@ -1,7 +1,6 @@
 
 #include "patterns.h"
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
 
@@ -10,15 +9,18 @@
 using namespace llvm;
 
 bool isAllocVectorOfKnownType(Value *inst, unsigned& type) {
-  CallSite cs(inst);
+
+  if (!CallBase::classof(inst))
+    return false;
+  CallBase *cs = cast<CallBase>(inst);
   if (!cs) {
     return false;
   }
-  Function *tgt = cs.getCalledFunction();
+  Function *tgt = cs->getCalledFunction();
   if (!tgt || tgt->getName() != "Rf_allocVector") {
     return false;
   }
-  Value *arg = cs.getArgument(0);
+  Value *arg = cs->getArgOperand(0);
   if (!ConstantInt::classof(arg)) {
     return false;
   }
@@ -29,18 +31,20 @@ bool isAllocVectorOfKnownType(Value *inst, unsigned& type) {
 }
 
 bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname) {
-  CallSite cs(inst);
-  
+
+  if (!CallBase::classof(inst))
+    return false;
+  CallBase *cs = cast<CallBase>(inst);
   if (!cs) {
     return false;
   }
-  
-  Function *tgt = cs.getCalledFunction();
+
+  Function *tgt = cs->getCalledFunction();
   if (!tgt) {
     return false;
   }
   
-  Value *lval = cs.getArgument(0);
+  Value *lval = cs->getArgOperand(0);
   if (!LoadInst::classof(lval)) {
     return false;
   }
@@ -51,7 +55,7 @@ bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname) {
   }
   
   var = cast<AllocaInst>(lvar);
-  fname = tgt->getName();
+  fname = tgt->getName().str();
   return true;
 }
 
@@ -394,7 +398,7 @@ bool isTypeSwitch(Value *inst, AllocaInst*& var, BasicBlock*& defaultSucc, TypeS
 
 bool isCallThroughPointer(Value *inst) {
   if (CallInst* ci = dyn_cast<CallInst>(inst)) {
-    return LoadInst::classof(ci->getCalledValue());
+    return LoadInst::classof(ci->getCalledOperand());
   } else {
     return false;
   }

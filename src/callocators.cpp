@@ -13,7 +13,6 @@
 #include <stack>
 #include <unordered_set>
 
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
@@ -135,22 +134,22 @@ const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, bool regi
 const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, SEXPGuardsChecker* sexpGuardsChecker, SEXPGuardsTy *sexpGuards, bool registerCallSite) {
   // FIXME: this is quite inefficient, does a lot of allocation
   
-  CallSite cs (inst);
-  if (!cs) {
+  if (!CallBase::classof(inst)) {
     return NULL;
   }
-  Function *fun = cs.getCalledFunction();
+  CallBase *cs = cast<CallBase>(inst);
+  Function *fun = cs->getCalledFunction();
   if (!fun) {
     return NULL;
   }
       
   // build arginfo
       
-  unsigned nargs = cs.arg_size();
+  unsigned nargs = cs->arg_size();
   ArgInfosVectorTy argInfo(nargs, NULL);
 
   for(unsigned i = 0; i < nargs; i++) {
-    Value *arg = cs.getArgument(i);
+    Value *arg = cs->getArgOperand(i);
     if (LoadInst::classof(arg)) { // R_XSymbol
       Value *src = cast<LoadInst>(arg)->getPointerOperand();
       if (GlobalVariable::classof(src)) {
@@ -554,12 +553,13 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
           }
           continue;
         }
-        CallSite cs(in);
         const CalledFunctionTy *ct = cm->getCalledFunction(in, true);
-        if (cs) {
-          Function *t = cs.getCalledFunction();
+        if (CallBase::classof(in)) {
+          CallBase *cs = cast<CallBase>(in);
+          Function *t = cs->getCalledFunction();
           if (t && ct) {
-            // t/ct can be NULL - LLVM returns NULL for cs.getCalledFunction() for some internal calls
+            // t/ct can be NULL
+            // well it could when CallSite was used, LLVM returned NULL for cs.getCalledFunction() for some internal calls
           
             // note that this is a heuristic, best-effort approach that is not equivalent to what allocators.cpp do
             //   this heuristic may treat a function as wrapped even when allocators.cpp will not
@@ -609,12 +609,12 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
             for(ValuesSetTy::iterator vi = vorig.begin(), ve = vorig.end(); vi != ve; ++vi) { 
               Value *v = *vi;
             
-              CallSite cs(v);
-              if (cs) {
-                Function *tgt = cs.getCalledFunction();
+              if (CallBase::classof(v)) {
+                CallBase *cs = cast<CallBase>(v);
+                Function *tgt = cs->getCalledFunction();
                 if (tgt && (tgt->getName() == "Rf_protect" || tgt->getName() == "Rf_protectWithIndex")) {
                   if (msg.debug()) msg.debug("propagating origins through PROTECT/PROTECT_WITH_INDEX to " + varName(dst), in);
-                  v = cs.getArgument(0);
+                  v = cs->getArgOperand(0);
                 }
               }
               if (AllocaInst* src = dyn_cast<AllocaInst>(v)) {

@@ -2,7 +2,6 @@
 
 #include <llvm/Analysis/CallGraph.h>
 #include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/CallSite.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/InstIterator.h>
@@ -21,9 +20,11 @@ void getCalledFunctions(Function *f, FunctionsSetTy& calledFunctions) {
   for(Function::iterator bb = f->begin(), bbe = f->end(); bb != bbe; ++bb) {
     for(BasicBlock::iterator in = bb->begin(), ine = bb->end(); in != ine; ++in) {
       Value *v = &*in;
-      CallSite cs(v);
-      if (!cs) continue;
-      Function *tgt = cs.getCalledFunction();
+      if (!CallBase::classof(v)) {
+        continue;
+      }
+      CallBase *cs = cast<CallBase>(v);
+      Function *tgt = cs->getCalledFunction();
       calledFunctions.insert(tgt);
     }
   }

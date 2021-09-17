@@ -41,7 +41,7 @@ else
   LLVM ?= /usr
   
   # use with Ubuntu 16.04 (not needed with newer Ubuntu/LLVM)
-  EXTRACXXFLAGS := -I/usr/include/llvm-3.8/
+  # EXTRACXXFLAGS := -I/usr/include/llvm-3.8/
   
   ifeq ($(wildcard $(LLVM)),)
     $(error Please customize your Makefile here. Please set the home directory for LLVM)

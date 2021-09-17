@@ -7,7 +7,7 @@ if [ X"`hostname -s`" == Xprg ] ; then
   export LLVM=/usr
   export RCHK=/home/tomas/git/rchk
 
-elif [ X"`hostname -s`" == Xr-lnx400 ] ; then
+elif [ X"`hostname -s`" == Xr-lnx400 -o X"`hostname -s`" == Xr-lnx404 ] ; then
 
   export WLLVM=/space/tkalibera/.local/bin
   export LLVM=/usr

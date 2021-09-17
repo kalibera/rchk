@@ -260,14 +260,16 @@ void handleUnprotectWithIntGuard(Instruction *in, BcheckStateTy& s, GlobalsTy& g
   
   // UNPROTECT(intguard ? 3 : 4)
   
-  CallSite cs(cast<Value>(in));
+  if (!CallBase::classof(cast<Value>(in)))
+    return;
+  CallBase *cs = cast<CallBase>(cast<Value>(in));
   if (!cs) {
     return;
   }
-  const Function* targetFunc = cs.getCalledFunction();
+  const Function* targetFunc = cs->getCalledFunction();
   if (!targetFunc || targetFunc != g.unprotectFunction) return;
           
-  Value* unprotectValue = cs.getArgument(0);
+  Value* unprotectValue = cs->getArgOperand(0);
   if (!SelectInst::classof(unprotectValue)) {
     return;
   } 

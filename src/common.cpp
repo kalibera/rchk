@@ -209,7 +209,7 @@ std::string funName(const Function *f) {
   if (!f) {
     return "<unknown function>";
   }
-  return demangle(f->getName());
+  return demangle(f->getName().str());
 }
 
 typedef std::map<const AllocaInst*, std::string> VarNamesTy;
@@ -229,11 +229,11 @@ std::string computeVarName(const AllocaInst *var) {
   
     if (const DbgDeclareInst *ddi = dyn_cast<DbgDeclareInst>(in)) {
       if (ddi->getAddress() == var) {
-        return ddi->getVariable()->getName();
+        return ddi->getVariable()->getName().str();
       }
     } else if (const DbgValueInst *dvi = dyn_cast<DbgValueInst>(in)) {
       if (dvi->getValue() == var) {
-        return dvi->getVariable()->getName();
+        return dvi->getVariable()->getName().str();
       }
     }
   }
@@ -263,7 +263,7 @@ bool isPointerToStruct(Type* type, std::string name) {
     return false;
   }
   StructType *estr = cast<StructType>(etype);
-  if (!estr->hasName() || estr->getName() != name) {
+  if (!estr->hasName() || estr->getName().str() != name) {
     return false;
   }
   return true;
