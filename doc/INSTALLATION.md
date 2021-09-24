@@ -54,6 +54,29 @@ These instructions are for LLVM 10. Tested October 21, 2020.
 	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
 	path to rchk directory created by git.
 
+
+## Debian (Bookworm)
+
+These instructions are for LLVM 11. Tested September 24, 2021 on a clean
+install of Debian testing (bookworm).
+
+0. Install build dependencies for R:
+	* enable source repositories in `/etc/apt/sources.list`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base`
+1. Install clang and llvm:
+	* `apt-get install llvm clang libllvm11 libc\+\+-dev libc\+\+abi-dev`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install python3-pip`
+	* `pip3 install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone -b llvm11 https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
 ## Debian (Bullseye)
 
 These instructions are for LLVM 9. Tested October 21, 2020 on a clean
@@ -76,14 +99,15 @@ install of Debian testing (bullseye/sid).
 	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
 	path to rchk directory created by git.
 
-## Fedora 32
+## Fedora 34
 
-These instructions are for LLVM 10. Tested October 21, 2020 on a clean install
-of Fedora 32.
+These instructions are for LLVM 12. Tested September 24, 2021 on a clean install
+of Fedora 34 (note: it is intentional to use branch named `llvm11` as there
+were no incompatible API changes in LLVM 12 impacting rchk.
 
 0. Install development tools and build dependencies for R:
 	* `dnf install dnf-plugins-core diffutils which`
-	* `dnf install redhat-rpm-config hostname java-1.8.0-openjdk-devel`
+	* `dnf install redhat-rpm-config hostname java-11-openjdk-devel`
         * `dnf install 'dnf-command(builddep)'`
 	* `dnf builddep R`
 	* `dnf groupinstall "Development Tools"`
@@ -95,11 +119,39 @@ of Fedora 32.
 	* `pip install wllvm` (as root)
 3. Install [rchk](https://github.com/kalibera/rchk.git):
 	* `dnf install git`
-	* `git clone https://github.com/kalibera/rchk.git`
+	* `git clone -b llvm11 https://github.com/kalibera/rchk.git`
 	* `cd rchk/src ;  make ; cd ..`
 	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
 	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
 	path to rchk directory created by git.
+
+
+## Fedora 33
+
+These instructions are for LLVM 11. Tested September 24, 2021 on a clean install
+of Fedora 33.
+
+0. Install development tools and build dependencies for R:
+	* `dnf install dnf-plugins-core diffutils which`
+	* `dnf install redhat-rpm-config hostname java-11-openjdk-devel`
+        * `dnf install 'dnf-command(builddep)'`
+	* `dnf builddep R`
+	* `dnf groupinstall "Development Tools"`
+	* `dnf groupinstall "C Development Tools and Libraries"`
+	* `dnf install rsync`
+1. Install clang and llvm:
+	* `dnf install llvm llvm-devel clang`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `dnf install python-pip`
+	* `pip install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `dnf install git`
+	* `git clone -b llvm11 https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ;  make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
 
 # Installing on older systems
 
@@ -128,12 +180,38 @@ of Debian testing (buster/sid).
 	is `/usr/lib/llvm-7`, WLLVM is `/usr/local/bin`, RCHK is the
 	path to rchk directory created by git.
 
+## Fedora 32
+
+These instructions are for LLVM 10. Tested October 21, 2020 on a clean install
+of Fedora 32.
+
+0. Install development tools and build dependencies for R:
+	* `dnf install dnf-plugins-core diffutils which`
+	* `dnf install redhat-rpm-config hostname java-1.8.0-openjdk-devel`
+        * `dnf install 'dnf-command(builddep)'`
+	* `dnf builddep R`
+	* `dnf groupinstall "Development Tools"`
+	* `dnf groupinstall "C Development Tools and Libraries"`
+1. Install clang and llvm:
+	* `dnf install llvm llvm-devel clang`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `dnf install python-pip`
+	* `pip install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `dnf install git`
+	* `git clone https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ;  make ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
+
 ## Fedora 29 and 30
 
 These instructions are for LLVM 7. Tested March 6, 2019 on a clean install
 of Fedora 29 and March 7 on Fedora 30. Note, however, there may be error
 messages like `objcopy: xxx: failed to find link section for section` (the
-problem has been discussed at WLLVM website a bug filed against binutils).
+problem has been discussed at WLLVM website and a bug filed against binutils).
 It seems these messages can be ignored.
 
 0. Install development tools and build dependencies for R:
