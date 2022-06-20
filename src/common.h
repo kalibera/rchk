@@ -16,6 +16,7 @@ void myassert_fail (const char *assertion, const char *file, unsigned int line, 
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <map>
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>

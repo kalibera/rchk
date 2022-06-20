@@ -103,7 +103,7 @@ bool checkTable(Value *v, bool checkDotCallArity, StringMapTy& smap) {
  
       int nfuns = -1;
       if (PointerType *pt = dyn_cast<PointerType>(gv->getType())) {
-        if (ArrayType *at = dyn_cast<ArrayType>(pt->getElementType())) {
+        if (ArrayType *at = dyn_cast<ArrayType>(pt->getPointerElementType())) {
           nfuns = (int) at->getNumElements();
         }
       }

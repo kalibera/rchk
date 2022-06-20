@@ -32,9 +32,8 @@ bool isInstallConstantCall(Value *inst, std::string& symbolName) {
     return false;
   }	
   ConstantExpr *ce = cast<ConstantExpr>(arg);
-  if (!ce->isGEPWithNoNotionalOverIndexing()) {
+  if (ce->getOpcode() != Instruction::GetElementPtr)
     return false;
-  }
   
   Value *ceop = ce->getOperand(0);
   if (!GlobalVariable::classof(ceop)) {

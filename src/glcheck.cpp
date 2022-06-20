@@ -32,15 +32,15 @@ bool containsSEXP(Type *t, TypeSetTy& visited) {
   visited.insert(t);
   
   if (ArrayType *at = dyn_cast<ArrayType>(t)) {
-    return containsSEXP(at->getElementType(), visited);
+    return containsSEXP(at->getPointerElementType(), visited);
   }
 
   if (PointerType *pt = dyn_cast<PointerType>(t)) {
-    return containsSEXP(pt->getElementType(), visited);
+    return containsSEXP(pt->getPointerElementType(), visited);
   }
   
   if (VectorType *vt = dyn_cast<VectorType>(t)) {
-    return containsSEXP(vt->getElementType(), visited);
+    return containsSEXP(vt->getPointerElementType(), visited);
   }
 
   if (StructType *st = dyn_cast<StructType>(t)) {
