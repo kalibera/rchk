@@ -6,7 +6,7 @@
 # See https://github.com/kalibera/rchk/blob/master/doc/DOCKER.md for more.
 #
 
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 LABEL maintainer tomas.kalibera@gmail.com
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -20,12 +20,12 @@ ENV TZ=Europe/Prague
 
 # Install LLVM, R dependencies and common package dependencies
 RUN apt-get update && apt-get install -yq \
-      clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev make && \
+      clang llvm-dev '^clang++$' llvm libllvm14 libc++-dev libc++abi-dev make && \
   apt-get install -yq zip unzip libpaper-utils xdg-utils \
-      libbz2-dev libcairo2-dev libcurl4-gnutls-dev libgomp1 libicu66 libjpeg-dev liblzma-dev \
+      libbz2-dev libcairo2-dev libcurl4-gnutls-dev libgomp1 libicu-dev libjpeg-dev liblzma-dev \
       libpango1.0-dev libpangocairo-1.0-0 libpcre3-dev libpng-dev libreadline-dev tcl8.6-dev \
       libtiff-dev tk8.6-dev libx11-dev libxt-dev zlib1g-dev ca-certificates && \
-  apt-get install -yq libgsl-dev gfortran && \
+  apt-get install -yq libgsl-dev gfortran git && \
   rm -rf /var/lib/apt/lists/* && \
   apt autoremove -y
 
@@ -48,8 +48,7 @@ ENV WLLVM=/usr/local/bin LLVM=/usr RCHK=/rchk
 # Install rchk
 RUN apt-get update && \
   dpkg --get-selections > /pkgs.sel && \
-  apt-get install -yq git && \
-  git clone https://github.com/kalibera/rchk && \
+  git clone -b llvm14 https://github.com/kalibera/rchk.git && \
   echo "# settings moved to container configuration" > rchk/scripts/config.inc && \
   echo "# settings moved to container configuration" > rchk/scripts/cmpconfig.inc  && \
   cd rchk && \
@@ -75,7 +74,10 @@ ENV CPICFLAGS="-fPIC" \
   LLVM_COMPILER=clang \
   LD="clang++ -stdlib=libc++" \
   R_LIBS=$RCHK/packages/libs
-  
+
+ARG CRAN
+ENV CRAN=${CRAN:-https://cran.R-project.org}
+
 # Build R using WLLVM and install core dependencies to build R packages
 RUN export WLLVM_BC_STORE="$RCHK/bcstore" && \
   sed -i 's/^# deb-src/deb-src/g' /etc/apt/sources.list && \
@@ -90,13 +92,13 @@ RUN export WLLVM_BC_STORE="$RCHK/bcstore" && \
   cd trunk && \
   ./configure --without-recommended-packages --prefix=$RCHK/build \
               --with-blas=no --with-lapack=no --enable-R-static-lib && \
-  make -j 4 && \
+  make -j 32 && \
   make install && \
   cd .. && \
   extract-bc ./build/lib/R/bin/exec/R && \
   mv ./build/lib/R/bin/exec/R.bc ./build/R.bc && \
   rm -rf trunk && \
-  echo 'options(repos = c(CRAN="https://cran.r-project.org"))' > build/lib/R/etc/Rprofile.site && \
+  echo 'options(repos = c(CRAN="'$CRAN'"))' > build/lib/R/etc/Rprofile.site && \
   dpkg --clear-selections && \
   dpkg --set-selections < /pkgs.sel && \
   apt-get -yq dselect-upgrade && \
