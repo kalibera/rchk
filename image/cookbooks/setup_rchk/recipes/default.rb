@@ -129,7 +129,7 @@ end
 
 # install LLVM
 
-["clang llvm-dev '^clang++$' llvm libllvm10 libc++-dev libc++abi-dev"].each do |pkg|
+["clang llvm-dev '^clang++$' llvm libllvm14 libc++-dev libc++abi-dev"].each do |pkg|
   package pkg do
     action :install
     not_if 'dpkg --get-selections | grep -q "^#{pkg}\s"'
@@ -198,8 +198,8 @@ rchkdir = "/opt/rchk"
 bcheck = "#{rchkdir}/src/bcheck"
 
 git rchkdir do
-  repository "git://www.github.com/kalibera/rchk"
-  revision "0cb0860c7b7b6a7a8cf532c3a8be73427c265fcc"
+  repository "https://www.github.com/kalibera/rchk.git"
+  revision "llvm14"
   action :export
   user "root"
   not_if {File.exists?("#{rchkdir}/src")}

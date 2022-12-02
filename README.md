@@ -66,7 +66,7 @@ dependencies needed by that package.
 	* `../scripts/build_r.sh` (*in automated install*, `/opt/rchk/scripts/build_r.sh`)
 2. Install and check the package
 	* `echo 'install.packages("jpeg",repos="http://cloud.r-project.org")' |  ./bin/R --no-echo`
-	* `../scripts/check_package.sh jpeg` (in VM install, `/opt/rchk/scripts/check_package.sh jpeg`)
+	* `../scripts/check_package.sh jpeg` (*in automated install*, `/opt/rchk/scripts/check_package.sh jpeg`)
 
 The output of the checking is in files
 `packages/lib/jpeg/libs/jpeg.so.*check`. For version 0.1-8 of the package,
@@ -83,11 +83,28 @@ only contains something like
 Analyzed 15 functions, traversed 1938 states.
 ```
 
+Version 0.1-10 of the package no longer has the error, `jpeg.so.bcheck`
+currently contains something like
+
+```
+ERROR: too many states (abstraction error?) in function strptime_internal
+ERROR: too many states (abstraction error?) in function StringValue
+ERROR: too many states (abstraction error?) in function RunGenCollect
+ERROR: too many states (abstraction error?) in function tre_tnfa_run_parallel
+Analyzed 17 functions, traversed 815 states.
+```
+
+Errors about "too many states" can be ignored, this means that the tool
+could not analyze some R functions in the memory limit provided.
+
 To check the next package, just follow the same steps, installing it into
 this customized version of R.  When checking a tarball, one would typically
 first install the CRAN/BIOC version of the package to get all dependencies
 in, and then use `R CMD INSTALL` to install the newest version to check from
 the tarball.
+
+Warnings like `objdump: Warning: Unrecognized form: 0x22` should be safe to
+ignore.
 
 One can reduce the number of required R package dependencies by only
 installing LinkingTo dependencies of the package and then installing the
