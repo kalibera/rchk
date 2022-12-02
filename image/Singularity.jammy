@@ -1,0 +1,170 @@
+BootStrap: debootstrap
+OSVersion: jammy
+MirrorURL: http://archive.ubuntu.com/ubuntu/
+
+%post
+  sed -i 's/main/main restricted universe/g' /etc/apt/sources.list
+  sed -i 's/^# deb-src/deb-src/g' /etc/apt/sources.list
+  test -z "`cat /etc/apt/sources.list | grep '^deb-src'`" && cat /etc/apt/sources.list | sed -e 's/^deb/deb-src/' >> /etc/apt/sources.list
+  apt-get update
+
+  # Install required R, Python, misc. utilities
+  apt-get install -y libopenblas-dev libcurl4-openssl-dev libopenmpi-dev openmpi-bin openmpi-common openmpi-doc openssh-client openssh-server libssh-dev wget vim git cmake curl wget python3 autoconf bzip2 libtool libtool-bin python3-pip python3-dev locales rsync
+  apt-get build-dep -y r-base-core libpcre2-dev
+  # LLVM
+  apt-get install -y clang llvm-dev '^clang++$' llvm libllvm14 libc++-dev libc++abi-dev
+  apt-get clean
+  locale-gen en_US.UTF-8
+
+  # wllvm
+  pip3 install wllvm
+
+  # rchk
+  cd /opt
+  git clone -b llvm14 https://www.github.com/kalibera/rchk &&  \
+    cd rchk && \
+    cd src && \
+    make -j `cat /proc/cpuinfo | grep "core id" | wc -l` \
+        CXX=g++ BCHECK_MAX_STATES=3000000 CALLOCATORS_MAX_STATES=1000000 LLVM=/usr
+
+  # download, build r-devel
+  cd /opt
+  wget -O - -q https://cran.r-project.org/src/base-prerelease/R-devel.tar.gz | tar zxvf -
+  cd /opt/R-devel
+  export WLLVM=/usr/local/bin
+  export LLVM=/usr
+  export RCHK=/opt/rchk
+  export R_LIBS=
+  export R_LIBS_SITE=
+  export R_LIBS_USER=
+  export R_MAKEVARS_USER=
+  export R_MAKEVARS_SITE=
+  export R_PROFILE=
+  export R_PROFILE_USER=
+  /opt/rchk/scripts/build_r.sh
+
+  # fix up cmpconfig.inc to use user-defined PKG_BUILD, R_LIBS
+  cat << EOF > /opt/rchk/scripts/cmpconfig.inc
+# these options were tested on Ubuntu 16.04.2
+#   they allow to build most but not all packages
+export CFLAGS="-Wall -g -O0 -fPIC"
+export CXXFLAGS="$CFLAGS -I/usr/include/libcxxabi"
+export CC=$WLLVM/wllvm
+export CXX="$WLLVM/wllvm++ -stdlib=libc++"
+export PATH=$LLVM/bin:$PATH
+export LLVM_COMPILER=clang
+#  export PKG_BUILD_DIR=`pwd`/packages/build
+#  export R_LIBS=`pwd`/packages/lib
+export LD="clang++ -stdlib=libc++"
+EOF
+
+  # print usage message
+  cat << EOF
+
+Usage:
+   singularity run <rchk_image> <package_tarball_full_path>
+   singularity run <rchk_image> <package_name>
+   singularity run <rchk_image> R [arguments]
+
+Local package installation is performed when a package source path is
+provided.  Otherwise, default CRAN and BIOC repositories are used.  Outputs
+are placed in ${PKG_ROOT}/build, ${PKG_ROOT}/lib, and ${PKG_ROOT}/libsonly
+directories, which are created if they do not exist.  If not set, the
+PKG_ROOT shell variable is set to be the current working directory.
+
+Usage examples:
+
+# Install curl from CRAN and check:
+singularity run rchk.img curl
+
+# Local package install
+wget https://cran.r-project.org/src/contrib/irlba_2.3.1.tar.gz
+singularity run rchk.img $(pwd)/irlba_2.3.1.tar.gz
+
+# Set the output directory to /tmp
+PKG_ROOT=/tmp singularity run rchk.img curl
+
+EOF
+
+
+
+%runscript
+  if test -z "$1"; then
+    echo
+    echo "Usage: singularity run <rchk_image> <package_tarball_full_path>"
+    echo "       singularity run <rchk_image> <package_name>"
+    echo "       singularity run <rchk_image> R"
+    # for compatibility with older version, also <package_name> <package_tarball_full_path>
+    echo
+    exit 1
+  fi
+  if test -n "$2"; then
+    PKG_NAME="$1"
+    PKG_PATH="$2"
+  else
+    PKG_PATH="$1"
+    if echo "$1" | grep -q "tar\.gz$" ; then
+      PKG_NAME=`echo $1 | sed -e 's/.*\///g' | sed -e 's/\(.*\)_.*/\1/g'`
+    else
+      PKG_NAME="$1"
+    fi
+  fi
+  if test -z "$PKG_ROOT"; then
+    export PKG_ROOT=`pwd`
+    echo
+    echo "Note: Setting PKG_ROOT variable to the current directory."
+    echo "Output will be in ./lib, ./build and ./libsonly subdirectories."
+    echo "If it is not, maybe your local singularity configuration does"
+    echo "not allow singularity container to access your current directory;"
+    echo "it may help to try with PKG_ROOT=/tmp or check the configurarion."
+    echo
+  fi
+  export LLVM=/usr
+  export WLLVM=/usr/local/bin
+  export RCHK=/opt/rchk
+  export CFLAGS="-Wall -g -O0 -fpic"  
+  export CXXFLAGS="$CFLAGS -I/usr/include/libcxxabi"
+  export CC=$WLLVM/wllvm
+  export CXX="$WLLVM/wllvm++ -stdlib=libc++"
+  export PATH=$LLVM/bin:$PATH
+  export LLVM_COMPILER=clang
+  export PKG_BUILD_DIR="${PKG_ROOT}/build"
+  export R_LIBS="${PKG_ROOT}/lib"
+  export R_LIBSONLY="${PKG_ROOT}/libsonly"
+  export R_LIBS_USER="${PKG_ROOT}/lib"
+  export R_LIBS_SITE=
+  export R_MAKEVARS_USER=
+  export R_MAKEVARS_SITE=
+  export R_PROFILE=
+  export R_PROFILE_USER=
+  export LD="clang++ -stdlib=libc++"  
+  mkdir -p "${PKG_BUILD_DIR}"
+  mkdir -p "${R_LIBS}"
+  mkdir -p "${R_LIBSONLY}"
+  if test "$PKG_NAME" = R ; then
+    cd /tmp
+    shift
+    /opt/R-devel/bin/R --vanilla $*
+    exit
+  fi
+  cd /opt/R-devel
+  if test "$PKG_PATH" != "$PKG_NAME" ; then
+    if [ ! -r "$PKG_PATH" ] ; then
+      echo
+      echo "The container cannot access package tarball $PKG_PATH."
+      echo "Please specify it as full path."
+      echo
+      exit 2
+    fi
+  fi
+  echo "source(\"${RCHK}/scripts/utils.r\"); install_package_libs(\"${PKG_PATH}\")"
+  echo "source(\"${RCHK}/scripts/utils.r\"); install_package_libs(\"${PKG_PATH}\")" | ./bin/R --vanilla --no-echo
+  find "${PKG_ROOT}/libsonly/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec rm {} \;
+  /opt/rchk/scripts/check_package.sh "$PKG_NAME"
+  echo
+  find "${PKG_ROOT}/libsonly/${PKG_NAME}/libs" \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -exec cat {} \;
+  echo
+  echo "Rchk version: "`cd /opt/rchk && git rev-parse HEAD`
+  echo "R version: "`echo 'cat(paste(R.version$svn, R.version$version.string, sep="/"))'  | ./bin/R --vanilla --no-echo`
+  echo "LLVM version: "`/usr/bin/llvm-config --version`
+  exit

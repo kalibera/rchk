@@ -1,5 +1,11 @@
-Rchk is available in pre-built singularity container on Linux
-systems. To check R package `jpeg` from CRAN, one needs to do
+Rchk has been available in pre-built singularity container on Linux systems
+via Singularity Hub.  This service has been shut down in 2021 and it is not
+possible to update the pre-built containers anymore.  One can still use the
+old pre-built containers as described below, but they are rather old.  For
+up-to-date pre-built rchk containers, please use docker. The following can
+also be used to build an up-to-date singularity container.
+
+To check R package `jpeg` from CRAN, one needs to do
 
 ```
 singularity pull shub://kalibera/rchk:bionic
@@ -7,7 +13,7 @@ singularity run kalibera-rchk-master-bionic.simg jpeg
 ```
 
 Note that the default image file name may be different (e.g. 
-`rchk_def.sif`), based on the version of singularity used.  The results will
+`rchk_bionic.sif`), based on the version of singularity used. The results will
 be printed and saved in `lib` directory (`lib/jpeg/libs/jpeg.so.bcheck` and
 `lib/jpeg/libs/jpeg.so.maacheck`).  Full path to the package tarball can be
 given instead to check a version of the package not yet on CRAN.  
@@ -17,7 +23,9 @@ I've tested this on Ubuntu 18.04 (singularity 2.6 from
 and on Debian 9.8 (singularity 2.6 from stretch-backports) and on Debian
 buster/testing (singularity 3.0.3 from the distribution) and on Ubuntu 20.04
 (singularity 2.6 from
-[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container)).
+[Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container))
+and on Ubuntu 22.04 (singularity 3.10.4-jammy from [Sylabs
+GitHub](https://github.com/sylabs/singularity)).
 
 There is also a newer singularity image with tag "def", it uses Ubuntu 20.04
 as guest systems, but requires singularity at least version 3.5 (available
@@ -73,7 +81,8 @@ available in the main distribution (Debian Sid, Ubuntu 18.04) or from
 [Neuro Debian](http://neuro.debian.net/install_pkg.html?p=singularity-container)
 (Debian 9, 10, 11, Ubuntu 20.04, 18.04, 16.04). For Fedora and openSUSE, the
 package name is `singularity` and it is available from the main
-distribution.
+distribution. Recent versions are available from [Sylabs GitHub](https://github.com/sylabs/singularity)
+(Ubuntu 22.04, 20.04, 18.04, RHEL 9, 8, 7).
 
 More information can be found at
 https://www.sylabs.io/guides/3.0/user-guide/installation.html.
@@ -87,7 +96,9 @@ definition file for building a singularity container image based on Ubuntu
 all the updates and improvements, but is still provided to build an image on
 Singularity hub for use with older versions of singularity (Ubuntu 20.04 on
 Singularity hub is only supported by a builder which requires a newer
-version of singularity than available on some systems).
+version of singularity than available on some systems). File
+`Singularity.jammy` uses Ubuntu 22.04 and LLVM-14.0 and an up-to-date
+version of R and rchk (December 2022).
 
 Singularity containers may be built as single files or, for experimentation,
 sandbox directories.
@@ -147,6 +158,7 @@ singularity run rchk.img curl
 Inspect the rchk output with, for instance:
 ```
 cat ./lib/curl/libs/curl.so.bcheck 
+# or ./libsonly/curl/libs/curl.so.bcheck
 
 ## Analyzed 86 functions, traversed 864 states.
 ```
@@ -155,10 +167,11 @@ This output means that `rchk/bcheck` found no problems.
 The following example checks a local source package, placing the rchk
 output in `/tmp`:
 ```
-wget https://cran.r-project.org/src/contrib/irlba_2.3.1.tar.gz
-PKG_ROOT=/tmp singularity run rchk.img irlba $(pwd)/irlba_2.3.1.tar.gz
+wget https://cran.r-project.org/src/contrib/irlba_2.3.5.1.tar.gz
+PKG_ROOT=/tmp singularity run rchk.img irlba $(pwd)/irlba_2.3.5.1.tar.gz
 
 cat /tmp/lib/irlba/libs/irlba.so.bcheck 
+# or /tmp/libsonly/irlba/libs/irlba.so.bcheck
 
 # Analyzed 71 functions, traversed 489 states.
 ```
@@ -237,6 +250,7 @@ PKG_ROOT=/tmp singularity run rchk  Rmpfr
 
 # Let's check the output:
 cat /tmp/lib/Rmpfr/libs/Rmpfr.so.bcheck 
+# or /tmp/libsonly/Rmpfr/libs/Rmpfr.so.bcheck
 
 ## Function MPFR_as_R
 ##   [UP] unprotected variable exp_R while calling allocating ...
