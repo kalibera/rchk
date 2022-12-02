@@ -92,7 +92,7 @@ RUN export WLLVM_BC_STORE="$RCHK/bcstore" && \
   cd trunk && \
   ./configure --without-recommended-packages --prefix=$RCHK/build \
               --with-blas=no --with-lapack=no --enable-R-static-lib && \
-  make -j 32 && \
+  make -j 4 && \
   make install && \
   cd .. && \
   extract-bc ./build/lib/R/bin/exec/R && \

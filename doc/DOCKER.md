@@ -22,7 +22,7 @@ docker pull kalibera/rchk:latest
 docker run kalibera/rchk:latest audio
 ```
 
-The output ends with
+The output ends with (for an earlier version of audio package)
 
 ```
 Installed libraries of package  audio 
@@ -73,7 +73,7 @@ container can access them. More details are provided in the following.
 To check a package tarball (on Linux and macOS)
 
 ```
-# wget https://cran.r-project.org/src/contrib/lazy_1.2-16.tar.gz
+# wget https://cran.r-project.org/src/contrib/Archive/lazy/lazy_1.2-16.tar.gz
 mkdir packages
 cp lazy_1.2-16.tar.gz packages
 docker run -v `pwd`/packages:/rchk/packages kalibera/rchk:latest /rchk/packages/lazy_1.2-16.tar.gz
@@ -210,7 +210,7 @@ user.
 ## Modifying the container
 
 To avoid the need of installing Ubuntu packages on every invocation of the
-container, one can modify to container to already contain those. For
+container, one can modify the container to already contain those. For
 example, create this Dockerfile in an empty directory:
 
 ```
