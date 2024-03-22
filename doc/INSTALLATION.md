@@ -32,6 +32,28 @@ instructions provided [here](../README.md).  The description below assumes
 that wllvm is installed via running pip as root; when run as a regular user,
 the installation directory will be different (e.g.  `~/.local/bin`).
 
+## Newer distributions (with LLVM > 14)
+
+A major change in LLVM 15 removed pointee-type information from pointers, so
+pointers are now [opaque](https://llvm.org/docs/OpaquePointers.html).  Rchk,
+however, heavily depends on that it can see which pointers are `SEXP`
+directly from the IR.  Currently, one has to install LLVM 14 on systems that
+already distribute newer versions and use the `llvm-14` branch of rchk as in
+the examples below.  This includes Fedora Core 37 and Fedora Core 38.
+
+LLVM 14 for use with rchk can be compiled from source as follow:
+
+```
+ cmake -S llvm -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DLLVM_ENABLE_LIBCXX:BOOL=OFF \
+      -DLLVM_ENABLE_PROJECTS="clang" \
+      -DCMAKE_INSTALL_PREFIX=/opt/llvm14
+ cmake --build build --target install
+```
+
+and then one has to arrange for `src/Makefile` to set `LLVM = /opt/llvm14`
+and `scripts/config.inc` to set `export LLVM = /opt/llvm14`.
+
 ## Ubuntu 22.04 (Jammy Jellyfish)
 
 These instructions are for LLVM 14. Tested August 12, 2022 on a clean
