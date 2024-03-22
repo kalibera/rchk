@@ -1,7 +1,7 @@
 
 # to be customized and sourced by bash before running other scripts
 
-if [ X"`hostname -s`" == Xprg ] ; then
+if [ X"`hostname -s`" == Xlin ] ; then
 
   export WLLVM=/usr/local/bin
   export LLVM=/usr

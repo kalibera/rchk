@@ -3,7 +3,7 @@
 
 HOST := $(shell hostname -s)
 
-ifeq ($(HOST), prg)
+ifeq ($(HOST), lin)
   LLVM := /usr
   CXX := g++
 #  CXX := $(LLVM)/bin/clang++
