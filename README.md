@@ -44,7 +44,9 @@ check the same package and easier to customize the process. See
 Finally, the tool can be installed natively on Linux, compiled from source.
 This setup is good for interactive use and reduces disk space overhead. The
 setup is not automated, but only requires several steps described for recent
-Linux distributions. See [Native installation on Linux for interactive use](doc/INSTALLATION.md).
+Linux distributions (on latest distributions with LLVM > 14, one however has
+to compile LLVM 14 from source).
+See [Native installation on Linux for interactive use](doc/INSTALLATION.md).
 
 An alternative docker image is also available from third parties on R-hub
 (`rhub/ubuntu-rchk`,
