@@ -250,8 +250,8 @@ static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
     bitsLoad = cast<LoadInst>(andv->getOperand(0));
     cmask = cast<ConstantInt>(andv->getOperand(1));
   } else if (LoadInst::classof(andv->getOperand(1)) && ConstantInt::classof(andv->getOperand(0))) {
-    bitsLoad = cast<LoadInst>(andv->getOperand(0));
-    cmask = cast<ConstantInt>(andv->getOperand(1));
+    bitsLoad = cast<LoadInst>(andv->getOperand(1));
+    cmask = cast<ConstantInt>(andv->getOperand(0));
   } else {
     return false;
   } 
