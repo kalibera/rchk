@@ -56,7 +56,10 @@ bool isAssertedNonAllocating(Function *f) {
 bool isKnownVectorReturningFunction(const CalledFunctionTy* f) {
   std::string name = funName(f);
   
-  if (name == "Rf_getAttrib(?,S:dimnames)" || name == "Rf_getAttrib(V,S:dimnames)") { // FIXME: the tool now would not be infer this from exception on getAttrib0
+  if (name == "Rf_getAttrib(?,S:dimnames)" || name == "Rf_getAttrib(V,S:dimnames)") { // FIXME: the tool now would not be able to infer this from exception on getAttrib0
+    return true;
+  }
+  if (name == "new_compact_intseq" || name == "new_compact_realseq") { // the tool would be able to see this from R_new_altrep
     return true;
   }
   return false;
