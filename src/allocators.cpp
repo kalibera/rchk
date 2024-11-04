@@ -108,7 +108,7 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
       if (DEBUG) errs() << "  callsite result is returned directly\n";
       return true;
     }
-    if (GetElementPtrInst::classof(u) || BitCastInst::classof(u)) { // go through casts and (some) derived assignments
+    if (GetElementPtrInst::classof(u) || BitCastInst::classof(u) || PHINode::classof(u)) { // go through casts and (some) derived assignments and phi nodes
       if (valueMayBeReturned(u, possiblyReturned)) {
         return true;
       }
