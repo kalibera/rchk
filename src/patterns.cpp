@@ -256,7 +256,7 @@ static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
     return false;
   } 
   
-  if (cmask->equalsInt(31)) {
+  if (!cmask->equalsInt(31)) {
     // NOTE: getZExtValue() may assert that the value fits 64 bits
     return false;
   }
