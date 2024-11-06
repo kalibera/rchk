@@ -223,6 +223,62 @@ bool findOnlyStoreTo(AllocaInst* var, StoreInst*& definingStore) {
   return true;
 }
 
+// find if operand of inst comes from a variable, and return that variable if it does
+bool operandComesFromVariable(Instruction *inst, Value *operand, AllocaInst*& var) {
+
+  if (LoadInst::classof(operand)) {
+    // operand is directly a load from variable
+    Value *varv = cast<LoadInst>(operand)->getPointerOperand();
+    if (!AllocaInst::classof(varv)) {
+      return false;
+    }
+    var = cast<AllocaInst>(varv);
+    return true;
+  }
+  
+  // handle assignment within a call, such as
+  // %42 = call %struct.SEXPREC* @CAR(%struct.SEXPREC* noundef %41), !dbg !100075 ; [#uses=2 type=%struct.SEXPREC*] [debug line = 1477:9]
+  // store %struct.SEXPREC* %42, %struct.SEXPREC** %9, align 8, !dbg !100075 ; [debug line = 1477:9]
+  // %43 = getelementptr inbounds %struct.SEXPREC, %struct.SEXPREC* %42, i32 0, i32 0, !dbg !100075 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 1477:9]
+  
+  if (!inst->getParent() || !Instruction::classof(operand) || inst->getParent() != cast<Instruction>(operand)->getParent())
+    return false; 
+
+  // find the latest store of the value to a varible, which is still before the instruction
+  StoreInst *latests = NULL;
+  AllocaInst *latestsvar = NULL;
+  for(Value::user_iterator ui = operand->user_begin(), ue = operand->user_end(); ui != ue; ++ui) {
+    User *u = *ui;
+    if (StoreInst::classof(u)) {
+      StoreInst *si = cast<StoreInst>(u);
+      if (si->getParent() && si->getParent() == inst->getParent() && si->comesBefore(inst)
+          && si->getValueOperand() == operand) {
+        Value* storePointer = si->getPointerOperand();
+        if (AllocaInst::classof(storePointer) && (!latests || latests->comesBefore(si))) {
+          latests = si;
+          latestsvar = cast<AllocaInst>(storePointer);
+        }
+      }
+    }
+  }
+
+  if (!latests)
+    return false;
+  
+   // now make sure there is no later store (of another value) to the same variable before the instruction
+   for(Value::user_iterator ui = latests->user_begin(), ue = latests->user_end(); ui != ue; ++ui) {
+     User *u = *ui;
+     if (StoreInst::classof(u)) {
+       StoreInst *si = cast<StoreInst>(u);
+       if (si->getParent() && si->getParent() == inst->getParent() && si->comesBefore(inst)
+           && latests->comesBefore(si) && latests->getPointerOperand() == si->getPointerOperand())
+         return false;
+     }
+   }
+    
+  var = latestsvar;
+  return true;
+}
 
 // just does part of a type check
 static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
@@ -232,6 +288,18 @@ static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
   // %35 = bitcast %struct.sxpinfo_struct* %34 to i32*, !dbg !21240 ; [#uses=1 type=i32*] [debug line = 1097:0]
   // %36 = load i32* %35, align 4, !dbg !21240       ; [#uses=1 type=i32] [debug line = 1097:0]
   // %37 = and i32 %36, 31, !dbg !21240              ; [#uses=1 type=i32] [debug line = 1097:0]
+  
+  // it is more complicated with assignment within a call, such as
+  //   isString(x = foo())
+  //
+  
+  // %42 = call %struct.SEXPREC* @CAR(%struct.SEXPREC* noundef %41), !dbg !100075 ; [#uses=2 type=%struct.SEXPREC*] [debug line = 1477:9]
+  // store %struct.SEXPREC* %42, %struct.SEXPREC** %9, align 8, !dbg !100075 ; [debug line = 1477:9]
+  // %43 = getelementptr inbounds %struct.SEXPREC, %struct.SEXPREC* %42, i32 0, i32 0, !dbg !100075 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 1477:9]
+  // %44 = bitcast %struct.sxpinfo_struct* %43 to i64*, !dbg !100075 ; [#uses=1 type=i64*] [debug line = 1477:9]
+  // %45 = load i64, i64* %44, align 8, !dbg !100075 ; [#uses=1 type=i64] [debug line = 1477:9]
+  // %46 = and i64 %45, 31, !dbg !100075             ; [#uses=1 type=i64] [debug line = 1477:9]
+
 
 
   BinaryOperator* andv = dyn_cast<BinaryOperator>(inst);
@@ -275,17 +343,8 @@ static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
     return false;
   }
   
-  if (!LoadInst::classof(gep->getPointerOperand())) {
-    return false;
-  }
+  return operandComesFromVariable(gep, gep->getPointerOperand(), var);
   
-  Value *varv = cast<LoadInst>(gep->getPointerOperand())->getPointerOperand();
-  if (!AllocaInst::classof(varv)) {
-    return false;
-  }
-  
-  var = cast<AllocaInst>(varv);
-  return true;
 
 }
 
