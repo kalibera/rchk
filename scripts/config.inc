@@ -10,7 +10,7 @@ if [ X"`hostname -s`" == Xlin ] ; then
 elif [ X"`hostname -s`" == Xr-lnx400 -o X"`hostname -s`" == Xr-lnx404 ] ; then
 
   export WLLVM=/space/tkalibera/.local/bin
-  export LLVM=/var/scratch/tomas/llvm/llvm14
+  export LLVM=/var/scratch/tomas/llvm/llvm14_libcxx
   export RCHK=/space/tkalibera/git/rchk
 
 elif [ X"`hostname -s`" == Xra ] ; then

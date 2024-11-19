@@ -25,7 +25,7 @@ else ifeq ($(HOST), r-lnx400)
   CALLOCATORS_MAX_STATES := 1000000
 
 else ifeq ($(HOST), r-lnx404)
-  LLVM := /var/scratch/tomas/llvm/llvm14
+  LLVM := /var/scratch/tomas/llvm/llvm14_libcxx
   CXX := g++
 #  CXX := $(LLVM)/bin/clang++
   BCHECK_MAX_STATES := 6000000
