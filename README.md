@@ -23,7 +23,7 @@ particular package:
 ```
 docker pull kalibera/rchk:latest
 docker run kalibera/rchk:latest audio
-docker run --rm -v $(pwd):/pkg kalibera/rchk:latest /pkg/mypkg_1.0.0.tar.gz
+docker run --rm -v $(pwd):/pkg --env MAKEFLAGS=-j8 kalibera/rchk:latest /pkg/mypkg_1.0.0.tar.gz
 ```
 
 ```
