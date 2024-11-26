@@ -16,7 +16,7 @@ itself. Several installation options are provided, including containers.
 
 ## Installation
 
-The tool is available in pre-built containers, Docker and Singularity, for
+The tool is available in a pre-built Docker container, for
 *non-interactive* use. The container is invoked as a command to check a
 particular package:
 
@@ -25,15 +25,9 @@ docker pull kalibera/rchk:latest
 docker run kalibera/rchk:latest audio
 ```
 
-```
-singularity pull shub://kalibera/rchk:def
-singularity run kalibera-rchk-master-def.simg jpeg
-```
-
-For more details, see [Docker rchk container](doc/DOCKER.md) and 
-[Singularity rchk container](doc/SINGULARITY.md). This setup is good for
-occasional checking of a single package. Docker clients are
-available for Linux, macOS and Windows. Singularity only for Linux.
+For more details, see [Docker rchk container](doc/DOCKER.md).  This setup is
+good for occasional checking of a single package.  Docker clients are
+available for Linux, macOS and Windows.
 
 The tool can also be used interactively in a virtual machine running Ubuntu,
 which can be automatically installed using Vagrant scripts. This setup is
@@ -112,8 +106,8 @@ One can reduce the number of required R package dependencies by only
 installing LinkingTo dependencies of the package and then installing the
 package with `--libs-only` option (only shared libraries are built and
 installed). This is enough to build shared libraries of most but not all
-packages. Docker and singularity rchk containers for non-interactive use do
-this, see `scripts/utils.r` and definitions of the containers for more
+packages. The Docker container for non-interactive use does
+this, see `scripts/utils.r` and definitions of the container for more
 details.
 
 Further information:
@@ -122,5 +116,3 @@ Further information:
 * [User documentation](doc/USAGE.md) - how to use the tools and what they check.
 * [Internals](doc/INTERNALS.md) - how the tools work internally.
 * [Building](doc/BUILDING.md) - how to get the necessary bitcode files for R/packages; this is now encapsulated in scripts, but the background is here
-
-[![https://www.singularity-hub.org/static/img/hosted-singularity--hub-%23e32929.svg](https://www.singularity-hub.org/static/img/hosted-singularity--hub-%23e32929.svg)](https://singularity-hub.org/collections/2534)
