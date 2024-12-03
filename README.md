@@ -22,11 +22,11 @@ particular package:
 
 ```
 docker pull kalibera/rchk:latest
-docker run kalibera/rchk:latest audio
+docker run --rm kalibera/rchk:latest audio
 
 mkdir packages
 cp lazy_1.2-16.tar.gz packages
-docker run -v `pwd`/packages:/rchk/packages kalibera/rchk:latest /rchk/packages/lazy_1.2-16.tar.gz
+docker run --rm -v `pwd`/packages:/rchk/packages kalibera/rchk:latest /rchk/packages/lazy_1.2-16.tar.gz
 ```
 
 For more details, see [Docker rchk container](doc/DOCKER.md).  This setup is
