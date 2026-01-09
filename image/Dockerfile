@@ -43,6 +43,6 @@ RUN chown -R vagrant /home/vagrant/.ssh && \
 RUN echo "Europe/Prague" > /etc/timezone && \
   dpkg-reconfigure -f noninteractive tzdata
 
-ENV DEBIAN_FRONTEND teletype
+ENV DEBIAN_FRONTEND=teletype
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]

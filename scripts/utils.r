@@ -23,7 +23,7 @@ install_package_libs <- function(package,
                           target = Sys.getenv("R_LIBSONLY", file.path(tempdir(), "libsonly")),
                           contriburl,
                           CRAN_mirror = "https://cran.r-project.org/src",
-                          BIOC_mirror = "https://master.bioconductor.org/packages/3.11",
+                          BIOC_mirror = "https://master.bioconductor.org/packages/3.22",
                           Ncpus = 4) {
 
   check_rchk_variables()
