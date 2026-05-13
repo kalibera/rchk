@@ -5,6 +5,7 @@
 */
 
 #include "common.h"
+#include "cache.h"
        
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
@@ -14,9 +15,7 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "allocators.h"
 #include "callocators.h"
-#include "errors.h"
 #include "cprotect.h"
 
 using namespace llvm;
@@ -27,8 +26,14 @@ int main(int argc, char* argv[])
 
   FunctionsOrderedSetTy functionsOfInterestSet;
   FunctionsVectorTy functionsOfInterestVector;
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
+  std::string cacheFile;
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context, &cacheFile);
+
   CalledModuleTy *cm = CalledModuleTy::create(m);
+  CAllocatorCacheTy reader(cacheFile);
+  if (!cacheFile.empty()) {
+    if (!reader.deserialize(cm)) exit(1);
+  }
 
   FunctionsSetTy *possibleAllocators = cm->getPossibleAllocators();
   FunctionsSetTy *allocatingFunctions = cm->getAllocatingFunctions();

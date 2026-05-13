@@ -21,24 +21,22 @@ const bool DEBUG = false;
 const bool CONMSG = DEBUG; // print message when confused
 const unsigned MAX_DEPTH = 64;
 
-// the function takes at least one SEXP variable as argument
-static bool hasSEXPArg(Function *fun) {
-  FunctionType* ftype = fun->getFunctionType();
-  for(FunctionType::param_iterator pi = ftype->param_begin(), pe = ftype->param_end(); pi != pe; ++pi) {
-    Type* type = *pi;
-    if (isSEXP(type)) {
-      return true; 
-    }
-  }
-  return false;
-}
-
 static bool isSEXPParam(Function *fun, unsigned pidx) {
   FunctionType* ftype = fun->getFunctionType();
   if (pidx >= ftype->getNumParams()) {
     return false;
   }
-  return isSEXP(ftype->getParamType(pidx));
+  return isFunctionArgSEXP(fun, pidx);
+}
+
+// the function takes at least one SEXP variable as argument
+static bool hasSEXPArg(Function *fun) {
+  for (int i = 0; i < fun->arg_size(); i++) {
+    if (isSEXPParam(fun, i)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 struct CProtectFunctionState {
@@ -429,7 +427,7 @@ static void analyzeFunction(CProtectFunctionState& fstate, FunctionTableTy& func
           
           if (Argument *arg = dyn_cast<Argument>(val)) {
             aidx = fstate.argIndex.indexOf(arg);
-            passingArg = isSEXP(arg->getType());
+            passingArg = isSEXP(arg);
             if (DEBUG && passingArg) errs() << "passing argument " << aidx << " directly " << sourceLocation(in) << "\n";            
           } else if (LoadInst *li = dyn_cast<LoadInst>(val)) {
             if (AllocaInst *var = dyn_cast<AllocaInst>(li->getPointerOperand())) { // passing a variable

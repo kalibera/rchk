@@ -1,5 +1,6 @@
 
 #include "callocators.h"
+#include "cginfo.h"
 #include "errors.h"
 #include "guards.h"
 #include "symbols.h"
@@ -120,11 +121,15 @@ size_t ArgInfosVectorTy_hash::operator()(const ArgInfosVectorTy& t) const {
   return res;
 }
 
+const CalledFunctionTy* CalledModuleTy::getCalledFunction(Function *f, ArgInfosVectorTy& argInfos) {
+  CalledFunctionTy calledFunction(f, intern(argInfos), this);
+  return intern(calledFunction);
+}
+
 const CalledFunctionTy* CalledModuleTy::getCalledFunction(Function *f) {
   size_t nargs = f->arg_size();
   ArgInfosVectorTy argInfos(nargs, NULL);
-  CalledFunctionTy calledFunction(f, intern(argInfos), this);
-  return intern(calledFunction);
+  return getCalledFunction(f, argInfos);
 }
 
 const CalledFunctionTy* CalledModuleTy::getCalledFunction(Value *inst, bool registerCallSite) {
@@ -225,6 +230,7 @@ CalledModuleTy::CalledModuleTy(Module *m, SymbolsMapTy *symbolsMap, FunctionsSet
   allocatingCFunctions = NULL;
   contextSensitivePossibleAllocators = NULL;
   contextSensitiveAllocatingFunctions = NULL;
+  seedData = nullptr;
 }
 
 CalledModuleTy::~CalledModuleTy() {
@@ -243,6 +249,9 @@ CalledModuleTy::~CalledModuleTy() {
   }
   if (vrfState) {
     freeVrfState(vrfState);
+  }
+  if (seedData){
+    delete seedData;
   }
 }
 
@@ -469,7 +478,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
   VarsSetTy possiblyReturnedVars; 
   findPossiblyReturnedVariables(f->fun, possiblyReturnedVars); // to restrict origin tracking
     
-  bool trackOrigins = isSEXP(f->fun->getReturnType());
+  bool trackOrigins = isFunctionRetSEXP(f->fun);
     
   if (DEBUG && ONLY_DEBUG_ONLY_FUNCTION) {
     if (ONLY_FUNCTION_NAME == funName(f)) {
@@ -520,6 +529,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     }
       
     if (doneSet.size() > MAX_STATES) {
+      outs().flush();
       errs() << "ERROR: too many states (abstraction error?) in function " << funName(f) << "\n";
       clearStates();
       delete intGuardsChecker;
@@ -774,58 +784,15 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
   }
 }
 
-typedef std::vector<std::vector<bool>> BoolMatrixTy;
-typedef std::vector<unsigned> AdjacencyListRow;
-typedef std::vector<AdjacencyListRow> AdjacencyListTy;
-
 static void resize(AdjacencyListTy& list, unsigned n) {
   list.resize(n);
-}
-
-static void resize(BoolMatrixTy& matrix, unsigned n) {
-  unsigned oldn = matrix.size();
-  if (n <= oldn) {
-    return;
-  }
-  matrix.resize(n);
-  for (unsigned i = 0; i < n; i++) {
-    matrix[i].resize(n);
-  }
-}
-
-static void buildClosure(BoolMatrixTy& mat, AdjacencyListTy& list, unsigned n) {
-
-  bool added = true;
-  while(added) {
-    added = false;
-    
-    for(unsigned i = 0; i < n; i++) {
-      for(unsigned jidx = 0; jidx < list[i].size(); jidx++) {
-        unsigned j = list[i][jidx];
-        if (i == j) {
-          continue;
-        }
-        for(unsigned kidx = 0; kidx < list[j].size(); kidx++) {
-          unsigned k = list[j][kidx];
-          if (j == k) {
-            continue;
-          }
-          if (!mat[i][k]) {
-            mat[i][k] = true;
-            list[i].push_back(k);
-            added = true;
-          }
-        }
-      }
-    }
-  }
 }
 
 void CalledModuleTy::computeCalledAllocators() {
 
   // find calls and variable origins for each called function
   // then create a "callgraph" out of these
-  // and then compute call graph closure
+  // and then compute "can reach" list for GC function
   //
   // for performance, restrict variable origins to possible allocators
   // and restrict calls to possibly allocating functions
@@ -841,10 +808,28 @@ void CalledModuleTy::computeCalledAllocators() {
   
   unsigned nfuncs = getNumberOfCalledFunctions(); // NOTE: nfuncs can increase during the checking
 
-  BoolMatrixTy callsMat(nfuncs, std::vector<bool>(nfuncs));  // calls[i][j] - function i calls function j
   AdjacencyListTy callsList(nfuncs, AdjacencyListRow()); // calls[i] - list of functions called by i
-  BoolMatrixTy wrapsMat(nfuncs, std::vector<bool>(nfuncs));  // wraps[i][j] - function i wraps function j
   AdjacencyListTy wrapsList(nfuncs, AdjacencyListRow()); // wraps[i] - list of functions wrapped by i
+  std::unordered_set<const CalledFunctionTy*> cachedCallers;
+  
+  // use seedData to pre-fill callsList, wrapsList and 
+  if (seedData) {
+    // deserializing may have added called functions
+    resize(callsList, nfuncs);
+    resize(wrapsList, nfuncs);
+
+    for (const auto& e : seedData->getCallEdges()) {
+      const CalledFunctionTy *caller = e.first;
+      const CalledFunctionTy *callee = e.second;
+      callsList[caller->idx].push_back(callee->idx);
+    }
+    for (const auto& e : seedData->getWrapEdges()) {
+      const CalledFunctionTy *caller = e.first;
+      const CalledFunctionTy *callee = e.second;
+      wrapsList[caller->idx].push_back(callee->idx);
+    }
+    cachedCallers.insert(seedData->getDoneCallers().begin(), seedData->getDoneCallers().end());
+  }
   
   for(unsigned i = 0; i < getNumberOfCalledFunctions(); i++) {
 
@@ -853,6 +838,11 @@ void CalledModuleTy::computeCalledAllocators() {
       continue;
     }
     
+    // skip cached callers
+    if (cachedCallers.find(f) != cachedCallers.end()) {
+      continue;
+    }
+
     CalledFunctionsOrderedSetTy called;
     CalledFunctionsOrderedSetTy wrapped;
     getCalledAndWrappedFunctions(f, msg, called, wrapped);
@@ -886,27 +876,44 @@ void CalledModuleTy::computeCalledAllocators() {
     nfuncs = getNumberOfCalledFunctions(); // get the current size
     resize(callsList, nfuncs);
     resize(wrapsList, nfuncs);
-    resize(callsMat, nfuncs);
-    resize(wrapsMat, nfuncs);
     
     for(CalledFunctionsOrderedSetTy::const_iterator cfi = called.begin(), cfe = called.end(); cfi != cfe; ++cfi) {
       const CalledFunctionTy *cf = *cfi;
-      callsMat[f->idx][cf->idx] = true;
       callsList[f->idx].push_back(cf->idx);
     }
 
     for(CalledFunctionsOrderedSetTy::const_iterator wfi = wrapped.begin(), wfe = wrapped.end(); wfi != wfe; ++wfi) {
       const CalledFunctionTy *wf = *wfi;
-      wrapsMat[f->idx][wf->idx] = true;
       wrapsList[f->idx].push_back(wf->idx);
-    }    
-  }
-  
-  // calculate transitive closure
+    }
 
-  buildClosure(callsMat, callsList, nfuncs);
-  buildClosure(wrapsMat, wrapsList, nfuncs);
-  
+    cachedCallers.insert(f);
+  }
+
+  // if seedData wasn't provided, create and populate it with fresh data
+  if (!seedData) {
+    seedData = new CAllocatorSeedDataTy(this);
+    for (unsigned i = 0; i < callsList.size(); ++i) {
+      const CalledFunctionTy *caller = getCalledFunction(i);
+      for (unsigned j : callsList[i]) {
+        seedData->addInternedCallEdge(caller, getCalledFunction(j));
+      }
+    }
+    for (unsigned i = 0; i < wrapsList.size(); ++i) {
+      const CalledFunctionTy *caller = getCalledFunction(i);
+      for (unsigned j : wrapsList[i]) {
+        seedData->addInternedWrapEdge(caller, getCalledFunction(j));
+      }
+    }
+    for (const CalledFunctionTy* cf : cachedCallers) {
+      seedData->addInternedDone(cf);
+    }
+  }
+
+  // calculate canReach for GC function
+  auto callsCanReach = computeCanReachToIndex(callsList, gcFunction->idx);
+  auto wrapsCanReach = computeCanReachToIndex(wrapsList, gcFunction->idx);
+
   // fill in results
   
   // also fill in context-sensitive non-called allocators, allocating functions
@@ -917,14 +924,14 @@ void CalledModuleTy::computeCalledAllocators() {
   
   unsigned gcidx = gcFunction->idx;
   for(unsigned i = 0; i < nfuncs; i++) {
-    if (callsMat[i][gcidx]) {
+    if (callsCanReach[i]) {
       const CalledFunctionTy *tgt = getCalledFunction(i);
       allocatingCFunctions->insert(tgt);
       if (!tgt->hasContext()) {
         contextSensitiveAllocatingFunctions->insert(tgt->fun);
       }
     }
-    if (wrapsMat[i][gcidx]) {
+    if (wrapsCanReach[i]) {
       const CalledFunctionTy *tgt = getCalledFunction(i);
       if (!isKnownNonAllocator(tgt)) {
         possibleCAllocators->insert(tgt);
@@ -942,4 +949,27 @@ void CalledModuleTy::computeCalledAllocators() {
 
 std::string funName(const CalledFunctionTy *cf) {
   return funName(cf->fun) + cf->getNameSuffix();  
+}
+
+void CalledModuleTy::CAllocatorSeedDataTy::addCallEdge(Function *callerFun, ArgInfosVectorTy& callerArgs, Function *calleeFun, ArgInfosVectorTy& calleeArgs) {
+  const CalledFunctionTy* caller = cm->getCalledFunction(callerFun, callerArgs);
+  const CalledFunctionTy* callee = cm->getCalledFunction(calleeFun, calleeArgs);
+  callEdges.push_back({caller, callee});
+}
+
+void CalledModuleTy::CAllocatorSeedDataTy::addWrapEdge(Function *callerFun, ArgInfosVectorTy& callerArgs, Function *calleeFun, ArgInfosVectorTy& calleeArgs) {
+  const CalledFunctionTy* caller = cm->getCalledFunction(callerFun, callerArgs);
+  const CalledFunctionTy* callee = cm->getCalledFunction(calleeFun, calleeArgs);
+  wrapEdges.push_back({caller, callee});
+}
+
+void CalledModuleTy::CAllocatorSeedDataTy::addDone(Function *callerFun, ArgInfosVectorTy& callerArgs) {
+  const CalledFunctionTy* caller = cm->getCalledFunction(callerFun, callerArgs);
+  doneCallers.insert(caller);
+}
+
+void CalledModuleTy::addToCallSiteTarget(Value *callInst, Function *f, ArgInfosVectorTy& argInfos) {
+  const CalledFunctionTy* cf = getCalledFunction(f, argInfos);
+
+  callSiteTargets[callInst].insert(cf);
 }

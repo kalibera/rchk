@@ -123,6 +123,27 @@ typedef std::map<AllocaInst*,SEXPGuardTy> SEXPGuardsTy;
 typedef std::map<Value*, CalledFunctionsSetTy> CallSiteTargetsTy;
 
 class CalledModuleTy {
+public:
+  class CAllocatorSeedDataTy {
+    CalledModuleTy* const cm;
+    std::vector<std::pair<const CalledFunctionTy*, const CalledFunctionTy*>> callEdges;
+    std::vector<std::pair<const CalledFunctionTy*, const CalledFunctionTy*>> wrapEdges;
+    std::unordered_set<const CalledFunctionTy*> doneCallers;
+    public:
+      explicit CAllocatorSeedDataTy(CalledModuleTy* cm): cm(cm) {}
+      void addCallEdge(Function *callerFun, ArgInfosVectorTy& callerArgs, Function *calleeFun, ArgInfosVectorTy& calleeArgs);
+      void addWrapEdge(Function *callerFun, ArgInfosVectorTy& callerArgs, Function *calleeFun, ArgInfosVectorTy& calleeArgs);
+      void addDone(Function *callerFun, ArgInfosVectorTy& callerArgs);
+      void addInternedCallEdge(const CalledFunctionTy* caller, const CalledFunctionTy* callee) { callEdges.push_back({caller, callee}); }
+      void addInternedWrapEdge(const CalledFunctionTy* caller, const CalledFunctionTy* callee) { wrapEdges.push_back({caller, callee}); }
+      void addInternedDone(const CalledFunctionTy* caller) { doneCallers.insert(caller); }
+      const std::vector<std::pair<const CalledFunctionTy*, const CalledFunctionTy*>>& getCallEdges() const { return callEdges; }
+      const std::vector<std::pair<const CalledFunctionTy*, const CalledFunctionTy*>>& getWrapEdges() const { return wrapEdges; }
+      const std::unordered_set<const CalledFunctionTy*>& getDoneCallers() const { return doneCallers; }
+      void clear() { callEdges.clear(); wrapEdges.clear(); doneCallers.clear(); }
+  };
+
+private:
   CalledFunctionsTableTy calledFunctionsTable; // intern table
   ArgInfoVectorsTableTy argInfoVectorsTable; // intern table
   
@@ -137,6 +158,7 @@ class CalledModuleTy {
   CalledFunctionsSetTy* possibleCAllocators;
   CalledFunctionsSetTy* allocatingCFunctions;
   CallSiteTargetsTy callSiteTargets; // maps  call instruction -> set of target functions
+  CAllocatorSeedDataTy *seedData; // cached data for computeCalledAllocators
   VrfStateTy* vrfState; // state for vector returning functions detection
   
   const CalledFunctionTy* const gcFunction;
@@ -152,10 +174,17 @@ class CalledModuleTy {
       
     static CalledModuleTy* create(Module *m);
     static void release(CalledModuleTy *cm);
+
+    // NOTE: once seedData is populated, it won't update
+    // with freshly computed results which is fine for current usecase
+    void setCAllocatorSeedData(CAllocatorSeedDataTy *data) { seedData = data; }
+    const CAllocatorSeedDataTy* getCAllocatorSeedData() { computeCalledAllocators(); return seedData; }
+    void addToCallSiteTarget(Value *callInst, Function *f, ArgInfosVectorTy& argInfos);
       
     const CalledFunctionTy* getCalledFunction(Value *inst, bool registerCallSite = false);
     const CalledFunctionTy* getCalledFunction(Value *inst, SEXPGuardsChecker *sexpGuardsChecker, SEXPGuardsTy *sexpGuards, bool registerCallSite); // takes context from guards
     const CalledFunctionTy* getCalledFunction(Function *f); // gets a version with no context
+    const CalledFunctionTy* getCalledFunction(Function *f, ArgInfosVectorTy& argInfos); // gets a version with specific context
     const CalledFunctionTy* getCalledFunction(unsigned idx) { return calledFunctionsTable.at(idx); };
     const CalledFunctionsIndexTy* getCalledFunctions() { return calledFunctionsTable.getIndex(); }
     size_t getNumberOfCalledFunctions() { return calledFunctionsTable.getIndex()->size(); }

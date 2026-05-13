@@ -101,6 +101,7 @@ void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
 
 // this ignores derived/cast values
 static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
+  if (!v->hasUseList()) return false;
 
   for(Value::user_iterator ui = v->user_begin(), ue = v->user_end(); ui != ue; ++ui) {
     User *u = *ui;
@@ -145,7 +146,7 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
 // returns an empty set if this function cannot be an allocator
 
 void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Function* gcFunction) {
-  if (!isSEXP(f->getReturnType())) return; // allocator must return SEXP
+  if (!isFunctionRetSEXP(f)) return; // allocator must return SEXP
 
   VarsSetTy possiblyReturnedVars;
   findPossiblyReturnedVariables(f, possiblyReturnedVars);
@@ -169,7 +170,7 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
         continue;
       }
       if (!tgt) continue;
-      if (!isSEXP(tgt->getReturnType())) continue;
+      if (!isFunctionRetSEXP(tgt)) continue;
       if (isKnownNonAllocator(tgt)) continue;
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f
@@ -203,19 +204,20 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   }
   
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, &onlyEdges, gcFunction /* assume external functions allocate */);
+  buildCGInfo(m, functionsMap, true /* ignore error paths */, &onlyFunctions, &onlyEdges, gcFunction /* assume external functions allocate */);
 
   for(CallEdgesMapTy::iterator cei = onlyEdges.begin(), cee = onlyEdges.end(); cei != cee; ++cei) {
     delete cei->second;
   }
   
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
+  CanReachVectorTy canReachGC = computeCanReachToIndex(functionsMap, gcFunctionIndex);
 
   for(FunctionsInfoMapTy::iterator fi = functionsMap.begin(), fe = functionsMap.end(); fi != fe; ++fi) {
     Function *f = const_cast<Function *>(fi->second.function);
     if (!f) continue;
 
-    if ((fi->second.callsFunctionMap)[gcFunctionIndex]) {
+    if (canReachGC[fi->second.index]) {
       possibleAllocators.insert(f);
     }
   }
@@ -223,7 +225,7 @@ void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators) {
   possibleAllocators.insert(gcFunction);
 }
 
-bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex) {
+bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, CanReachVectorTy& canReachGC) {
   if (!fun || isAssertedNonAllocating(fun)) {
     return false;
   }
@@ -234,7 +236,7 @@ bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsig
   }
   FunctionInfo& finfo = fsearch->second;
 
-  return (finfo.callsFunctionMap)[gcFunctionIndex];
+  return canReachGC[finfo.index];
 }
 
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
@@ -249,15 +251,16 @@ void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions) {
   }
   
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */, &onlyFunctions, NULL, getGCFunction(m) /* assume external functions allocate */);
+  buildCGInfo(m, functionsMap, true /* ignore error paths */, &onlyFunctions, NULL, getGCFunction(m) /* assume external functions allocate */);
 
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
+  CanReachVectorTy canReachGC = computeCanReachToIndex(functionsMap, gcFunctionIndex);
 
   for(FunctionsInfoMapTy::iterator fi = functionsMap.begin(), fe = functionsMap.end(); fi != fe; ++fi) {
     Function *f = const_cast<Function *>(fi->second.function);
     if (!f) continue;
 
-    if ((fi->second.callsFunctionMap)[gcFunctionIndex]) {
+    if (canReachGC[fi->second.index]) {
       allocatingFunctions.insert(f);
     }
   }

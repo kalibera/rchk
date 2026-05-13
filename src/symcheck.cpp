@@ -2,6 +2,8 @@
   This tool just prints symbol shortcuts - both global variables and static
   variables in functions.  It could be extended to do some checks on how
   symbols are defined, if necessary.
+
+  This tool doesn't use the cache.
 */ 
 
 #include "common.h"

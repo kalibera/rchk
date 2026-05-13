@@ -1,6 +1,9 @@
 /*
   This tool prints results of vector-related analyses, such as which
   functions and when return a vector.
+
+  Although veccheck uses CalledModuleTy, it won't benefit from the cache file
+  because no usage triggers internal computeCalledAllocators().
 */ 
 
 #include "common.h"
@@ -23,6 +26,7 @@ int main(int argc, char* argv[])
   FunctionsVectorTy functionsOfInterestVector;
   
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
+  
   CalledModuleTy *cm = CalledModuleTy::create(m);
   
     // FIXME: this will not discover many call-sites (will not include many interesting contexts)

@@ -2,6 +2,8 @@
 /* 
    Check if there are functions that do not return, but are not marked as
    noreturn (e.g. error call wrappers)
+
+  This tool doesn't use the cache.
 */
  
 #include "common.h" 

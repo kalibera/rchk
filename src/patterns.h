@@ -22,7 +22,7 @@ ValuesSetTy valueOrigins(Value *inst);
 
 bool isAllocVectorOfKnownType(Value *inst, unsigned& type);
 
-bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type);
+bool isLoadFollowedByGEP(Value *inst, AllocaInst*& var, GetElementPtrInst*& gep);
 
 bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname);
 

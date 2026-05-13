@@ -1,3 +1,8 @@
+
+/* 
+  This tool doesn't use the cache.
+*/
+
 #include "common.h"
 
 #include <llvm/Analysis/CallGraph.h>
@@ -10,8 +15,7 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "allocators.h"
-#include "cgclosure.h"
+#include "cginfo.h"
 
 using namespace llvm;
 
@@ -66,7 +70,7 @@ int main(int argc, char* argv[])
   }
 
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, false /* ignore error paths */, &onlyFunctions, &onlyEdges);
+  buildCGInfo(m, functionsMap, false /* ignore error paths */, &onlyFunctions, &onlyEdges);
   
   for(CallEdgesMapTy::iterator cei = onlyEdges.begin(), cee = onlyEdges.end(); cei != cee; ++cei) {
     delete cei->second;
@@ -80,6 +84,7 @@ int main(int argc, char* argv[])
     exit(1);
   }
   myfindex = fsearch->second.index;  
+  CanReachVectorTy canReachMyf = computeCanReachToIndex(functionsMap, myfindex);
 
   errs() << "Functions calling (recursively) function " << funName(myf) << "\n";
   for(FunctionsVectorTy::iterator FI = functionsOfInterestVector.begin(), FE = functionsOfInterestVector.end(); FI != FE; ++FI) {
@@ -88,7 +93,7 @@ int main(int argc, char* argv[])
     if (fisearch == functionsMap.end()) continue;
     FunctionInfo& finfo = fisearch->second;
 
-    if ((finfo.callsFunctionMap)[myfindex]) {
+    if (canReachMyf[finfo.index]) {
       errs() << funName(finfo.function) << "\n";
     }
   }

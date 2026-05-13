@@ -35,17 +35,33 @@ if [ ! -r ./src/main/R.bin.bc ] ; then
   exit 2
 fi
 
+RBC=./src/main/R.bin.bc
+
+# ensure cache
+
+if [ -n "$RCHK_NO_CACHE" ] ; then
+  CACHE_ARGS=""
+else
+  CACHE_FILE="$RBC".cache
+  . $RCHK/scripts/ensure_cache.sh "$RBC" "$CACHE_FILE"
+  if [ $? -ne 0 ] ; then
+    echo "Cache generation failed. Aborting." >&2
+    exit 2
+  fi
+  CACHE_ARGS="--cache $CACHE_FILE"
+fi
+
 # run the tools
 
 for T in $TOOLS ; do
-  if [ ! -r ./src/main/R.bin.$T ] || [ ./src/main/R.bin.bc -nt ./src/main/R.bin.$T ] ; then
-    $RCHK/src/$T ./src/main/R.bin.bc >./src/main/R.bin.$T 2>&1
+  if [ ! -r ./src/main/R.bin.$T ] || [ $RBC -nt ./src/main/R.bin.$T ] ; then
+    $RCHK/src/$T $CACHE_ARGS $RBC >./src/main/R.bin.$T 2>&1
   fi
   
   find . -name "*.bc" | grep -v R.bin.bc | grep -v '\.o\.bc' | grep -v '\.svn' | grep -v '^./packages' | while read F ; do
     FOUT=`echo $F | sed -e 's/\.bc$/.'$T'/g'`
-    if [ ! -r $FOUT ] || [ $F -nt $FOUT ] || [ ./src/main/R.bin.bc -nt $FOUT ] ; then
-      $RCHK/src/$T ./src/main/R.bin.bc $F >$FOUT 2>&1
+    if [ ! -r $FOUT ] || [ $F -nt $FOUT ] || [ $RBC -nt $FOUT ] ; then
+      $RCHK/src/$T $CACHE_ARGS $RBC $F >$FOUT 2>&1
     fi
   done
 done

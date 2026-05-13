@@ -13,6 +13,8 @@
   integer.
   
   By default the checking ignores error paths.
+
+  This tool doesn't use the cache.
 */
 
 #include "common.h"
@@ -26,7 +28,7 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "allocators.h"
-#include "cgclosure.h"
+#include "cginfo.h"
 
 using namespace llvm;
 
@@ -36,7 +38,7 @@ enum ArgExpKind {
   AK_FRESH         // allocation and possibly returning a fresh object
 };
 
-ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex, FunctionsSetTy& possibleAllocators) {
+ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsMap, CanReachVectorTy& canReachGC, FunctionsSetTy& possibleAllocators) {
 
   if (!CallInst::classof(arg)) {
     // argument does not come (immediatelly) from a call
@@ -49,7 +51,7 @@ ArgExpKind classifyArgumentExpression(Value *arg, FunctionsInfoMapTy& functionsM
     return AK_NOALLOC;
   }
 
-  if (!isAllocatingFunction(fun, functionsMap, gcFunctionIndex)) {
+  if (!isAllocatingFunction(fun, functionsMap, canReachGC)) {
     // argument does not come from a call to an allocating function
     return AK_NOALLOC;
   }
@@ -71,9 +73,10 @@ int main(int argc, char* argv[])
   Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);  
   
   FunctionsInfoMapTy functionsMap;
-  buildCGClosure(m, functionsMap, true /* ignore error paths */);
+  buildCGInfo(m, functionsMap, true /* ignore error paths */);
   
   unsigned gcFunctionIndex = getGCFunctionIndex(functionsMap, m);
+  CanReachVectorTy canReachGC = computeCanReachToIndex(functionsMap, gcFunctionIndex);
   
   FunctionsSetTy possibleAllocators;
   findPossibleAllocators(m, possibleAllocators); // FIXME: use context-sensitive (more precise) detection
@@ -113,13 +116,13 @@ int main(int argc, char* argv[])
           unsigned nvals = phi->getNumIncomingValues();
           k = AK_NOALLOC;
           for(unsigned i = 0; i < nvals; i++) {
-            ArgExpKind cur = classifyArgumentExpression(phi->getIncomingValue(i), functionsMap, gcFunctionIndex, possibleAllocators);
+            ArgExpKind cur = classifyArgumentExpression(phi->getIncomingValue(i), functionsMap, canReachGC, possibleAllocators);
             if (cur > k) {
               k = cur;
             }
           }
         } else {
-          k = classifyArgumentExpression(o, functionsMap, gcFunctionIndex, possibleAllocators);
+          k = classifyArgumentExpression(o, functionsMap, canReachGC, possibleAllocators);
         }
 
         if (k >= AK_ALLOCATING) nAllocatingArgs++;

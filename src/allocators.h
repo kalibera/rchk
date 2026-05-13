@@ -2,7 +2,7 @@
 #define RCHK_ALLOCATORS_H
 
 #include "common.h"
-#include "cgclosure.h"
+#include "cginfo.h"
 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
@@ -24,7 +24,7 @@ unsigned getGCFunctionIndex(FunctionsInfoMapTy& functionsMap, Module *m);
 bool mayBeAllocator(Function& f);
 void findPossibleAllocators(Module *m, FunctionsSetTy& possibleAllocators);
 
-bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, unsigned gcFunctionIndex);
+bool isAllocatingFunction(Function *fun, FunctionsInfoMapTy& functionsMap, CanReachVectorTy& canReachGC);
 void findAllocatingFunctions(Module *m, FunctionsSetTy& allocatingFunctions);
 
 void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned);

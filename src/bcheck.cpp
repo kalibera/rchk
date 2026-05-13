@@ -20,7 +20,6 @@
 #include <set>
 #include <stack>
 #include <unordered_set>
-#include <unordered_map>
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/LLVMContext.h>
@@ -32,6 +31,7 @@
 
 #include "errors.h"
 #include "callocators.h"
+#include "cache.h"
 #include "allocators.h"
 #include "balance.h"
 #include "freshvars.h"
@@ -388,6 +388,7 @@ class FunctionChecker {
       }
       
       if (doneSet.size() > MAX_STATES) {
+        outs().flush();
         errs() << "ERROR: too many states (abstraction error?) in function " << funName(fun) << "\n";
         clearStates();
         return;
@@ -516,7 +517,8 @@ int main(int argc, char* argv[])
   FunctionsOrderedSetTy functionsOfInterestSet;
   FunctionsVectorTy functionsOfInterestVector;
   
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
+  std::string cacheFile;
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context, &cacheFile);
 //  EXCLUDE_PROTECTION_FUNCTIONS = (argc == 3); // exclude when checking modules
   GlobalsTy gl(m);
   LineMessenger msg(context, DEBUG, TRACE, UNIQUE_MSG);
@@ -534,6 +536,11 @@ int main(int argc, char* argv[])
   findSymbols(m, &symbolsMap);
   
   CalledModuleTy cm(m, &symbolsMap, &errorFunctions, &gl, &possibleAllocators, &allocatingFunctions);
+  CAllocatorCacheTy reader(cacheFile);
+  if (!cacheFile.empty()) {
+    if (!reader.deserialize(&cm)) exit(1);
+  }
+
   CProtectInfo cprotect = findCalleeProtectFunctions(m, *cm.getContextSensitiveAllocatingFunctions());
   
   ModuleCheckingStateTy mstate(possibleAllocators, allocatingFunctions, errorFunctions, gl, msg, cm, cprotect); 

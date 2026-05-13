@@ -28,18 +28,13 @@ bool isInstallConstantCall(Value *inst, std::string& symbolName) {
   // getting a constant string from the IR is not very straightforward
   // http://lists.cs.uiuc.edu/pipermail/llvmdev/2012-January/047147.html
   
-  if (!ConstantExpr::classof(arg)) {
-    return false;
-  }	
-  ConstantExpr *ce = cast<ConstantExpr>(arg);
-  if (ce->getOpcode() != Instruction::GetElementPtr)
-    return false;
-  
-  Value *ceop = ce->getOperand(0);
-  if (!GlobalVariable::classof(ceop)) {
+  // as of opaque pointers, the argument is directly a global variable (before it was a getelementptr of a global variable)
+  GlobalVariable *gv = dyn_cast<GlobalVariable>(arg);
+  if (!gv) {
     return false;
   }
-  Constant *gvInit = cast<GlobalVariable>(ceop)->getInitializer();
+
+  Constant *gvInit = gv->getInitializer();
   
   if (!ConstantDataArray::classof(gvInit)) {
     return false;
@@ -75,12 +70,14 @@ void findSymbols(Module *m, SymbolsMapTy* symbolsMap) {
           foundInstall = true;
         } else {
           if (symbolName != name) {
+            outs().flush();
             errs() << "ERROR: Multiple names for symbol " << gv->getName() << ": " << symbolName << " and " << name << "\n";
             goto cannot_be_symbol;
           }
         }
       } else {
         if (foundInstall) {
+          outs().flush();
           errs() << "ERROR: Invalid write to symbol " << gv->getName();
           if (Instruction::classof(valueOp)) {
             errs() << " at " << sourceLocation(cast<Instruction>(valueOp));

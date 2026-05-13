@@ -9,6 +9,8 @@
   somewhat context-aware (e.g.  taking into account some constant arguments
   being passed to functions, which makes a big difference for calls like
   getAttrib)
+
+  This analysis benefits from the cache.
 */
 
 #include "common.h"
@@ -21,6 +23,7 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "callocators.h"
+#include "cache.h"
 #include "lannotate.h"
 
 using namespace llvm;
@@ -31,8 +34,14 @@ int main(int argc, char* argv[])
 
   FunctionsOrderedSetTy functionsOfInterestSet;
   FunctionsVectorTy functionsOfInterestVector;
-  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context);
+  std::string cacheFile;
+  Module *m = parseArgsReadIR(argc, argv, functionsOfInterestSet, functionsOfInterestVector, context, &cacheFile);
+
   CalledModuleTy *cm = CalledModuleTy::create(m);
+  CAllocatorCacheTy reader(cacheFile);
+  if (!cacheFile.empty()) {
+    if (!reader.deserialize(cm)) exit(1);
+  }
 
   const CallSiteTargetsTy *callSiteTargets = cm->getCallSiteTargets();
   const CalledFunctionsSetTy *allocatingCFunctions = cm->getAllocatingCFunctions();
