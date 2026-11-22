@@ -42,8 +42,7 @@ WARNING Suspicious call (two or more unprotected arguments) to Rf_setAttrib at l
 `ERROR: too many states (abstraction error?)` can be ignored, it informs
 about that `strptime_internal` function in R is too complicated to be
 analyzed.  `ERROR: did not find initialization function R_init_audio` is
-from `fficheck` (checking foreign function call registration).  `WARNING
-Suspicious call` are from `maacheck` (checking for likely PROTECT bugs due
+from `fficheck` (checking foreign function call registration).  `WARNING Suspicious call` are from `maacheck` (checking for likely PROTECT bugs due
 to multiple allocating arguments in a function).  `src/driver.c:241` is
 
 ```
@@ -85,7 +84,7 @@ On Windows:
 mkdir packages
 copy lazy_1.2-16.tar.gz packages
 docker run -v %cd%/packages:/rchk/packages kalibera/rchk:latest /rchk/packages/lazy_1.2-16.tar.gz
-````
+```
 
 In the above, directory `packages` is made available to the container under
 `/rchk/packages`, hence the full path to the tarball
@@ -139,12 +138,12 @@ because it ends with (line numbers added)
       out->I=0;
 }
 ```
+
 The UNPROTECT at line 471 matches the PROTECT at line 468, but the object
 protected at line 467 will not be unprotected.
 
 Split outputs from checking by tool are in `./packages/libsonly/lazy/libs/`:
 `lazy.so.maacheck`, `lazy.so.bcheck`, `lazy.so.fficheck`.
-
 
 ## Checking a package with R package dependencies
 
