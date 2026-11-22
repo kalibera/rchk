@@ -25,12 +25,82 @@ instructions provided [here](../README.md).  One can access the host file
 system in directory `/vagrant` inside the virtual installation, e.g.  to
 copy package tarballs in and out.
 
+Note that the automated installation has not been updated for LLVM 22: it
+installs LLVM 10 and cannot build this version of rchk. Use the [Docker
+container](DOCKER.md) or the native installation below instead.
+
 # Native installation on Linux for interactive use
 
 Once the installation is finished, check the first R package using
-instructions provided [here](../README.md).  The description below assumes
-that wllvm is installed via running pip as root; when run as a regular user,
-the installation directory will be different (e.g.  `~/.local/bin`).
+instructions provided [here](../README.md).  The commands below are run as
+root. Each section says where WLLVM gets installed. If you install WLLVM as a
+regular user instead, it is in `~/.local/bin` of that user.
+
+The LLVM packages from apt.llvm.org install only versioned commands into
+`/usr/bin` (e.g. `clang-22`). The unversioned ones that WLLVM runs are in
+`/usr/lib/llvm-22/bin`, which `scripts/cmpconfig.inc` adds to `PATH`.
+
+## Ubuntu 24.04 (Noble Numbat) with LLVM 22
+
+Ubuntu does not ship LLVM 22, so it is installed from the [LLVM apt
+repository](https://apt.llvm.org). Tested November 22, 2026 with R-devel
+r90959.
+
+0. Install build dependencies for R:
+	* enable source repositories by adding `deb-src` to the `Types:` line in
+	  `/etc/apt/sources.list.d/ubuntu.sources`, e.g. using
+	  `sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base`
+1. Install clang and llvm from apt.llvm.org:
+	* `apt-get install wget ca-certificates`
+	* `wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null`
+	* `echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" > /etc/apt/sources.list.d/llvm.list`
+	* `apt-get update`
+	* `apt-get install clang-22 llvm-22 llvm-22-dev libllvm22 libc++-22-dev libc++abi-22-dev`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install pipx`
+	* `pipx install wllvm` (`pip3 install` into the system Python is not
+	  allowed on Ubuntu 24.04)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone -b llvm22 https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; make LLVM=/usr/lib/llvm-22 ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr/lib/llvm-22`, WLLVM is `~/.local/bin` (where pipx installed
+	it), RCHK is the path to rchk directory created by git.
+
+## Ubuntu 22.04 (Jammy Jellyfish) with LLVM 22
+
+These steps follow the Docker image (`image/docker/Dockerfile`), which is
+based on Ubuntu 22.04. Tested November 22, 2026 with R-devel r90959.
+
+0. Install build dependencies for R:
+	* enable source repositories in `/etc/apt/sources.list`, e.g. using
+	  `sed -i 's/^# deb-src/deb-src/g' /etc/apt/sources.list`
+	* `apt-get update`
+	* `apt-get build-dep -y r-base`
+	* `apt-get install libzstd-dev` (required by R-devel, but not a build dependency of R in Ubuntu 22.04)
+1. Install clang and llvm from apt.llvm.org:
+	* `apt-get install wget ca-certificates`
+	* `wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null`
+	* `echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" > /etc/apt/sources.list.d/llvm.list`
+	* `apt-get update`
+	* `apt-get install clang-22 llvm-22 llvm-22-dev libllvm22 libc++-22-dev libc++abi-22-dev`
+2. Install [WLLVM scripts](https://github.com/travitch/whole-program-llvm):
+	* `apt-get install python3-pip`
+	* `pip3 install wllvm` (as root)
+3. Install [rchk](https://github.com/kalibera/rchk.git):
+	* `apt-get install git`
+	* `git clone -b llvm22 https://github.com/kalibera/rchk.git`
+	* `cd rchk/src ; make LLVM=/usr/lib/llvm-22 ; cd ..`
+	* customize `scripts/config.inc` (set root of LLVM, WLLVM, and rchk), LLVM
+	is `/usr/lib/llvm-22`, WLLVM is `/usr/local/bin`, RCHK is the
+	path to rchk directory created by git.
+
+# Installing for older versions of LLVM
+
+The instructions below are for older versions of LLVM. Use the corresponding branch of rchk.
 
 ## Ubuntu 20.04 (Focal Fossa)
 
