@@ -35,6 +35,13 @@ export LLVM_COMPILER=clang
 make
 ```
 
+Both `-g` and `-O0` are needed. With optimizations, the bitcode no longer
+has the patterns rchk looks for (e.g. local variables kept in memory). Since
+LLVM 15, rchk also needs the debug information to recognize which values are
+`SEXP`s (see [Internals](INTERNALS.md#recognizing-sexp-values)). The example
+above dates back to LLVM 3.6; today `scripts/build_r.sh` takes these settings
+from `scripts/cmpconfig.inc`.
+
 As a result, one gets executable binaries (`R.bin`, `stats.so`) and bitcode
 versions of the object files (except for some packages, see discussion
 below).  The binaries have encoded in their meta-data from which object
