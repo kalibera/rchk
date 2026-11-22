@@ -33,10 +33,10 @@ fi
 # build R creating bitcode files for modules (.o files)
 
 ./tools/rsync-recommended
-./configure --with-blas=no --with-lapack=no --enable-R-static-lib
-make
+./configure --with-blas=no --with-lapack=no --enable-R-static-lib || exit 1
+make || exit 1
 
 # create bitcode for R binary (R.bin) and shared objects (.so files)
 
-$WLLVM/extract-bc src/main/R.bin
+$WLLVM/extract-bc src/main/R.bin || exit 1
 find . -name *.so -exec $WLLVM/extract-bc {} \;
