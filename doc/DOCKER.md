@@ -271,5 +271,28 @@ are in directory `image/docker`.  To build it, run
 
 ```
 cd image/docker
-docker build .
+docker build -t rchk .
+```
+
+and then use `rchk` in place of `kalibera/rchk:latest` in the commands above.
+
+The image does not use your local checkout: it clones rchk from git and
+R-devel from svn. These sources are selected by build arguments
+(`--build-arg NAME=value`):
+
+* `LLVM_VERSION` - LLVM version installed from [apt.llvm.org](https://apt.llvm.org) (default `22`)
+* `RCHK_REPO` - git repository to clone rchk from
+* `RCHK_REF` - branch or tag of rchk to check out
+* `R_SVN_REVISION` - svn revision of R-devel to build (default `HEAD`)
+
+For example, to build rchk from your own fork:
+
+```
+docker build --build-arg RCHK_REPO=https://github.com/<user>/rchk --build-arg RCHK_REF=<branch> -t rchk .
+```
+
+For reproducible results, build a fixed revision of R:
+
+```
+docker build --build-arg R_SVN_REVISION=89568 -t rchk .
 ```
