@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -yq \
 RUN apt-get update && apt-get install -yq zip unzip libpaper-utils xdg-utils \
       libbz2-dev libcairo2-dev libcurl4-gnutls-dev libgomp1 libicu70 libjpeg-dev liblzma-dev \
       libpango1.0-dev libpangocairo-1.0-0 libpcre3-dev libpng-dev libreadline-dev tcl8.6-dev \
-      libtiff-dev tk8.6-dev libx11-dev libxt-dev zlib1g-dev file && \
+      libtiff-dev tk8.6-dev libx11-dev libxt-dev libzstd-dev zlib1g-dev file && \
   apt-get install -yq libgsl-dev gfortran && \
   rm -rf /var/lib/apt/lists/* && \
   apt autoremove -y
