@@ -76,17 +76,19 @@ bool isVectorType(unsigned type) {
 
 bool isVectorOnlyVarOperation(Value *inst, AllocaInst*& var) {
   AllocaInst* tvar;
-  Type *type;
-  
-  if (!isBitCastOfVar(inst, tvar, type)) {
+  GetElementPtrInst* gep;
+
+  // checks whether the result of LoadInst is VECTOR_SEXPREC* or SEXPREC_ALIGN*
+  if (!isLoadFollowedByGEP(inst, tvar, gep)) {
     return false;
   }
-
-  if (isPointerToStruct(type, "struct.VECTOR_SEXPREC") || isPointerToStruct(type, "union.SEXPREC_ALIGN")) {
+  Type* type = gep->getSourceElementType();
+  if (isPointeeStruct(type, "struct.VECTOR_SEXPREC") || isPointeeStruct(type, "union.SEXPREC_ALIGN")) { 
     var = tvar;
     return true;
   }
   
+  // checks whether the inst is a call to vector functions bellow
   std::string name;
   if (isCallPassingVar(inst, tvar, name)) {
     if (name == "SET_STRING_ELT" || name == "SET_VECTOR_ELT" || name == "XLENGTH" || name == "LENGTH" ||
@@ -361,7 +363,7 @@ static bool valueIsVector(Value *val, VectorsFunctionState& fstate, VectorsBlock
   // = foo()
   if (cs && cs->getCalledFunction()) {
     Function *tgt = cs->getCalledFunction();
-    if (isSEXP(tgt->getReturnType())) {
+    if (isFunctionRetSEXP(tgt)) {
       return callReturnsOnlyVector(cs, fstate, s, context, functions, functionsWorkList, cm);
     }
   }
@@ -485,7 +487,7 @@ static void analyzeFunction(VectorsFunctionState& fstate, FunctionTableTy& funct
       if (Instruction *in = dyn_cast<Instruction>(u)) {
         if (BasicBlock *bb = dyn_cast<BasicBlock>(in->getParent())) {
           Function *pf = bb->getParent();
-          if (isSEXP(pf->getReturnType())) {
+          if (isFunctionRetSEXP(pf)) {
             VectorsFunctionState& pstate = VectorsFunctionState::get(functions, pf);
             pstate.addToWorkList(functionsWorkList);
             if (DEBUG) errs() << "Marking dirty affected caller function " << funName(pf) << "\n";
@@ -509,7 +511,7 @@ void findVectorReturningFunctions(CalledModuleTy *cm) {
   Module *m = cm->getModule();
   for(Module::iterator fi = m->begin(), fe = m->end(); fi != fe; ++fi) {
     Function *f = &*fi;
-    if (!isSEXP(f->getReturnType())) {
+    if (!isFunctionRetSEXP(f)) {
       continue;
       // if a function does not return an SEXP, it definitely does not return a vector
     }
@@ -580,7 +582,7 @@ bool isVectorReturningFunction(Function *fun, ArgsTy context, CalledModuleTy* cm
   FunctionListTy workList;
   FunctionTableTy& functions = *functionsPtr;
 
-  if (!isSEXP(fun->getReturnType())) {
+  if (!isFunctionRetSEXP(fun)) {
     return false;
   }
 

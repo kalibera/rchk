@@ -388,7 +388,7 @@ To reduce the risks of missing true errors due to these limitations
 of the tools, one can make all value transfers between basic blocks go
 through local variables ("memory") using LLVM's `opt` tool:
 
-`opt -reg2mem R.bin.bc > R.bin.reg2mem.bc`
+`opt -passes=reg2mem R.bin.bc > R.bin.reg2mem.bc`
 
 This also happens to reduce the number of phi nodes (or eliminates them). On
 the other hand, the resulting bitcode is harder to check as it has indeed
@@ -396,4 +396,6 @@ more local variables, so one may need a lot of RAM for the checking.  Using
 the tool does not eliminate these errors entirely.  It may not remove all
 phi nodes (even in practice it seems to), and it will not remove unusual
 code (e.g.  the use of an outdated variable value) that happens within a
-single basic block.
+single basic block. Also, the local variables introduced by `reg2mem` have
+no debug information, so rchk has to guess from their uses whether they
+hold an `SEXP` (see [Internals](INTERNALS.md#local-variables)).

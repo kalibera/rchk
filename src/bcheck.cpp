@@ -20,7 +20,6 @@
 #include <set>
 #include <stack>
 #include <unordered_set>
-#include <unordered_map>
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/LLVMContext.h>
@@ -388,6 +387,7 @@ class FunctionChecker {
       }
       
       if (doneSet.size() > MAX_STATES) {
+        outs().flush();
         errs() << "ERROR: too many states (abstraction error?) in function " << funName(fun) << "\n";
         clearStates();
         return;

@@ -59,25 +59,23 @@ bool isCallPassingVar(Value *inst, AllocaInst*& var, std::string& fname) {
   return true;
 }
 
-bool isBitCastOfVar(Value *inst, AllocaInst*& var, Type*& type) {
-
-  if (!BitCastInst::classof(inst)) {
+bool isLoadFollowedByGEP(Value *inst, AllocaInst*& var, GetElementPtrInst*& gep) {
+  if (!LoadInst::classof(inst)) {
     return false;
   }
-  BitCastInst* bc = cast<BitCastInst>(inst);
-  
-  Value *lvar = bc->getOperand(0);
-  if (!LoadInst::classof(lvar)) {
-    return false;
-  }
-  Value *avar = cast<LoadInst>(lvar)->getPointerOperand();
+  Value *avar = cast<LoadInst>(inst)->getPointerOperand();
   if (!AllocaInst::classof(avar)) {
     return false;
   }
   
   var = cast<AllocaInst>(avar);
-  type = cast<Type>(bc->getDestTy());
-  return true;
+
+  // return true only when the load is followed by a GEP, which is the case for vector SEXPRECs
+  for (auto user : inst->users()) {
+    gep = dyn_cast<GetElementPtrInst>(user);
+    if (gep) return true;
+  }
+  return false;
 }
 
 // this is useful e.g. for detecting when a variable is stored into the node stack
@@ -88,7 +86,7 @@ bool isStoreToStructureElement(Value *inst, std::string structType, std::string 
   // [] %431 = load %struct.SEXPREC** %__v__7, align 8, !dbg !152225 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 4610:5]
   // %432 = load %struct.R_bcstack_t** %3, align 8, !dbg !152225 ; [#uses=1 type=%struct.R_bcstack_t*] [debug line = 4610:5]
   // %433 = getelementptr inbounds %struct.R_bcstack_t* %432, i32 0, i32 1, !dbg !152225 ; [#uses=1 type=%union.ieee_double*] [debug line = 4610:5]
-  // %434 = bitcast %union.ieee_double* %433 to %struct.SEXPREC**, !dbg !152225 ; [#uses=1 type=%struct.SEXPREC**] [debug line = 4610:5]
+  // DEPRECATED by opaque pointers: %434 = bitcast %union.ieee_double* %433 to %struct.SEXPREC**, !dbg !152225 ; [#uses=1 type=%struct.SEXPREC**] [debug line = 4610:5]
   // store %struct.SEXPREC* %431, %struct.SEXPREC** %434, align 8, !dbg !152225 ; [debug line = 4610:5]
           
   StoreInst *si = dyn_cast<StoreInst>(inst);
@@ -105,18 +103,13 @@ bool isStoreToStructureElement(Value *inst, std::string structType, std::string 
   if (!pvar) {
     return false;
   }
-  
-  BitCastInst *bc = dyn_cast<BitCastInst>(si->getPointerOperand());
-  if (!bc) {
+
+  GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(si->getPointerOperand());
+  if (!gep || !gep->isInBounds()) {
     return false;
   }
-  
-  if (!isPointerToStruct(bc->getSrcTy(), elementType)) {
-    return false;
-  }
-  
-  GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(bc->getOperand(0));
-  if (!gep || !gep->isInBounds() || !isPointerToStruct(gep->getPointerOperandType(), structType)) {
+
+  if (!isPointeeStruct(gep->getSourceElementType(), structType) || !isPointeeStruct(gep->getResultElementType(), elementType)) {
     return false;
   }
   
@@ -247,16 +240,19 @@ bool operandComesFromVariable(Instruction *inst, Value *operand, AllocaInst*& va
   // find the latest store of the value to a varible, which is still before the instruction
   StoreInst *latests = NULL;
   AllocaInst *latestsvar = NULL;
-  for(Value::user_iterator ui = operand->user_begin(), ue = operand->user_end(); ui != ue; ++ui) {
-    User *u = *ui;
-    if (StoreInst::classof(u)) {
-      StoreInst *si = cast<StoreInst>(u);
-      if (si->getParent() && si->getParent() == inst->getParent() && si->comesBefore(inst)
-          && si->getValueOperand() == operand) {
-        Value* storePointer = si->getPointerOperand();
-        if (AllocaInst::classof(storePointer) && (!latests || latests->comesBefore(si))) {
-          latests = si;
-          latestsvar = cast<AllocaInst>(storePointer);
+
+  if (operand->hasUseList()) {
+    for(Value::user_iterator ui = operand->user_begin(), ue = operand->user_end(); ui != ue; ++ui) {
+      User *u = *ui;
+      if (StoreInst::classof(u)) {
+        StoreInst *si = cast<StoreInst>(u);
+        if (si->getParent() && si->getParent() == inst->getParent() && si->comesBefore(inst)
+        && si->getValueOperand() == operand) {
+          Value* storePointer = si->getPointerOperand();
+          if (AllocaInst::classof(storePointer) && (!latests || latests->comesBefore(si))) {
+            latests = si;
+            latestsvar = cast<AllocaInst>(storePointer);
+          }
         }
       }
     }
@@ -285,7 +281,7 @@ static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
 
   // %33 = load %struct.SEXPREC** %2, align 8, !dbg !21240 ; [#uses=1 type=%struct.SEXPREC*] [debug line = 1097:0]
   // %34 = getelementptr inbounds %struct.SEXPREC* %33, i32 0, i32 0, !dbg !21240 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 1097:0]
-  // %35 = bitcast %struct.sxpinfo_struct* %34 to i32*, !dbg !21240 ; [#uses=1 type=i32*] [debug line = 1097:0]
+  // DEPRECATED by opaque pointers: %35 = bitcast %struct.sxpinfo_struct* %34 to i32*, !dbg !21240 ; [#uses=1 type=i32*] [debug line = 1097:0]
   // %36 = load i32* %35, align 4, !dbg !21240       ; [#uses=1 type=i32] [debug line = 1097:0]
   // %37 = and i32 %36, 31, !dbg !21240              ; [#uses=1 type=i32] [debug line = 1097:0]
   
@@ -296,7 +292,7 @@ static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
   // %42 = call %struct.SEXPREC* @CAR(%struct.SEXPREC* noundef %41), !dbg !100075 ; [#uses=2 type=%struct.SEXPREC*] [debug line = 1477:9]
   // store %struct.SEXPREC* %42, %struct.SEXPREC** %9, align 8, !dbg !100075 ; [debug line = 1477:9]
   // %43 = getelementptr inbounds %struct.SEXPREC, %struct.SEXPREC* %42, i32 0, i32 0, !dbg !100075 ; [#uses=1 type=%struct.sxpinfo_struct*] [debug line = 1477:9]
-  // %44 = bitcast %struct.sxpinfo_struct* %43 to i64*, !dbg !100075 ; [#uses=1 type=i64*] [debug line = 1477:9]
+  // DEPRECATED by opaque pointers: %44 = bitcast %struct.sxpinfo_struct* %43 to i64*, !dbg !100075 ; [#uses=1 type=i64*] [debug line = 1477:9]
   // %45 = load i64, i64* %44, align 8, !dbg !100075 ; [#uses=1 type=i64] [debug line = 1477:9]
   // %46 = and i64 %45, 31, !dbg !100075             ; [#uses=1 type=i64] [debug line = 1477:9]
 
@@ -329,17 +325,14 @@ static bool isTypeExtraction(Value *inst, AllocaInst*& var) {
     return false;
   }
   
-  if (!BitCastInst::classof(bitsLoad->getPointerOperand())) {
-    return false;
-  }
-  Value *gepv = cast<BitCastInst>(bitsLoad->getPointerOperand())->getOperand(0);
+  Value *gepv = bitsLoad->getPointerOperand();
   
   if (!GetElementPtrInst::classof(gepv)) {
     return false;
   }
 
   GetElementPtrInst *gep = cast<GetElementPtrInst>(gepv);
-  if (!gep->isInBounds() || !gep->hasAllZeroIndices() || !isSEXP(gep->getPointerOperandType())) {
+  if (!gep->isInBounds() || !gep->hasAllZeroIndices() || !isGEPSourceSEXP(gep)) {
     return false;
   }
   

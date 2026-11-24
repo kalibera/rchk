@@ -64,6 +64,7 @@ StoreInst* getDominatingNonProtectingAllocatingStore(AllocaInst *v, const Instru
       // also allow a store and a call to protect
       //   so that we can handle PROTECT(v = foo())
 
+      if (!ssrc->hasUseList()) continue;
       Value::user_iterator ui = ssrc->user_begin();
       Value *u = *ui;
       if (u == s) {
@@ -115,7 +116,7 @@ Instruction* getProtect(AllocaInst *v, const StoreInst *allocStore, const Instru
   // look for PROTECT(var = foo())
   //   in IR, the protect call may be on the result of foo directly without loading var
   Value* allocValue = const_cast<Value*>(allocStore->getValueOperand());
-  if (!allocValue->hasOneUse()) {
+  if (allocValue->hasUseList() && !allocValue->hasOneUse()) {
     for(Value::user_iterator ui = allocValue->user_begin(), ue = allocValue->user_end(); ui != ue; ++ui) {
       Value *u = *ui;
       if (!CallBase::classof(u)) {
@@ -183,7 +184,7 @@ bool isLoadOfUnprotectedObject(Value *arg, Instruction *callInst, FunctionsSetTy
   if (!AllocaInst::classof(v) || !isSEXP(cast<AllocaInst>(v))) { // FIXME: does not handle phi nodes
     return false;
   }
-  if (PointerMayBeCapturedBefore(v, false, true, callInst, &dominatorTree, true)) {
+  if (PointerMayBeCapturedBefore(v, false, callInst, &dominatorTree, true)) {
     return false;
   }
   StoreInst* allocStore = getDominatingNonProtectingAllocatingStore(cast<AllocaInst>(v), cast<LoadInst>(arg), possibleAllocators, dominatorTree);

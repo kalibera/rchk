@@ -38,6 +38,14 @@ else ifeq ($(HOST), pod)
   BCHECK_MAX_STATES := 800000
   CALLOCATORS_MAX_STATES := 1000000
 
+else ifeq ($(HOST), lunovo)
+#   LLVM = /lib/llvm-14
+  LLVM = /lib/llvm-22
+  CXX := g++
+#  CXX := $(LLVM)/bin/clang++
+  BCHECK_MAX_STATES := 800000
+  CALLOCATORS_MAX_STATES := 1000000
+
 else
   # ------  CUSTOMIZE HERE --------- 
   # or provide these variables to make

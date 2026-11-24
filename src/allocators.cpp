@@ -101,6 +101,7 @@ void findPossiblyReturnedVariables(Function *f, VarsSetTy& possiblyReturned) {
 
 // this ignores derived/cast values
 static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
+  if (!v->hasUseList()) return false;
 
   for(Value::user_iterator ui = v->user_begin(), ue = v->user_end(); ui != ue; ++ui) {
     User *u = *ui;
@@ -145,7 +146,7 @@ static bool valueMayBeReturned(Value* v, VarsSetTy& possiblyReturned) {
 // returns an empty set if this function cannot be an allocator
 
 void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Function* gcFunction) {
-  if (!isSEXP(f->getReturnType())) return; // allocator must return SEXP
+  if (!isFunctionRetSEXP(f)) return; // allocator must return SEXP
 
   VarsSetTy possiblyReturnedVars;
   findPossiblyReturnedVariables(f, possiblyReturnedVars);
@@ -169,7 +170,7 @@ void getWrappedAllocators(Function *f, FunctionsSetTy& wrappedAllocators, Functi
         continue;
       }
       if (!tgt) continue;
-      if (!isSEXP(tgt->getReturnType())) continue;
+      if (!isFunctionRetSEXP(tgt)) continue;
       if (isKnownNonAllocator(tgt)) continue;
         
       // tgt is a function returning an SEXP, check if the result may be returned by function f

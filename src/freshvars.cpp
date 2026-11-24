@@ -187,8 +187,8 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
         var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
         if (msg.debug()) msg.debug(MSG_PFX + "PreserveObject of variable " + varName(var), in); 
       }
-      if (!var) { // PreserveObject(x = foo())
-        for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
+      if (!var && arg->hasUseList()) { // PreserveObject(x = foo())
+        for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) {
           User *u = *ui;
           if (StoreInst* si = dyn_cast<StoreInst>(u)) {
             var = dyn_cast<AllocaInst>(si->getPointerOperand()); 
@@ -226,7 +226,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
         var = dyn_cast<AllocaInst>(li->getPointerOperand()); 
         if (msg.debug()) msg.debug(MSG_PFX + "PROTECT of variable " + varName(var), in); 
       }
-      if (!var) { // PROTECT(x = foo())
+      if (!var && arg->hasUseList()) { // PROTECT(x = foo())
         for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
           User *u = *ui;
           if (StoreInst* si = dyn_cast<StoreInst>(u)) {
@@ -462,7 +462,7 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
     for(CallBase::op_iterator ai = cs->arg_begin(), ae = cs->arg_end(); ai != ae; ++ai, ++i) {
       Value *arg = *ai;
       
-      if (i < nParams && !isSEXP(ftype->getParamType(i))) {
+      if (i < nParams && !isFunctionArgSEXP(tgt->fun, i)) {
         // note i can be >= nParams when the function accepts varargs (...)
         continue;
       }
@@ -478,11 +478,13 @@ static void handleCall(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *s
       }
       // foo(x = bar())
       //   handling this is, sadly, quite slow
-      for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) {
-        User *u = *ui;
-        if (StoreInst* si = dyn_cast<StoreInst>(u)) {
-          if (AllocaInst *svar = dyn_cast<AllocaInst>(si->getPointerOperand())) {
-            passedVars.insert(svar);
+      if (arg->hasUseList()) {
+        for(Value::user_iterator ui = arg->user_begin(), ue = arg->user_end(); ui != ue; ++ui) { 
+          User *u = *ui;
+          if (StoreInst* si = dyn_cast<StoreInst>(u)) {
+            if (AllocaInst *svar = dyn_cast<AllocaInst>(si->getPointerOperand())) {
+              passedVars.insert(svar);
+            }
           }
         }
       }
@@ -763,34 +765,35 @@ static void handleStore(Instruction *in, CalledModuleTy *cm, SEXPGuardsChecker *
       // the store (re-)creates a fresh variable
       
       // check if the value stored is also being protected (e.g. PROTECT(x = allocVector())
+      if (storeValueOp->hasUseList()) {
+        for(Value::user_iterator ui = storeValueOp->user_begin(), ue = storeValueOp->user_end(); ui != ue; ++ui) { 
+          User *u = *ui;
+          if (!CallBase::classof(u))
+            continue;
+          CallBase *cs = cast<CallBase>(u);
+          if (cs && cs->getCalledFunction()) {
+            Function* otherFun = cs->getCalledFunction();
+            if (otherFun->getName() == "Rf_protect" || otherFun->getName() == "Rf_protectWithIndex" || otherFun->getName() == "R_Reprotect") {
+              // this case is handled in handleCall
+              return;
+            }
+              // handle setter calls with indirect loads, e.g.
+              // SET_VECTOR_ELT(ans, 2, cosines = allocVector(REALSXP, shiftlen));
+      
+            if (cs->arg_size() > 1 && isSetterFunction(otherFun)) {
+              if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs->getArgOperand(0))) {
+                if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
+              
+                  auto vsearch = freshVars.vars.find(firstArg);
+                  if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
+                    // first argument of the setter is not fresh
 
-      for(Value::user_iterator ui = storeValueOp->user_begin(), ue = storeValueOp->user_end(); ui != ue; ++ui) {
-        User *u = *ui;
-        if (!CallBase::classof(u))
-          continue;
-        CallBase *cs = cast<CallBase>(u);
-        if (cs && cs->getCalledFunction()) {
-          Function* otherFun = cs->getCalledFunction();
-          if (otherFun->getName() == "Rf_protect" || otherFun->getName() == "Rf_protectWithIndex" || otherFun->getName() == "R_Reprotect") {
-            // this case is handled in handleCall
-            return;
-          }
-            // handle setter calls with indirect loads, e.g.
-            // SET_VECTOR_ELT(ans, 2, cosines = allocVector(REALSXP, shiftlen));
-    
-          if (cs->arg_size() > 1 && isSetterFunction(otherFun)) {
-            if (LoadInst* firstArgLoad = dyn_cast<LoadInst>(cs->getArgOperand(0))) {
-              if (AllocaInst* firstArg = dyn_cast<AllocaInst>(firstArgLoad->getPointerOperand())) {
-            
-                auto vsearch = freshVars.vars.find(firstArg);
-                if (vsearch == freshVars.vars.end() || (vsearch->second > 0)) {
-                  // first argument of the setter is not fresh
-
-                  Value *protArg = cs->getArgOperand(1); // the argument being implicitly protected
-                  if (protArg != storeValueOp) {
-                    if (msg.debug()) msg.debug(MSG_PFX + "indirect protect using setter call for variable " + varName(var), in);
-                    freshVars.vars.erase(var);
-                    return ; // variable is not fresh as it is implicitly protected
+                    Value *protArg = cs->getArgOperand(1); // the argument being implicitly protected
+                    if (protArg != storeValueOp) {
+                      if (msg.debug()) msg.debug(MSG_PFX + "indirect protect using setter call for variable " + varName(var), in);
+                      freshVars.vars.erase(var);
+                      return ; // variable is not fresh as it is implicitly protected
+                    }
                   }
                 }
               }

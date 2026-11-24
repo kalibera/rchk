@@ -469,7 +469,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
   VarsSetTy possiblyReturnedVars; 
   findPossiblyReturnedVariables(f->fun, possiblyReturnedVars); // to restrict origin tracking
     
-  bool trackOrigins = isSEXP(f->fun->getReturnType());
+  bool trackOrigins = isFunctionRetSEXP(f->fun);
     
   if (DEBUG && ONLY_DEBUG_ONLY_FUNCTION) {
     if (ONLY_FUNCTION_NAME == funName(f)) {
@@ -520,6 +520,7 @@ static void getCalledAndWrappedFunctions(const CalledFunctionTy *f, LineMessenge
     }
       
     if (doneSet.size() > MAX_STATES) {
+      outs().flush();
       errs() << "ERROR: too many states (abstraction error?) in function " << funName(f) << "\n";
       clearStates();
       delete intGuardsChecker;

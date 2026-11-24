@@ -14,9 +14,7 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "allocators.h"
 #include "callocators.h"
-#include "errors.h"
 #include "cprotect.h"
 
 using namespace llvm;

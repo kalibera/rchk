@@ -10,7 +10,6 @@
 
 #include <llvm/Support/raw_ostream.h>
 
-#include "allocators.h"
 #include "cgclosure.h"
 
 using namespace llvm;
