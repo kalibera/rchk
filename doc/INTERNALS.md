@@ -3,6 +3,167 @@ Overall the choice of algorithms so far was the most naive one that still
 solves the problem for R (slightly over 3,000 functions) in reasonable time
 and memory requirements and for the constructs seen in the code of R.
 
+## Recognizing SEXP Values
+
+Most of the tools need to know which values are `SEXP`s. Up to LLVM 14,
+Clang gave an `SEXP` the LLVM type `%struct.SEXPREC*`, so we recognized
+`SEXP`s by this type. Since LLVM 15, all pointers have a single opaque type
+`ptr`: in the bitcode an `SEXP` looks like any other pointer, although it
+is still `struct SEXPREC *` in C. We therefore take source-level types from
+debug information (R and packages are compiled with `-g`). The code is in
+`common.cpp`.
+
+Debug information describes types by `DIType` nodes, which, unlike LLVM
+types, keep typedefs and qualifiers. We consider a `DIType` an `SEXP` if,
+after removing qualifiers (`const`, `volatile`, `restrict`, ...), it is a
+typedef named `SEXP` of a pointer to a structure named `SEXPREC`
+(`isSEXP(DIType*)`). How we find the `DIType` of a value depends on the kind
+of the value.
+
+### Global Variables
+
+A global variable has a `!dbg` attachment that leads to its
+`DIGlobalVariable`, and we take the type from there
+(`isSEXP(GlobalVariable*)`):
+
+```
+@R_VStack = internal global ptr null, align 8, !dbg !15632
+!15632 = !DIGlobalVariableExpression(var: !15633, ...)
+!15633 = !DIGlobalVariable(name: "R_VStack", type: !15168, ...)
+!15168 = !DIDerivedType(tag: DW_TAG_typedef, name: "SEXP", ...)
+```
+
+### Pointer Arithmetic
+
+A `getelementptr` instruction still carries the type it indexes into, e.g.
+`getelementptr %struct.SEXPREC, ptr %1239, i64 1`, so here we can check the
+LLVM type directly (`isGEPSourceSEXP`).
+
+### Function Parameters and Return Values
+
+The debug information of a function (`DISubprogram`) lists its return type
+followed by the types of its C parameters. This is enough for the return
+type (`isFunctionRetSEXP`), but not for the parameters (`isFunctionArgSEXP`).
+Clang lowers function signatures to the platform ABI, so the LLVM parameters
+can differ from the C parameters in number, type and position. On x86_64,
+Clang
+
+* splits a structure of two `double`s into two parameters, so
+
+  ```
+  struct Point { double x, y; };
+  struct Point add_points(struct Point a, struct Point b);
+  ```
+
+  becomes
+
+  ```
+  define { double, double } @add_points(double %0, double %1, double %2, double %3)
+  ```
+
+* packs the fields of a small structure into a single integer parameter,
+  e.g. `struct { uint8_t x, y; }` is passed as one `i16`
+* returns a large structure through an extra pointer parameter (`sret`),
+  which comes before the other parameters and shifts them by one
+
+We therefore map LLVM parameters to C parameters using debug information
+(`buildIRToDIIndexMap`). Each C parameter has a `#dbg_declare` record with
+its index. The record refers either to the LLVM parameter itself, or to a
+local variable into which the parameter is stored. In `add_points`, the
+record of `a` refers to a local copy of `a`, into which Clang stores `%0`
+and `%1` through `getelementptr`s.
+
+Clang lowers a structure with a single `SEXP` member, such as
+
+```
+typedef struct { SEXP ptr; } R_altrep_class_t;
+```
+
+to the member itself, so we treat such a structure as an `SEXP` as well
+(`isSEXPWrapper`). Functions without a body in the module have no
+`DISubprogram`, and we assume they neither take nor return `SEXP`s. The
+same holds for indirect calls through function pointers.
+
+### Local Variables
+
+At `-O0`, Clang keeps local variables in memory allocated by `alloca`. For a
+source-level variable, we take its type from its `#dbg_declare` record
+(`isSEXP(AllocaInst*)`). This is not enough in two cases: temporary
+variables introduced by the compiler or by `reg2mem` have no record, and a
+variable may hold an `SEXP` although it is declared with a different type.
+In both cases, we guess the type from how the variable is used
+(`traverseToSEXP`). The search follows the uses of the variable through
+loads, stores, phi nodes and selects until it finds one that requires an
+`SEXP`:
+
+* a `getelementptr` into `SEXPREC`
+* a return from a function returning `SEXP`
+* an `SEXP` argument of a call
+
+Pointer types do not tell whether a value is an `SEXP`, an `SEXP*`, and so
+on, so the search counts levels of indirection. It starts at level 1,
+because the `alloca` is a pointer to the variable. Loads and stores move the
+search one level down or up, and a use counts only at level 0.
+
+For example, in R's `altrep.c`
+
+```
+static SEXP find_namespace(void *data) {
+  return R_FindNamespace((SEXP) data);
+}
+```
+
+`data` is declared as `void *`, but it is passed to the `SEXP` parameter of
+`R_FindNamespace`, so we treat it as an `SEXP`.
+
+The search looks only at how the value of a variable is used, not at where
+it comes from. A temporary variable that holds the result of `allocVector`,
+but whose value is only compared or passed to a `void *` parameter, is not
+recognized as an `SEXP`.
+
+### Global Variables in glcheck
+
+The `glcheck` tool looks for global variables that may contain an `SEXP`,
+possibly nested in structures and arrays, such as `Type2Table` in R's
+`util.c`:
+
+```
+static struct {
+    const char *cstrName;
+    SEXP rcharName;
+    SEXP rstrName;
+    SEXP rsymName;
+} Type2Table[MAX_NUM_SEXPTYPE];
+```
+
+We search the debug type of each global variable for an `SEXP`. A structure
+may be described only by a forward declaration, which has no fields. Debug
+information does not link a forward declaration to its definition, so we
+collect all structure definitions in the module by name and report the
+variable if any definition of that name contains an `SEXP`. Anonymous
+structures have no name to match, so they are left out.
+
+### Type Names in the Output
+
+LLVM types printed by some tools (e.g. by `glcheck`) do not always match
+the types in the source code:
+
+* pointers are printed as `ptr`
+* unions are printed as structures, because LLVM has no union types and
+  Clang represents a union as a structure of the right size and alignment
+* when modules are linked, LLVM may reuse an existing type of a different
+  name with the same layout
+
+With opaque pointers, all pointer fields have the same type, so many
+structures have the same layout. For example:
+
+* `R_compact_intseq_class` is declared as `R_altrep_class_t`, a structure
+  with one `SEXP` field. It is printed as `%union.anon.0`, a type of the
+  same layout that the linked module already contained.
+* `Type2Table` above is an array of anonymous structures with four pointer
+  fields. It is printed as `[32 x %struct.R_allocator]`, because
+  `R_allocator` also has four pointer fields.
+
 ## Detection of Error Paths
 
 An *error basic block* is a basic block that never returns (its terminator
